@@ -173,12 +173,14 @@ class Category
               AND usuario_id = ?
         ');
 
-        return $stmt->execute([
+        $stmt->execute([
             $name,
             $type,
             $id,
             $userId
         ]);
+
+        return $stmt->rowCount() > 0;
     }
 
     public function delete(
@@ -191,9 +193,11 @@ class Category
               AND usuario_id = ?
         ');
 
-        return $stmt->execute([
+        $stmt->execute([
             $id,
             $userId
         ]);
+
+        return $stmt->rowCount() > 0;
     }
 }

@@ -27,8 +27,12 @@
                     <input type="email" id="email" name="email" required>
                 </div>
                 <div class="form-group">
-                    <label for="password">Senha (mín. 6 caracteres)</label>
-                    <input type="password" id="password" name="password" required minlength="6">
+                    <label for="password">Senha (mín. 8 caracteres)</label>
+                    <input type="password" id="password" name="password" required minlength="8">
+                </div>
+                <div class="form-group">
+                    <label for="password_confirm">Confirmar senha</label>
+                    <input type="password" id="password_confirm" name="password_confirm" required minlength="8">
                 </div>
                 <button type="submit" class="btn btn-primary">Cadastrar</button>
             </form>

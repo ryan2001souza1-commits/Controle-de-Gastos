@@ -171,7 +171,7 @@ class Income
               AND tipo = ?
         ');
 
-        return $stmt->execute([
+        $stmt->execute([
             $description,
             $amount,
             $date,
@@ -179,6 +179,8 @@ class Income
             $userId,
             'receita'
         ]);
+
+        return $stmt->rowCount() > 0;
     }
 
     public function delete(int $id, int $userId): bool
@@ -190,11 +192,13 @@ class Income
               AND tipo = ?
         ');
 
-        return $stmt->execute([
+        $stmt->execute([
             $id,
             $userId,
             'receita'
         ]);
+
+        return $stmt->rowCount() > 0;
     }
 
     public function getTotalByUser(

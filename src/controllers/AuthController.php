@@ -34,8 +34,9 @@ class AuthController
             $name = trim($_POST['name'] ?? '');
             $email = trim($_POST['email'] ?? '');
             $password = $_POST['password'] ?? '';
+            $passwordConfirm = $_POST['password_confirm'] ?? '';
 
-            $result = $this->authService->register($name, $email, $password);
+            $result = $this->authService->register($name, $email, $password, $passwordConfirm);
 
             if ($result['success']) {
                 header('Location: /login.php?registered=1');

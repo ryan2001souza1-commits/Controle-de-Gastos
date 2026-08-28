@@ -20,14 +20,17 @@ class AuthService
         $_SESSION['user_id'] = $user->id;
         $_SESSION['user_name'] = $user->name;
         $_SESSION['user_email'] = $user->email;
-        session_regenerate_id(true);
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
 
         return true;
     }
 
-    public function register(string $name, string $email, string $password): array
+    public function register(string $name, string $email, string $password, string $passwordConfirm): array
     {
-        if (empty($name) || empty($email) || empty($password)) {
+        if (empty($name) || empty($email) || empty($password) || empty($passwordConfirm)) {
             return ['success' => false, 'message' => 'Todos os campos são obrigatórios.'];
         }
 
@@ -35,15 +38,22 @@ class AuthService
             return ['success' => false, 'message' => 'E-mail inválido.'];
         }
 
-        if (strlen($password) < 6) {
-            return ['success' => false, 'message' => 'Senha deve ter no mínimo 6 caracteres.'];
+        if (strlen($password) < 8) {
+            return ['success' => false, 'message' => 'Senha deve ter no mínimo 8 caracteres.'];
+        }
+
+        if ($password !== $passwordConfirm) {
+            return ['success' => false, 'message' => 'A confirmação de senha não confere.'];
         }
 
         if ($this->userModel->findByEmail($email)) {
             return ['success' => false, 'message' => 'E-mail já cadastrado.'];
         }
 
-        $this->userModel->create($name, $email, $password);
+        if (!$this->userModel->create($name, $email, $password)) {
+            return ['success' => false, 'message' => 'E-mail já cadastrado.'];
+        }
+
         return ['success' => true, 'message' => 'Usuário cadastrado com sucesso.'];
     }
 

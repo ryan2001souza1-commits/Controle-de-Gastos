@@ -184,7 +184,7 @@ class Expense
               AND tipo = ?
         ');
 
-        return $stmt->execute([
+        $stmt->execute([
             $description,
             $amount,
             $date,
@@ -193,6 +193,8 @@ class Expense
             $userId,
             'despesa'
         ]);
+
+        return $stmt->rowCount() > 0;
     }
 
     public function delete(int $id, int $userId): bool
@@ -204,11 +206,13 @@ class Expense
               AND tipo = ?
         ');
 
-        return $stmt->execute([
+        $stmt->execute([
             $id,
             $userId,
             'despesa'
         ]);
+
+        return $stmt->rowCount() > 0;
     }
 
     public function getTotalByUser(

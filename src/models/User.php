@@ -29,7 +29,8 @@ class User
             return null;
         }
 
-        return $this->hydrate($data);
+        $user = new User($this->db);
+        return $user->hydrate($data);
     }
 
     public function findById(int $id): ?User
@@ -46,7 +47,8 @@ class User
             return null;
         }
 
-        return $this->hydrate($data);
+        $user = new User($this->db);
+        return $user->hydrate($data);
     }
 
     public function create(
