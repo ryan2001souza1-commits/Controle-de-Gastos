@@ -228,48 +228,4 @@ class Expense
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
-
-    public function getTotalsByPeriod(
-        int $userId,
-        ?string $startDate = null,
-        ?string $endDate = null,
-        string $groupBy = 'day'
-    ): array {
-        if ($groupBy === 'month') {
-            $dateExpr = "TO_CHAR(data, 'YYYY-MM')";
-            $dateLabel = "TO_CHAR(data, 'MMM/YYYY')";
-        } else {
-            $dateExpr = 'data::text';
-            $dateLabel = "TO_CHAR(data, 'DD/MM/YYYY')";
-        }
-
-        $sql = "
-            SELECT
-                {$dateExpr} AS period,
-                {$dateLabel} AS label,
-                COALESCE(SUM(valor), 0) AS total
-            FROM transacoes
-            WHERE usuario_id = ?
-              AND tipo = 'despesa'
-        ";
-
-        $params = [$userId];
-
-        if ($startDate) {
-            $sql .= ' AND data >= ?';
-            $params[] = $startDate;
-        }
-
-        if ($endDate) {
-            $sql .= ' AND data <= ?';
-            $params[] = $endDate;
-        }
-
-        $sql .= " GROUP BY {$dateExpr} ORDER BY {$dateExpr}";
-
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute($params);
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
 }
