@@ -409,7 +409,7 @@ h2 {
 
 .chart-wrapper {
     position: relative;
-    height: 320px;
+    height: 300px;
     width: 100%;
 }
 
@@ -419,17 +419,16 @@ h2 {
     padding: 2rem 1rem;
     font-size: 0.875rem;
     font-style: italic;
+    display: none;
 }
 
 @media (max-width: 768px) {
     .charts-grid {
         grid-template-columns: 1fr;
     }
-}
 
-@media (max-width: 768px) {
-    .charts-grid {
-        grid-template-columns: 1fr;
+    .chart-wrapper {
+        height: 260px;
     }
 }
 
