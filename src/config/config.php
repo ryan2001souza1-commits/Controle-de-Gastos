@@ -16,7 +16,7 @@ define('DB_USER', 'postgres');
 // Senha do PostgreSQL:
 // 1) Recomendado: defina a variável de ambiente DB_PASS no seu sistema.
 // 2) Alternativa: substitua o valor abaixo diretamente (menos seguro).
-define('DB_PASS', getenv('DB_PASS') ?: '');
+define('DB_PASS', '123');
 
 // Função utilitária para obter uma conexão PDO com o PostgreSQL.
 // Retorna sempre a mesma instância durante a requisição (singleton).
