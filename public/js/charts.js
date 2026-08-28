@@ -1,23 +1,32 @@
 document.addEventListener('DOMContentLoaded', function () {
     if (typeof Chart === 'undefined') return;
 
-    var brl = function (v) {
-        return 'R$ ' + Number(v).toLocaleString('pt-BR', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        });
-    };
+    var brl = new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
 
-    var chartData = (typeof window.DASHBOARD_CHART_DATA !== 'undefined')
-        ? window.DASHBOARD_CHART_DATA
-        : null;
+    function fmt(value) {
+        var n = Number(value);
+        if (!isFinite(n)) n = 0;
+        return brl.format(n);
+    }
 
-    if (!chartData) return;
+    function getData() {
+        if (typeof window.DASHBOARD_CHART_DATA === 'undefined' || !window.DASHBOARD_CHART_DATA) {
+            return null;
+        }
+        return window.DASHBOARD_CHART_DATA;
+    }
 
-    // ============== Helpers ==============
     function showEmpty(canvas, msgEl) {
         if (canvas) canvas.style.display = 'none';
-        if (msgEl) { msgEl.style.display = 'block'; msgEl.textContent = msgEl.dataset.msg || 'Nenhum dado encontrado para o período selecionado.'; }
+        if (msgEl) {
+            msgEl.style.display = 'block';
+            msgEl.textContent = msgEl.dataset.msg || 'Nenhum dado encontrado para o período selecionado.';
+        }
     }
 
     function showCanvas(canvas, msgEl) {
@@ -25,24 +34,35 @@ document.addEventListener('DOMContentLoaded', function () {
         if (msgEl) msgEl.style.display = 'none';
     }
 
+    function destroyExisting(canvasId) {
+        var existing = Chart.getChart(canvasId);
+        if (existing) existing.destroy();
+    }
+
+    var data = getData();
+    if (!data) return;
+
+    var categoryColors = [
+        '#4f46e5', '#16a34a', '#dc2626', '#f59e0b', '#0ea5e9',
+        '#a855f7', '#ec4899', '#14b8a6', '#eab308', '#64748b',
+        '#06b6d4', '#84cc16', '#f97316', '#8b5cf6', '#db2777'
+    ];
+
     // ============== Chart 1: Despesas por Categoria (Doughnut) ==============
     var catCanvas = document.getElementById('chart-expenses-by-category');
     var catEmpty  = document.getElementById('chart-category-empty');
 
     if (catCanvas) {
-        var catLabels = chartData.expenses_by_category.labels || [];
-        var catValues = chartData.expenses_by_category.values || [];
+        var catLabels = data.expenses_by_category.labels || [];
+        var catValues = data.expenses_by_category.values || [];
 
         if (catLabels.length === 0) {
             showEmpty(catCanvas, catEmpty);
         } else {
             showCanvas(catCanvas, catEmpty);
+            destroyExisting('chart-expenses-by-category');
 
-            var catColors = [
-                '#4f46e5', '#16a34a', '#dc2626', '#f59e0b', '#0ea5e9',
-                '#a855f7', '#ec4899', '#14b8a6', '#eab308', '#64748b',
-                '#06b6d4', '#84cc16', '#f97316', '#8b5cf6', '#db2777'
-            ];
+            var total = catValues.reduce(function (a, b) { return a + b; }, 0);
 
             new Chart(catCanvas.getContext('2d'), {
                 type: 'doughnut',
@@ -51,24 +71,25 @@ document.addEventListener('DOMContentLoaded', function () {
                     datasets: [{
                         data: catValues,
                         backgroundColor: catLabels.map(function (_, i) {
-                            return catColors[i % catColors.length] + 'dd';
+                            return categoryColors[i % categoryColors.length] + 'dd';
                         }),
                         borderColor: catLabels.map(function (_, i) {
-                            return catColors[i % catColors.length];
+                            return categoryColors[i % categoryColors.length];
                         }),
                         borderWidth: 1.5,
-                        hoverOffset: 8,
+                        hoverOffset: 8
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     cutout: '55%',
+                    animation: { duration: 300 },
                     plugins: {
                         legend: {
                             position: 'bottom',
                             labels: {
-                                padding: 16,
+                                padding: 14,
                                 usePointStyle: true,
                                 pointStyleWidth: 10,
                                 font: { size: 12 }
@@ -77,9 +98,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         tooltip: {
                             callbacks: {
                                 label: function (ctx) {
-                                    var total = ctx.dataset.data.reduce(function (a, b) { return a + b; }, 0);
-                                    var pct = ((ctx.parsed / total) * 100).toFixed(1);
-                                    return ctx.label + ': ' + brl(ctx.parsed) + ' (' + pct + '%)';
+                                    var pct = total > 0 ? ((ctx.parsed / total) * 100).toFixed(1) : '0.0';
+                                    return ctx.label + ': ' + fmt(ctx.parsed) + ' (' + pct + '%)';
                                 }
                             }
                         }
@@ -94,32 +114,22 @@ document.addEventListener('DOMContentLoaded', function () {
     var periodEmpty  = document.getElementById('chart-period-empty');
 
     if (periodCanvas) {
-        var incomeRows  = chartData.income_by_period  || [];
-        var expenseRows = chartData.expense_by_period || [];
+        var incomeRows  = data.income_by_period  || [];
+        var expenseRows = data.expense_by_period || [];
 
         if (incomeRows.length === 0 && expenseRows.length === 0) {
             showEmpty(periodCanvas, periodEmpty);
         } else {
             showCanvas(periodCanvas, periodEmpty);
+            destroyExisting('chart-income-vs-expense');
 
-            // Build a unified map keyed by period_date (sortable string)
             var periodMap = {};
-
             incomeRows.forEach(function (r) {
-                periodMap[r.period] = {
-                    label: r.label,
-                    income: r.total,
-                    expense: 0
-                };
+                periodMap[r.period] = { label: r.label, income: r.total, expense: 0 };
             });
-
             expenseRows.forEach(function (r) {
                 if (!periodMap[r.period]) {
-                    periodMap[r.period] = {
-                        label: r.label,
-                        income: 0,
-                        expense: r.total
-                    };
+                    periodMap[r.period] = { label: r.label, income: 0, expense: r.total };
                 } else {
                     periodMap[r.period].expense = r.total;
                 }
@@ -142,7 +152,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             borderColor: '#16a34a',
                             borderWidth: 1.5,
                             borderRadius: 4,
-                            borderSkipped: false,
+                            borderSkipped: false
                         },
                         {
                             label: 'Despesas',
@@ -151,7 +161,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             borderColor: '#dc2626',
                             borderWidth: 1.5,
                             borderRadius: 4,
-                            borderSkipped: false,
+                            borderSkipped: false
                         }
                     ]
                 },
@@ -164,7 +174,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         legend: {
                             position: 'top',
                             labels: {
-                                padding: 16,
+                                padding: 14,
                                 usePointStyle: true,
                                 pointStyleWidth: 10,
                                 font: { size: 12 }
@@ -173,7 +183,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         tooltip: {
                             callbacks: {
                                 label: function (ctx) {
-                                    return ctx.dataset.label + ': ' + brl(ctx.parsed.y);
+                                    return ctx.dataset.label + ': ' + fmt(ctx.parsed.y);
                                 }
                             }
                         }
@@ -190,7 +200,80 @@ document.addEventListener('DOMContentLoaded', function () {
                         y: {
                             beginAtZero: true,
                             ticks: {
-                                callback: function (v) { return brl(v); }
+                                callback: function (v) { return fmt(v); }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    // ============== Chart 3: Evolução do Saldo (Linha) ==============
+    var balanceCanvas = document.getElementById('chart-balance-evolution');
+    var balanceEmpty  = document.getElementById('chart-balance-empty');
+
+    if (balanceCanvas) {
+        var balance = data.balance_evolution || { labels: [], balance: [] };
+
+        if (!balance.labels || balance.labels.length === 0) {
+            showEmpty(balanceCanvas, balanceEmpty);
+        } else {
+            showCanvas(balanceCanvas, balanceEmpty);
+            destroyExisting('chart-balance-evolution');
+
+            new Chart(balanceCanvas.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: balance.labels,
+                    datasets: [{
+                        label: 'Saldo acumulado',
+                        data: balance.balance,
+                        borderColor: '#4f46e5',
+                        backgroundColor: '#4f46e522',
+                        tension: 0.3,
+                        fill: true,
+                        borderWidth: 2.5,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#4f46e5',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 1.5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 300 },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                padding: 14,
+                                usePointStyle: true,
+                                pointStyleWidth: 10,
+                                font: { size: 12 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function (ctx) {
+                                    return 'Saldo: ' + fmt(ctx.parsed.y);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                autoSkip: false,
+                                maxRotation: 45,
+                                minRotation: 0
+                            },
+                            grid: { display: false }
+                        },
+                        y: {
+                            ticks: {
+                                callback: function (v) { return fmt(v); }
                             }
                         }
                     }

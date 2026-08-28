@@ -52,15 +52,22 @@ $userName = $_SESSION['user_name'] ?? 'Usuário';
         <section class="summary">
             <div class="card card-income">
                 <h3>Receitas</h3>
-                <p class="amount">R$ <?= number_format($data['total_incomes'], 2, ',', '.') ?></p>
+                <p class="amount">R$ <?= number_format((float)($data['total_incomes'] ?? 0), 2, ',', '.') ?></p>
+                <span class="card-sub"><?= (int)($data['income_count'] ?? 0) ?> lançamento(s)</span>
             </div>
             <div class="card card-expense">
                 <h3>Despesas</h3>
-                <p class="amount">R$ <?= number_format($data['total_expenses'], 2, ',', '.') ?></p>
+                <p class="amount">R$ <?= number_format((float)($data['total_expenses'] ?? 0), 2, ',', '.') ?></p>
+                <span class="card-sub"><?= (int)($data['expense_count'] ?? 0) ?> lançamento(s)</span>
             </div>
-            <div class="card card-balance <?= $data['balance'] < 0 ? 'negative' : 'positive' ?>">
+            <div class="card card-balance <?= ($data['balance'] ?? 0) < 0 ? 'negative' : (($data['balance'] ?? 0) > 0 ? 'positive' : 'neutral') ?>">
                 <h3>Saldo</h3>
-                <p class="amount">R$ <?= number_format($data['balance'], 2, ',', '.') ?></p>
+                <p class="amount">R$ <?= number_format((float)($data['balance'] ?? 0), 2, ',', '.') ?></p>
+            </div>
+            <div class="card card-count">
+                <h3>Total de Lançamentos</h3>
+                <p class="amount"><?= (int)($data['transactions_count'] ?? 0) ?></p>
+                <span class="card-sub">no período</span>
             </div>
         </section>
 
@@ -81,8 +88,8 @@ $userName = $_SESSION['user_name'] ?? 'Usuário';
                     <div class="chart-wrapper">
                         <canvas id="chart-expenses-by-category"></canvas>
                     </div>
-                    <p class="chart-empty" id="chart-category-empty" style="display:none;">
-                        Nenhuma despesa encontrada no período.
+                    <p class="chart-empty" id="chart-category-empty" data-msg="Nenhuma despesa registrada no período.">
+                        Nenhuma despesa registrada no período.
                     </p>
                 </div>
                 <div class="chart-card">
@@ -90,8 +97,19 @@ $userName = $_SESSION['user_name'] ?? 'Usuário';
                     <div class="chart-wrapper">
                         <canvas id="chart-income-vs-expense"></canvas>
                     </div>
-                    <p class="chart-empty" id="chart-period-empty" style="display:none;">
+                    <p class="chart-empty" id="chart-period-empty" data-msg="Nenhum lançamento encontrado no período.">
                         Nenhum lançamento encontrado no período.
+                    </p>
+                </div>
+            </div>
+            <div class="charts-grid charts-grid-single">
+                <div class="chart-card">
+                    <h3>Evolução do Saldo</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="chart-balance-evolution"></canvas>
+                    </div>
+                    <p class="chart-empty" id="chart-balance-empty" data-msg="Sem dados suficientes para calcular a evolução do saldo.">
+                        Sem dados suficientes para calcular a evolução do saldo.
                     </p>
                 </div>
             </div>

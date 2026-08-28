@@ -16,6 +16,17 @@ class Income
         $this->db = $db;
     }
 
+    public function countByUser(int $userId, ?string $startDate = null, ?string $endDate = null): int
+    {
+        $sql = 'SELECT COUNT(*) FROM transacoes WHERE usuario_id = ? AND tipo = ?';
+        $params = [$userId, 'receita'];
+        if ($startDate) { $sql .= ' AND data >= ?'; $params[] = $startDate; }
+        if ($endDate)   { $sql .= ' AND data <= ?'; $params[] = $endDate; }
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        return (int) $stmt->fetchColumn();
+    }
+
     public function findByUser(
         int $userId,
         ?string $startDate = null,

@@ -188,7 +188,7 @@ input:focus, select:focus {
 
 .summary {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 1rem;
     margin-bottom: 2rem;
 }
@@ -211,12 +211,22 @@ input:focus, select:focus {
 .card .amount {
     font-size: 1.875rem;
     font-weight: 700;
+    line-height: 1.2;
+}
+
+.card-sub {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-light);
+    margin-top: 0.25rem;
 }
 
 .card-income .amount { color: var(--income); }
 .card-expense .amount { color: var(--expense); }
 .card-balance.positive .amount { color: var(--balance-positive); }
 .card-balance.negative .amount { color: var(--balance-negative); }
+.card-balance.neutral .amount { color: var(--text); }
+.card-count .amount { color: var(--primary); }
 
 .filters {
     background: var(--card-bg);
@@ -391,6 +401,11 @@ h2 {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 1.5rem;
+}
+
+.charts-grid-single {
+    grid-template-columns: 1fr;
+    margin-top: 1.5rem;
 }
 
 .chart-card {
