@@ -51,11 +51,11 @@ $userName = $_SESSION['user_name'] ?? 'Usuário';
         </section>
 
         <section class="filters">
-            <form method="GET" action="/dashboard.php" class="filter-form">
+            <form method="GET" action="/index.php" class="filter-form">
                 <input type="date" name="start_date" value="<?= htmlspecialchars($_GET['start_date'] ?? '') ?>" placeholder="Data inicial">
                 <input type="date" name="end_date" value="<?= htmlspecialchars($_GET['end_date'] ?? '') ?>" placeholder="Data final">
                 <button type="submit" class="btn btn-primary">Filtrar</button>
-                <a href="/dashboard.php" class="btn btn-secondary">Limpar</a>
+                <a href="/index.php" class="btn btn-secondary">Limpar</a>
             </form>
         </section>
 
