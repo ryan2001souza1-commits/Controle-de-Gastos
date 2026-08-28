@@ -27,7 +27,8 @@ class Income
                 descricao AS description,
                 valor AS amount,
                 data AS date,
-                usuario_id AS user_id
+                usuario_id AS user_id,
+                tipo AS type
             FROM transacoes
             WHERE usuario_id = ?
               AND tipo = ?

@@ -1,4 +1,13 @@
 <?php
+if (!isset($data) || !is_array($data)) {
+    header('Location: /index.php');
+    exit;
+}
+
+if (!isset($categories) || !is_array($categories)) {
+    $categories = [];
+}
+
 $pageTitle = 'Dashboard - Controle de Gastos';
 $userName = $_SESSION['user_name'] ?? 'Usuário';
 ?>
