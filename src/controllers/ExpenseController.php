@@ -75,6 +75,9 @@ class ExpenseController
                 $this->expenseModel->create($description, $amount, $date, $categoryId, $userId);
             } elseif ($type === 'receita') {
                 $this->incomeModel->create($description, $amount, $date, $userId);
+            } else {
+                header('Location: /index.php?error=invalid_data');
+                exit;
             }
 
             header('Location: /index.php?success=1');
