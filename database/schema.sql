@@ -1,41 +1,39 @@
-CREATE DATABASE IF NOT EXISTS controle_gastos;
-USE controle_gastos;
-
-CREATE TABLE IF NOT EXISTS users (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
+CREATE TABLE IF NOT EXISTS usuarios (
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    senha VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS categories (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(50) NOT NULL,
-    type ENUM('expense', 'income') NOT NULL DEFAULT 'expense',
-    user_id INT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+CREATE TABLE IF NOT EXISTS categorias (
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    usuario_id INTEGER NOT NULL,
+    nome VARCHAR(50) NOT NULL,
+    tipo VARCHAR(10) NOT NULL CHECK (tipo IN ('receita', 'despesa')),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS expenses (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    description VARCHAR(255) NOT NULL,
-    amount DECIMAL(10, 2) NOT NULL,
-    date DATE NOT NULL,
-    category_id INT,
-    user_id INT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+CREATE TABLE IF NOT EXISTS transacoes (
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    usuario_id INTEGER NOT NULL,
+    categoria_id INTEGER,
+    descricao VARCHAR(255) NOT NULL,
+    valor NUMERIC(12, 2) NOT NULL,
+    tipo VARCHAR(10) NOT NULL CHECK (tipo IN ('receita', 'despesa')),
+    data DATE NOT NULL,
+    observacao TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+    FOREIGN KEY (categoria_id) REFERENCES categorias(id) ON DELETE SET NULL
 );
 
-CREATE TABLE IF NOT EXISTS incomes (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    description VARCHAR(255) NOT NULL,
-    amount DECIMAL(10, 2) NOT NULL,
-    date DATE NOT NULL,
-    user_id INT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
+CREATE INDEX idx_categorias_usuario_id ON categorias(usuario_id);
+CREATE INDEX idx_transacoes_usuario_id ON transacoes(usuario_id);
+CREATE INDEX idx_transacoes_categoria_id ON transacoes(categoria_id);
+CREATE INDEX idx_transacoes_data ON transacoes(data);
+CREATE INDEX idx_transacoes_usuario_data ON transacoes(usuario_id, data);
