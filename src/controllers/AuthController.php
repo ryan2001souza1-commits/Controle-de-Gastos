@@ -16,7 +16,7 @@ class AuthController
             $password = $_POST['password'] ?? '';
 
             if ($this->authService->login($email, $password)) {
-                header('Location: /dashboard.php');
+                header('Location: /index.php');
                 exit;
             }
 
