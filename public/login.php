@@ -8,18 +8,18 @@
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body class="auth-body">
-    <div class="auth-container">
-        <div class="auth-card">
-            <div class="auth-brand">
+    <main class="auth-stage">
+        <div class="auth-card" role="region" aria-labelledby="authTitle">
+            <header class="auth-head">
                 <div class="auth-logo" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0z"></path>
-                        <path d="M12 6v6l4 2"></path>
+                    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 1v22"></path>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
                     </svg>
                 </div>
-                <h1 class="auth-title">Controle de Gastos</h1>
-                <p class="auth-subtitle">Acesse sua conta</p>
-            </div>
+                <h1 id="authTitle" class="auth-title">Controle de Gastos</h1>
+                <p class="auth-subtitle">Gerencie suas finanças com simplicidade</p>
+            </header>
 
             <?php if (isset($_GET['registered'])): ?>
                 <div class="alert alert-success">Cadastro realizado! Faça login.</div>
@@ -52,8 +52,28 @@
                                 <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
                             </svg>
                         </span>
-                        <input type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password" required>
+                        <input type="password" id="password" name="password" placeholder="Sua senha" autocomplete="current-password" required>
+                        <button type="button" class="toggle-password" aria-label="Mostrar/ocultar senha" data-target="password">
+                            <svg class="eye-open" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                            <svg class="eye-closed" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+                                <path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-6.5 0-10-7-10-7a19.86 19.86 0 0 1 5.06-5.94"></path>
+                                <path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c6.5 0 10 7 10 7a19.95 19.95 0 0 1-3.17 4.19"></path>
+                                <path d="M1 1l22 22"></path>
+                            </svg>
+                        </button>
                     </div>
+                </div>
+
+                <div class="auth-row">
+                    <label class="auth-check">
+                        <input type="checkbox" name="remember" id="remember">
+                        <span class="auth-check-mark"></span>
+                        <span class="auth-check-label">Lembrar-me</span>
+                    </label>
+                    <a href="#" class="auth-forgot">Esqueci minha senha</a>
                 </div>
 
                 <button type="submit" class="btn btn-primary auth-submit">Entrar</button>
@@ -63,7 +83,8 @@
                 Não tem conta? <a href="/index.php?action=register">Cadastre-se</a>
             </p>
         </div>
-        <p class="auth-footer">&copy; <?= date('Y') ?> Controle de Gastos</p>
-    </div>
+        <p class="auth-footer">&copy; <?= date('Y') ?> Controle de Gastos · Todos os direitos reservados</p>
+    </main>
+    <script src="/js/app.js" defer></script>
 </body>
 </html>
