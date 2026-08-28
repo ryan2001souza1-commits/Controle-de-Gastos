@@ -313,6 +313,10 @@ h2 {
     color: var(--expense);
 }
 
+.amount-cell.income {
+    color: var(--income);
+}
+
 .badge {
     display: inline-block;
     padding: 0.125rem 0.5rem;
@@ -324,6 +328,11 @@ h2 {
 .badge-expense {
     background: #fee2e2;
     color: var(--expense);
+}
+
+.badge-income {
+    background: #dcfce7;
+    color: var(--income);
 }
 
 .alert {

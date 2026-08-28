@@ -130,7 +130,7 @@ $userName = $_SESSION['user_name'] ?? 'Usuário';
                             <td><?= htmlspecialchars($transaction['description'] ?? '') ?></td>
                             <td><?= htmlspecialchars($transaction['category_name'] ?? '-') ?></td>
                             <td><?= isset($transaction['date']) ? date('d/m/Y', strtotime($transaction['date'])) : '-' ?></td>
-                            <td class="amount-cell">R$ <?= number_format((float)($transaction['amount'] ?? 0), 2, ',', '.') ?></td>
+                            <td class="amount-cell <?= $txBadge ?>">R$ <?= number_format((float)($transaction['amount'] ?? 0), 2, ',', '.') ?></td>
                             <td>
                                 <form action="/index.php?action=delete" method="POST" style="display:inline">
                                     <input type="hidden" name="id" value="<?= (int)($transaction['id'] ?? 0) ?>">
