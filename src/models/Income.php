@@ -16,61 +16,108 @@ class Income
         $this->db = $db;
     }
 
-    public function findByUser(int $userId, ?string $startDate = null, ?string $endDate = null): array
-    {
-        $sql = 'SELECT * FROM incomes WHERE user_id = ?';
-        $params = [$userId];
+    public function findByUser(
+        int $userId,
+        ?string $startDate = null,
+        ?string $endDate = null
+    ): array {
+        $sql = '
+            SELECT
+                id,
+                descricao AS description,
+                valor AS amount,
+                data AS date,
+                usuario_id AS user_id
+            FROM transacoes
+            WHERE usuario_id = ?
+              AND tipo = ?
+        ';
+
+        $params = [$userId, 'income'];
 
         if ($startDate) {
-            $sql .= ' AND date >= ?';
+            $sql .= ' AND data >= ?';
             $params[] = $startDate;
         }
 
         if ($endDate) {
-            $sql .= ' AND date <= ?';
+            $sql .= ' AND data <= ?';
             $params[] = $endDate;
         }
 
-        $sql .= ' ORDER BY date DESC';
+        $sql .= ' ORDER BY data DESC';
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
-        return $stmt->fetchAll();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function create(string $description, float $amount, string $date, int $userId): bool
-    {
-        $stmt = $this->db->prepare(
-            'INSERT INTO incomes (description, amount, date, user_id) VALUES (?, ?, ?, ?)'
-        );
-        return $stmt->execute([$description, $amount, $date, $userId]);
+    public function create(
+        string $description,
+        float $amount,
+        string $date,
+        int $userId
+    ): bool {
+        $stmt = $this->db->prepare('
+            INSERT INTO transacoes
+                (usuario_id, descricao, valor, tipo, data)
+            VALUES
+                (?, ?, ?, ?, ?)
+        ');
+
+        return $stmt->execute([
+            $userId,
+            $description,
+            $amount,
+            'income',
+            $date
+        ]);
     }
 
     public function delete(int $id, int $userId): bool
     {
-        $stmt = $this->db->prepare(
-            'DELETE FROM incomes WHERE id = ? AND user_id = ?'
-        );
-        return $stmt->execute([$id, $userId]);
+        $stmt = $this->db->prepare('
+            DELETE FROM transacoes
+            WHERE id = ?
+              AND usuario_id = ?
+              AND tipo = ?
+        ');
+
+        return $stmt->execute([
+            $id,
+            $userId,
+            'income'
+        ]);
     }
 
-    public function getTotalByUser(int $userId, ?string $startDate = null, ?string $endDate = null): float
-    {
-        $sql = 'SELECT COALESCE(SUM(amount), 0) as total FROM incomes WHERE user_id = ?';
-        $params = [$userId];
+    public function getTotalByUser(
+        int $userId,
+        ?string $startDate = null,
+        ?string $endDate = null
+    ): float {
+        $sql = '
+            SELECT COALESCE(SUM(valor), 0) AS total
+            FROM transacoes
+            WHERE usuario_id = ?
+              AND tipo = ?
+        ';
+
+        $params = [$userId, 'income'];
 
         if ($startDate) {
-            $sql .= ' AND date >= ?';
+            $sql .= ' AND data >= ?';
             $params[] = $startDate;
         }
 
         if ($endDate) {
-            $sql .= ' AND date <= ?';
+            $sql .= ' AND data <= ?';
             $params[] = $endDate;
         }
 
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
-        return (float)$stmt->fetch()['total'];
+
+        return (float) $stmt->fetch()['total'];
     }
 }
