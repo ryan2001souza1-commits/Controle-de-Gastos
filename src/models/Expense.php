@@ -248,6 +248,7 @@ class Expense
     ): array {
         $sql = '
             SELECT
+                c.id,
                 c.nome AS name,
                 COALESCE(SUM(t.valor), 0) AS total,
                 COUNT(t.id) AS count

@@ -15,20 +15,14 @@ class ReportService
         int $userId,
         ?string $startDate,
         ?string $endDate,
-        ?int $categoryId = null
+        ?int $categoryId = null,
+        ?string $filterType = null
     ): array {
         $expenseRows = $this->expenseModel->findAllByUser(
-            $userId,
-            $startDate,
-            $endDate,
-            $categoryId,
-            null
+            $userId, $startDate, $endDate, $categoryId, null
         );
         $incomeRows = $this->incomeModel->findAllByUser(
-            $userId,
-            $startDate,
-            $endDate,
-            null
+            $userId, $startDate, $endDate, null
         );
 
         $totalExpenses = 0.0;
@@ -51,53 +45,56 @@ class ReportService
             return $db <=> $da;
         });
 
-        $expensesByCategory = $this->expenseModel->getTotalByCategory(
-            $userId,
-            $startDate,
-            $endDate
+        $chartData = $this->buildChartData(
+            $userId, $startDate, $endDate, $filterType, $categoryId
         );
 
-        $chartCategories = $this->normalizeCategoriesForChart($expensesByCategory);
-
-        $chartData = $this->buildChartData(
-            $userId,
-            $startDate,
-            $endDate,
-            $totalIncomes,
-            $totalExpenses
+        $chartCategories = $this->normalizeCategoriesForChart(
+            $this->expenseModel->getTotalByCategory($userId, $startDate, $endDate)
         );
 
         return [
             'transactions'        => $all,
-            'expenses'            => $expenseRows,
-            'incomes'             => $incomeRows,
-            'total_incomes'       => $totalIncomes,
-            'total_expenses'      => $totalExpenses,
-            'balance'             => $totalIncomes - $totalExpenses,
-            'expense_count'       => count($expenseRows),
-            'income_count'        => count($incomeRows),
+            'expenses'           => $expenseRows,
+            'incomes'            => $incomeRows,
+            'total_incomes'      => $totalIncomes,
+            'total_expenses'     => $totalExpenses,
+            'balance'            => $totalIncomes - $totalExpenses,
+            'expense_count'      => count($expenseRows),
+            'income_count'       => count($incomeRows),
             'transactions_count'  => count($all),
-            'expenses_by_category' => $expensesByCategory,
-            'chart_data'          => $chartData,
+            'expenses_by_category_table' => $this->normalizeForTable(
+                $this->expenseModel->getTotalByCategory($userId, $startDate, $endDate),
+                $totalExpenses
+            ),
+            'chart_data'         => $chartData,
+            'chart_categories'   => $chartCategories,
         ];
     }
 
     private function buildChartData(
-        int $userId,
+        int     $userId,
         ?string $startDate,
         ?string $endDate,
-        float $totalIncomes,
-        float $totalExpenses
+        ?string $filterType   = null,
+        ?int    $categoryId   = null
     ): array {
-        $incomeByPeriod  = $this->groupByMonth($userId, 'receita', $startDate, $endDate);
-        $expenseByPeriod = $this->groupByMonth($userId, 'despesa', $startDate, $endDate);
+        $showIncomes  = $filterType !== 'despesa';
+        $showExpenses = $filterType !== 'receita';
+
+        $incomeByPeriod   = $showIncomes
+            ? $this->groupByPeriod($userId, 'receita', 'month', $startDate, $endDate)
+            : [];
+        $expenseByPeriod  = $showExpenses
+            ? $this->groupByPeriod($userId, 'despesa', 'month', $startDate, $endDate, $categoryId)
+            : [];
 
         $merged = $this->mergePeriods($incomeByPeriod, $expenseByPeriod);
 
-        $labels = [];
-        $incomes = [];
+        $labels   = [];
+        $incomes  = [];
         $expenses = [];
-        $balance = [];
+        $balance  = [];
         $cum = 0.0;
         foreach ($merged as $row) {
             $labels[]   = $row['label'];
@@ -107,35 +104,78 @@ class ReportService
             $balance[]  = round($cum, 2);
         }
 
+        $expenseDaily  = $showExpenses
+            ? $this->groupByPeriod($userId, 'despesa', 'day', $startDate, $endDate, $categoryId)
+            : [];
+        $incomeDaily   = $showIncomes
+            ? $this->groupByPeriod($userId, 'receita', 'day', $startDate, $endDate)
+            : [];
+        $dailyMerged    = $this->mergePeriods($incomeDaily, $expenseDaily);
+        $flowLabels     = [];
+        $flowIncomes   = [];
+        $flowExpenses  = [];
+        $flowBalance   = [];
+        $cumFlow = 0.0;
+        foreach ($dailyMerged as $row) {
+            $flowLabels[]   = $row['label'];
+            $flowIncomes[]  = round($row['income'], 2);
+            $flowExpenses[] = round($row['expense'], 2);
+            $cumFlow += ($row['income'] - $row['expense']);
+            $flowBalance[]  = round($cumFlow, 2);
+        }
+
+        $catRaw = $this->expenseModel->getTotalByCategory($userId, $startDate, $endDate);
+        if ($categoryId) {
+            $catRaw = array_values(array_filter($catRaw, fn($r) => (int)($r['id'] ?? 0) === (int)$categoryId));
+        }
+        $chartCats = $this->normalizeCategoriesForChart($catRaw);
+
         return [
-            'income_by_period'  => $incomeByPeriod,
-            'expense_by_period' => $expenseByPeriod,
-            'balance_evolution' => ['labels' => $labels, 'balance' => $balance],
-            'financial_flow'    => [
-                'labels'   => $labels,
-                'incomes'  => $incomes,
-                'expenses' => $expenses,
-                'balance'  => $balance,
+            'income_by_period'      => $incomeByPeriod,
+            'expense_by_period'    => $expenseByPeriod,
+            'balance_evolution'      => ['labels' => $flowLabels, 'balance' => $flowBalance],
+            'financial_flow'       => [
+                'labels'   => $flowLabels,
+                'incomes'  => $flowIncomes,
+                'expenses' => $flowExpenses,
+                'balance'  => $flowBalance,
             ],
-            'group_by' => 'month',
+            'expenses_by_category' => $chartCats,
+            'group_by'             => 'month',
         ];
     }
 
-    private function groupByMonth(
-        int $userId,
-        string $type,
+    private function groupByPeriod(
+        int     $userId,
+        string  $type,
+        string  $granularity,
         ?string $startDate,
-        ?string $endDate
+        ?string $endDate,
+        ?int    $categoryId = null
     ): array {
+        if ($granularity === 'day') {
+            $truncExpr = "DATE_TRUNC('day', t.data)";
+            $labelFmt  = "'DD/MM/YYYY'";
+        } else {
+            $truncExpr = "DATE_TRUNC('month', t.data)";
+            $labelFmt  = "'MM/YYYY'";
+        }
+
         $sql = "
             SELECT
-                DATE_TRUNC('month', t.data) AS periodo,
-                TO_CHAR(DATE_TRUNC('month', t.data), 'MM/YYYY') AS label,
-                COALESCE(SUM(t.valor), 0) AS total
-            FROM transacoes t
-            WHERE t.usuario_id = :uid
-              AND t.tipo = :tipo
+                agrupado.periodo  AS period_date,
+                agrupado.label    AS label,
+                agrupado.total    AS total
+            FROM (
+                SELECT
+                    {$truncExpr}    AS periodo,
+                    TO_CHAR({$truncExpr}, {$labelFmt}) AS label,
+                    COALESCE(SUM(t.valor), 0) AS total
+                FROM transacoes t
+                WHERE t.usuario_id = :uid
+                  AND t.tipo = :tipo
         ";
+
         $params = [':uid' => $userId, ':tipo' => $type];
 
         if ($startDate) {
@@ -146,11 +186,16 @@ class ReportService
             $sql .= ' AND t.data <= :end_date';
             $params[':end_date'] = $endDate;
         }
+        if ($categoryId) {
+            $sql .= ' AND t.categoria_id = :cat_id';
+            $params[':cat_id'] = $categoryId;
+        }
 
-        $sql .= '
-            GROUP BY DATE_TRUNC(\'month\', t.data)
-            ORDER BY DATE_TRUNC(\'month\', t.data)
-        ';
+        $sql .= "
+                GROUP BY {$truncExpr}
+            ) AS agrupado
+            ORDER BY agrupado.periodo
+        ";
 
         $db = getDBConnection();
         $stmt = $db->prepare($sql);
@@ -159,7 +204,7 @@ class ReportService
         $out = [];
         while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $out[] = [
-                'period' => $r['periodo'],
+                'period' => $r['period_date'],
                 'label'  => $r['label'],
                 'total'  => (float)$r['total'],
             ];
@@ -192,10 +237,27 @@ class ReportService
             if ($total <= 0) continue;
             $entries[] = ['name' => $r['name'] ?? 'Sem categoria', 'total' => $total];
         }
-        usort($entries, function ($a, $b) { return $b['total'] <=> $a['total']; });
+        usort($entries, fn($a, $b) => $b['total'] <=> $a['total']);
         return [
             'labels' => array_map(fn($e) => $e['name'], $entries),
             'values' => array_map(fn($e) => $e['total'], $entries),
         ];
+    }
+
+    private function normalizeForTable(array $rows, float $totalExpenses): array
+    {
+        $entries = [];
+        foreach ($rows as $r) {
+            $total = (float)($r['total'] ?? 0);
+            if ($total <= 0) continue;
+            $entries[] = [
+                'name'       => $r['name'] ?? 'Sem categoria',
+                'count'      => (int)($r['count'] ?? 0),
+                'total'      => $total,
+                'percentage'  => $totalExpenses > 0 ? round(($total / $totalExpenses) * 100, 1) : 0.0,
+            ];
+        }
+        usort($entries, fn($a, $b) => $b['total'] <=> $a['total']);
+        return $entries;
     }
 }

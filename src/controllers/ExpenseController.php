@@ -385,8 +385,13 @@ class ExpenseController
             $userId,
             $startDate,
             $endDate,
-            $categoryId
+            $categoryId,
+            $filterType ?: null
         );
+
+        if (!empty($report['chart_categories'])) {
+            $report['chart_data']['expenses_by_category'] = $report['chart_categories'];
+        }
 
         if ($filterType === 'despesa') {
             $transactions = $report['expenses'];
