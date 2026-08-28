@@ -41,7 +41,9 @@ class ExpenseController
             $description = trim($_POST['description'] ?? '');
             $amount = (float)($_POST['amount'] ?? 0);
             $date = $_POST['date'] ?? date('Y-m-d');
-            $categoryId = (int)($_POST['category_id'] ?? 0);
+            $categoryId = !empty($_POST['category_id'])
+                ? (int) $_POST['category_id']
+                : null;
             $type = $_POST['type'] ?? 'expense';
             $userId = $_SESSION['user_id'];
 
