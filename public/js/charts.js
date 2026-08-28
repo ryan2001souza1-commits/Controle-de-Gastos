@@ -282,4 +282,63 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
     }
+
+    /* ============== Chart 4: Comparativo Mensal (Bar) ============== */
+    var monCanvas = document.getElementById('chart-monthly-comparison');
+    var monEmpty  = document.getElementById('chart-monthly-empty');
+    if (monCanvas) {
+        var monthly = (typeof window.DASHBOARD_MONTHLY_COMPARISON !== 'undefined' && window.DASHBOARD_MONTHLY_COMPARISON) || [];
+        if (monthly.length === 0) {
+            emptyState(monCanvas, monEmpty);
+        } else {
+            activeState(monCanvas, monEmpty);
+            destroy('chart-monthly-comparison');
+
+            var mLabels  = monthly.map(function (m) { return m.label; });
+            var mIncomes = monthly.map(function (m) { return Number(m.income)  || 0; });
+            var mExpense = monthly.map(function (m) { return Number(m.expense) || 0; });
+            var mBalance = monthly.map(function (m) { return Number(m.balance) || 0; });
+
+            new Chart(monCanvas.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: mLabels,
+                    datasets: [
+                        { label: 'Receitas', data: mIncomes, backgroundColor: 'rgba(22, 163, 74, 0.85)', borderColor: '#16a34a', borderWidth: 1.5, borderRadius: 6, borderSkipped: false, maxBarThickness: 32 },
+                        { label: 'Despesas', data: mExpense, backgroundColor: 'rgba(220, 38, 38, 0.85)', borderColor: '#dc2626', borderWidth: 1.5, borderRadius: 6, borderSkipped: false, maxBarThickness: 32 },
+                        {
+                            type: 'line', label: 'Saldo',
+                            data: mBalance, borderColor: '#4f46e5',
+                            backgroundColor: 'rgba(79, 70, 229, 0.05)',
+                            tension: 0.35, borderWidth: 2.5, borderDash: [6, 4],
+                            pointRadius: 4, pointHoverRadius: 6,
+                            pointBackgroundColor: '#4f46e5', pointBorderColor: '#fff', pointBorderWidth: 1.5
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    animation: { duration: 600, easing: 'easeOutQuart' },
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            position: 'top', align: 'end',
+                            labels: { padding: 14, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 12, font: { size: 12, weight: '500' } }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                            titleColor: '#fff', bodyColor: '#e2e8f0',
+                            borderColor: 'rgba(255,255,255,0.05)', borderWidth: 1,
+                            padding: 12, cornerRadius: 8, displayColors: true, usePointStyle: true,
+                            callbacks: { label: function (ctx) { return ' ' + ctx.dataset.label + ': ' + fmt(ctx.parsed.y); } }
+                        }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { display: false } },
+                        y: { beginAtZero: true, ticks: { color: '#94a3b8', callback: function (v) { return fmt(v); } }, grid: { color: gridColor, drawBorder: false } }
+                    }
+                }
+            });
+        }
+    }
 });

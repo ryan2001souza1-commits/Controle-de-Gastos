@@ -72,6 +72,14 @@ $activeMenu = 'dashboard';
                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
                 Relatórios
             </a>
+            <a href="/index.php?action=orcamentos" class="sidebar-link <?= $activeMenu === 'orcamentos' ? 'active' : '' ?>">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                Orçamentos
+            </a>
+            <a href="/index.php?action=metas" class="sidebar-link <?= $activeMenu === 'metas' ? 'active' : '' ?>">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                Metas
+            </a>
         </nav>
         <div class="sidebar-footer">
             <a href="/index.php?action=logout" class="sidebar-link">
@@ -164,13 +172,18 @@ $activeMenu = 'dashboard';
 
         <!-- ========== INDICATORS ========== -->
         <section class="indicators-grid">
+            <?php
+            $topCat = $data['indicators']['top_category'] ?? null;
+            $topCatName = $topCat['name'] ?? null;
+            $topCatTotal = $topCat['total'] ?? 0;
+            ?>
             <div class="indicator">
                 <span class="indicator-label">Maior Categoria</span>
-                <span class="indicator-value"><?= $topCategoryName ? htmlspecialchars($topCategoryName) : '—' ?></span>
+                <span class="indicator-value"><?= $topCatName ? htmlspecialchars($topCatName) : '—' ?></span>
             </div>
             <div class="indicator">
                 <span class="indicator-label">Valor Maior Categoria</span>
-                <span class="indicator-value text-expense"><?= $topCategoryName ? 'R$ ' . fmtBRL($topCategoryTotal) : '—' ?></span>
+                <span class="indicator-value text-expense"><?= $topCatName ? 'R$ ' . fmtBRL($topCatTotal) : '—' ?></span>
             </div>
             <div class="indicator">
                 <span class="indicator-label">Maior Despesa</span>
@@ -179,6 +192,22 @@ $activeMenu = 'dashboard';
             <div class="indicator">
                 <span class="indicator-label">Total Lançamentos</span>
                 <span class="indicator-value"><?= $txCount ?></span>
+            </div>
+            <div class="indicator">
+                <span class="indicator-label">Média Despesas/Mês</span>
+                <span class="indicator-value text-expense">R$ <?= fmtBRL($data['indicators']['avg_expense'] ?? 0) ?></span>
+            </div>
+            <div class="indicator">
+                <span class="indicator-label">Média Receitas/Mês</span>
+                <span class="indicator-value text-income">R$ <?= fmtBRL($data['indicators']['avg_income'] ?? 0) ?></span>
+            </div>
+            <div class="indicator">
+                <span class="indicator-label">Renda Comprometida</span>
+                <span class="indicator-value <?= ($data['indicators']['committed_pct'] ?? 0) > 80 ? 'text-danger' : 'text-primary' ?>"><?= $data['indicators']['committed_pct'] ?? 0 ?>%</span>
+            </div>
+            <div class="indicator">
+                <span class="indicator-label">Economizado</span>
+                <span class="indicator-value <?= ($data['indicators']['economy'] ?? 0) >= 0 ? 'text-income' : 'text-danger' ?>">R$ <?= fmtBRL($data['indicators']['economy'] ?? 0) ?></span>
             </div>
         </section>
 
@@ -265,6 +294,21 @@ $activeMenu = 'dashboard';
                         <canvas id="chart-balance-evolution"></canvas>
                     </div>
                     <div class="chart-empty" id="chart-balance-empty">Dados insuficientes para evolução.</div>
+                </div>
+            </div>
+            <!-- Row 4: Comparativo Mensal (full) -->
+            <div class="chart-full">
+                <div class="chart-card">
+                    <div class="chart-card-header">
+                        <div>
+                            <h3>Comparativo Mensal</h3>
+                            <span class="chart-subtitle">Receitas x Despesas nos últimos meses</span>
+                        </div>
+                    </div>
+                    <div class="chart-wrap">
+                        <canvas id="chart-monthly-comparison"></canvas>
+                    </div>
+                    <div class="chart-empty" id="chart-monthly-empty">Sem dados para comparar.</div>
                 </div>
             </div>
         </section>
@@ -444,6 +488,7 @@ $activeMenu = 'dashboard';
 <script src="/assets/chart.min.js"></script>
 <script>
     window.DASHBOARD_CHART_DATA = <?= json_encode($chartData, JSON_UNESCAPED_UNICODE) ?>;
+    window.DASHBOARD_MONTHLY_COMPARISON = <?= json_encode($data['monthly_comparison'] ?? [], JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <script src="/js/charts.js"></script>
 <script src="/js/app.js"></script>

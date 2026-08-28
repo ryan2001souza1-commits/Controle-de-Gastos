@@ -54,6 +54,8 @@ class ExpenseService
         $expensesByCategoryForChart = $this->normalizeExpensesByCategoryForChart($expensesByCategory);
         $expensesByCategoryForTable = $this->normalizeExpensesByCategoryForTable($expensesByCategory, $totalExpenses);
         $financialFlow = $this->buildFinancialFlow($dailyData['income'], $dailyData['expense']);
+        $indicators   = $this->buildIndicators($userId, $startDate, $endDate, $totalExpenses, $totalIncomes, $expensesByCategory);
+        $monthlyComparison = $this->getMonthlyComparison($userId);
 
         return [
             'total_expenses'       => $totalExpenses,
@@ -66,6 +68,8 @@ class ExpenseService
             'expenses_by_category_table' => $expensesByCategoryForTable,
             'recent_transactions'  => $recentTransactions,
             'largest_expense'      => $largestExpense,
+            'indicators'          => $indicators,
+            'monthly_comparison'  => $monthlyComparison,
             'chart_data'           => [
                 'expenses_by_category' => $expensesByCategoryForChart,
                 'income_by_period'     => $monthlyData['income'],
@@ -238,5 +242,139 @@ class ExpenseService
         }
         usort($entries, function ($a, $b) { return $b['total'] <=> $a['total']; });
         return $entries;
+    }
+
+    private function buildIndicators(
+        int $userId,
+        ?string $startDate,
+        ?string $endDate,
+        float $totalExpenses,
+        float $totalIncomes,
+        array $expensesByCategory
+    ): array {
+        $db = getDBConnection();
+
+        $avgExpense = 0.0;
+        $avgIncome = 0.0;
+
+        $monthsStmt = $db->prepare("
+            SELECT
+                EXTRACT(YEAR FROM t.data) AS yr,
+                EXTRACT(MONTH FROM t.data) AS mo,
+                t.tipo,
+                SUM(t.valor) AS total
+            FROM transacoes t
+            WHERE t.usuario_id = :uid
+            GROUP BY yr, mo, t.tipo
+            ORDER BY yr DESC, mo DESC
+            LIMIT 12
+        ");
+        $monthsStmt->execute([':uid' => $userId]);
+        $monthTotals = $monthsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $incomeByMonth = [];
+        $expenseByMonth = [];
+        foreach ($monthTotals as $r) {
+            $key = (int)$r['yr'] . '-' . str_pad((int)$r['mo'], 2, '0', STR_PAD_LEFT);
+            if ($r['tipo'] === 'receita') {
+                $incomeByMonth[] = (float)$r['total'];
+            } else {
+                $expenseByMonth[] = (float)$r['total'];
+            }
+        }
+
+        $avgExpense = count($expenseByMonth) > 0
+            ? round(array_sum($expenseByMonth) / count($expenseByMonth), 2)
+            : 0.0;
+        $avgIncome = count($incomeByMonth) > 0
+            ? round(array_sum($incomeByMonth) / count($incomeByMonth), 2)
+            : 0.0;
+
+        $topCategory = null;
+        if (!empty($expensesByCategory)) {
+            usort($expensesByCategory, fn($a, $b) => ((float)($b['total'] ?? 0)) <=> ((float)($a['total'] ?? 0)));
+            $top = $expensesByCategory[0];
+            if (($top['total'] ?? 0) > 0) {
+                $topCategory = [
+                    'name' => $top['name'] ?? 'Sem categoria',
+                    'total' => (float)($top['total'] ?? 0),
+                ];
+            }
+        }
+
+        $committedPct = $totalIncomes > 0
+            ? round(($totalExpenses / $totalIncomes) * 100, 1)
+            : 0.0;
+
+        $economy = $totalIncomes - $totalExpenses;
+        $economyPct = $totalIncomes > 0
+            ? round(($economy / $totalIncomes) * 100, 1)
+            : 0.0;
+
+        return [
+            'avg_expense'      => $avgExpense,
+            'avg_income'      => $avgIncome,
+            'top_category'    => $topCategory,
+            'committed_pct'   => $committedPct,
+            'economy'         => $economy,
+            'economy_pct'    => $economyPct,
+        ];
+    }
+
+    public function getMonthlyComparison(int $userId, int $months = 6): array
+    {
+        $db = getDBConnection();
+
+        $stmt = $db->prepare("
+            SELECT
+                EXTRACT(YEAR FROM t.data) AS yr,
+                EXTRACT(MONTH FROM t.data) AS mo,
+                t.tipo,
+                SUM(t.valor) AS total
+            FROM transacoes t
+            WHERE t.usuario_id = :uid
+            GROUP BY yr, mo, t.tipo
+            ORDER BY yr DESC, mo DESC
+            LIMIT :limit_rows
+        ");
+        $stmt->bindValue(':uid', $userId, PDO::PARAM_INT);
+        $stmt->bindValue(':limit_rows', $months * 2, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $map = [];
+        foreach ($rows as $r) {
+            $key = (int)$r['yr'] . '-' . str_pad((int)$r['mo'], 2, '0', STR_PAD_LEFT);
+            if (!isset($map[$key])) {
+                $dt = DateTime::createFromFormat('Y-m', $key);
+                $map[$key] = [
+                    'year'      => (int)$r['yr'],
+                    'month'     => (int)$r['mo'],
+                    'label'     => $dt ? ucfirst($dt->format('M/Y')) : $key,
+                    'income'    => 0.0,
+                    'expense'   => 0.0,
+                    'balance'   => 0.0,
+                ];
+            }
+            $val = (float)$r['total'];
+            if ($r['tipo'] === 'receita') {
+                $map[$key]['income'] = $val;
+            } else {
+                $map[$key]['expense'] = $val;
+            }
+        }
+
+        ksort($map);
+        $result = array_values($map);
+
+        foreach ($result as &$item) {
+            $item['balance'] = round($item['income'] - $item['expense'], 2);
+            $item['income']  = round($item['income'], 2);
+            $item['expense'] = round($item['expense'], 2);
+        }
+        unset($item);
+
+        return array_slice($result, -$months);
     }
 }

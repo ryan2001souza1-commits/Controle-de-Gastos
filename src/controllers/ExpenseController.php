@@ -6,17 +6,23 @@ class ExpenseController
     private Income $incomeModel;
     private Category $categoryModel;
     private ExpenseService $expenseService;
+    private Budget $budgetModel;
+    private BudgetService $budgetService;
 
     public function __construct(
         Expense $expenseModel,
         Income $incomeModel,
         Category $categoryModel,
-        ExpenseService $expenseService
+        ExpenseService $expenseService,
+        Budget $budgetModel,
+        BudgetService $budgetService
     ) {
         $this->expenseModel = $expenseModel;
         $this->incomeModel  = $incomeModel;
         $this->categoryModel = $categoryModel;
         $this->expenseService = $expenseService;
+        $this->budgetModel = $budgetModel;
+        $this->budgetService = $budgetService;
     }
 
     public function dashboard(): void
@@ -213,6 +219,98 @@ class ExpenseController
         } else {
             header("Location: /index.php?action=edit&id={$id}&type={$type}&error=update_failed");
         }
+        exit;
+    }
+
+    /* ================================================================
+       MÓDULO: ORÇAMENTOS
+       ================================================================ */
+    public function orcamentos(): void
+    {
+        requireLogin();
+        $userId = $_SESSION['user_id'];
+
+        $year  = isset($_GET['year'])  ? (int)$_GET['year']  : (int)date('Y');
+        $month = isset($_GET['month']) ? (int)$_GET['month'] : (int)date('n');
+
+        if ($year < 2000 || $year > 2100) $year = (int)date('Y');
+        if ($month < 1 || $month > 12)  $month = (int)date('n');
+
+        $budgetData = $this->budgetService->getBudgetsForPeriod($userId, $year, $month);
+        $expenseCategories = $this->categoryModel->findAll($userId, 'despesa');
+
+        $pageTitle = 'Orçamentos - Controle de Gastos';
+        $userName  = $_SESSION['user_name'] ?? 'Usuário';
+        $error   = $_GET['error']   ?? null;
+        $success = $_GET['success'] ?? null;
+
+        require basePath('orcamentos.php');
+    }
+
+    public function storeBudget(): void
+    {
+        requireLogin();
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            header('Location: /index.php?action=orcamentos');
+            exit;
+        }
+
+        $userId = $_SESSION['user_id'];
+        $categoryId = (int)($_POST['category_id'] ?? 0);
+        $year  = (int)($_POST['year']  ?? (int)date('Y'));
+        $month = (int)($_POST['month'] ?? (int)date('n'));
+        $limit = (float)($_POST['limit_amount'] ?? 0);
+
+        $cats = $this->categoryModel->findAll($userId, 'despesa');
+        $validIds = array_map(fn($c) => (int)$c['id'], $cats);
+
+        if ($categoryId <= 0 || !in_array($categoryId, $validIds, true)) {
+            header("Location: /index.php?action=orcamentos&year=$year&month=$month&error=invalid_category");
+            exit;
+        }
+
+        if ($limit <= 0) {
+            header("Location: /index.php?action=orcamentos&year=$year&month=$month&error=invalid_data");
+            exit;
+        }
+
+        if ($year < 2000 || $year > 2100 || $month < 1 || $month > 12) {
+            header("Location: /index.php?action=orcamentos&error=invalid_date");
+            exit;
+        }
+
+        $this->budgetModel->upsert($userId, $categoryId, $year, $month, $limit);
+        header("Location: /index.php?action=orcamentos&year=$year&month=$month&success=saved");
+        exit;
+    }
+
+    public function deleteBudget(): void
+    {
+        requireLogin();
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            header('Location: /index.php?action=orcamentos');
+            exit;
+        }
+
+        $userId = $_SESSION['user_id'];
+        $id = (int)($_POST['id'] ?? 0);
+        $year  = (int)($_POST['year']  ?? (int)date('Y'));
+        $month = (int)($_POST['month'] ?? (int)date('n'));
+
+        if ($id <= 0) {
+            header("Location: /index.php?action=orcamentos&year=$year&month=$month&error=invalid_id");
+            exit;
+        }
+
+        if (!$this->budgetModel->findById($id, $userId)) {
+            header("Location: /index.php?action=orcamentos&year=$year&month=$month&error=not_found");
+            exit;
+        }
+
+        $this->budgetModel->delete($id, $userId);
+        header("Location: /index.php?action=orcamentos&year=$year&month=$month&success=deleted");
         exit;
     }
 
