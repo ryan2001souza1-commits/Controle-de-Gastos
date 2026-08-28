@@ -30,6 +30,8 @@ if ($action === 'register') {
     $authController->logout();
 } elseif ($action === 'store') {
     $expenseController->store();
+} elseif ($action === 'store_category') {
+    $expenseController->storeCategory();
 } elseif ($action === 'delete') {
     $expenseController->delete();
 } elseif (isLoggedIn()) {

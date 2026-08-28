@@ -93,4 +93,25 @@ class ExpenseController
             exit;
         }
     }
+
+    public function storeCategory(): void
+    {
+        requireLogin();
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $name = trim($_POST['name'] ?? '');
+            $type = $_POST['type'] ?? 'despesa';
+            $userId = $_SESSION['user_id'];
+
+            if ($name === '' || !in_array($type, ['despesa', 'receita'], true)) {
+                header('Location: /dashboard.php?error=invalid_category');
+                exit;
+            }
+
+            $this->categoryModel->create($name, $type, $userId);
+
+            header('Location: /dashboard.php?success=1');
+            exit;
+        }
+    }
 }
