@@ -92,6 +92,54 @@ class Expense
         return $row ?: null;
     }
 
+    public function findAllByUser(
+        int $userId,
+        ?string $startDate = null,
+        ?string $endDate = null,
+        ?int $categoryId = null,
+        ?string $search = null
+    ): array {
+        $sql = '
+            SELECT
+                t.id,
+                t.descricao AS description,
+                t.valor AS amount,
+                t.data AS date,
+                t.tipo AS type,
+                t.categoria_id AS category_id,
+                c.nome AS category_name
+            FROM transacoes t
+            LEFT JOIN categorias c ON t.categoria_id = c.id
+            WHERE t.usuario_id = ?
+              AND t.tipo = ?
+        ';
+
+        $params = [$userId, 'despesa'];
+
+        if ($startDate) {
+            $sql .= ' AND t.data >= ?';
+            $params[] = $startDate;
+        }
+        if ($endDate) {
+            $sql .= ' AND t.data <= ?';
+            $params[] = $endDate;
+        }
+        if ($categoryId) {
+            $sql .= ' AND t.categoria_id = ?';
+            $params[] = $categoryId;
+        }
+        if ($search && trim($search) !== '') {
+            $sql .= ' AND t.descricao ILIKE ?';
+            $params[] = '%' . trim($search) . '%';
+        }
+
+        $sql .= ' ORDER BY t.data DESC, t.id DESC';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function create(
         string $description,
         float $amount,

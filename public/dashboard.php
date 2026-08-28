@@ -37,6 +37,7 @@ if (!empty($recentExpenses)) {
 function fmtBRL($value) {
     return number_format((float)$value, 2, ',', '.');
 }
+$activeMenu = 'dashboard';
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -60,19 +61,19 @@ function fmtBRL($value) {
         </div>
         <nav class="sidebar-nav">
             <div class="sidebar-section-label">Menu</div>
-            <a href="/index.php" class="sidebar-link active">
+            <a href="/index.php" class="sidebar-link <?= $activeMenu === 'dashboard' ? 'active' : '' ?>">
                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
                 Dashboard
             </a>
-            <a href="#" class="sidebar-link">
+            <a href="/index.php?action=lancamentos" class="sidebar-link <?= $activeMenu === 'lancamentos' ? 'active' : '' ?>">
                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
                 Lançamentos
             </a>
-            <a href="#" class="sidebar-link">
+            <a href="/index.php?action=categorias" class="sidebar-link <?= $activeMenu === 'categorias' ? 'active' : '' ?>">
                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
                 Categorias
             </a>
-            <a href="#" class="sidebar-link">
+            <a href="/index.php?action=relatorios" class="sidebar-link <?= $activeMenu === 'relatorios' ? 'active' : '' ?>">
                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
                 Relatórios
             </a>

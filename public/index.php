@@ -9,6 +9,7 @@ require_once __DIR__ . '/../src/models/Expense.php';
 require_once __DIR__ . '/../src/models/Income.php';
 require_once __DIR__ . '/../src/services/AuthService.php';
 require_once __DIR__ . '/../src/services/ExpenseService.php';
+require_once __DIR__ . '/../src/services/ReportService.php';
 require_once __DIR__ . '/../src/controllers/AuthController.php';
 require_once __DIR__ . '/../src/controllers/ExpenseController.php';
 
@@ -38,6 +39,16 @@ if ($action === 'register') {
     $expenseController->edit();
 } elseif ($action === 'update') {
     $expenseController->update();
+} elseif ($action === 'lancamentos') {
+    $expenseController->lancamentos();
+} elseif ($action === 'categorias') {
+    $expenseController->categorias();
+} elseif ($action === 'update_category') {
+    $expenseController->updateCategory();
+} elseif ($action === 'delete_category') {
+    $expenseController->deleteCategory();
+} elseif ($action === 'relatorios') {
+    $expenseController->relatorios();
 } elseif (isLoggedIn()) {
     $expenseController->dashboard();
 } else {

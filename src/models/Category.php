@@ -39,6 +39,107 @@ class Category
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function findById(int $id, int $userId): ?array
+    {
+        $stmt = $this->db->prepare('
+            SELECT
+                id,
+                nome AS name,
+                tipo AS type,
+                usuario_id AS user_id
+            FROM categorias
+            WHERE id = ?
+              AND usuario_id = ?
+        ');
+        $stmt->execute([$id, $userId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    public function findAllWithStats(
+        int $userId,
+        string $type,
+        ?string $startDate = null,
+        ?string $endDate = null
+    ): array {
+        $sql = '
+            SELECT
+                c.id,
+                c.nome        AS name,
+                c.tipo        AS type,
+                c.usuario_id  AS user_id,
+                COUNT(t.id)   AS tx_count,
+                COALESCE(SUM(t.valor), 0) AS tx_total
+            FROM categorias c
+            LEFT JOIN transacoes t
+                ON t.categoria_id = c.id
+                AND t.usuario_id  = c.usuario_id
+                AND t.tipo        = c.tipo
+        ';
+
+        $params = [];
+        $where  = [];
+
+        $where[] = 'c.usuario_id = ?';
+        $params[] = $userId;
+
+        $where[] = 'c.tipo = ?';
+        $params[] = $type;
+
+        if ($startDate) {
+            $where[] = '(t.data IS NULL OR t.data >= ?)';
+            $params[] = $startDate;
+        }
+        if ($endDate) {
+            $where[] = '(t.data IS NULL OR t.data <= ?)';
+            $params[] = $endDate;
+        }
+
+        $sql .= ' WHERE ' . implode(' AND ', $where);
+        $sql .= ' GROUP BY c.id, c.nome, c.tipo, c.usuario_id';
+        $sql .= ' ORDER BY c.nome';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function countTransactions(int $id, int $userId): int
+    {
+        $stmt = $this->db->prepare('
+            SELECT COUNT(*) FROM transacoes
+            WHERE categoria_id = ?
+              AND usuario_id = ?
+        ');
+        $stmt->execute([$id, $userId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    public function countByName(
+        string $name,
+        string $type,
+        int $userId,
+        ?int $excludeId = null
+    ): int {
+        $sql = '
+            SELECT COUNT(*) FROM categorias
+            WHERE LOWER(TRIM(nome)) = LOWER(TRIM(?))
+              AND tipo = ?
+              AND usuario_id = ?
+        ';
+        $params = [$name, $type, $userId];
+
+        if ($excludeId !== null) {
+            $sql .= ' AND id <> ?';
+            $params[] = $excludeId;
+        }
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        return (int) $stmt->fetchColumn();
+    }
+
     public function create(
         string $name,
         string $type,
@@ -54,6 +155,28 @@ class Category
         return $stmt->execute([
             $name,
             $type,
+            $userId
+        ]);
+    }
+
+    public function update(
+        int $id,
+        string $name,
+        string $type,
+        int $userId
+    ): bool {
+        $stmt = $this->db->prepare('
+            UPDATE categorias
+            SET nome = ?,
+                tipo = ?
+            WHERE id = ?
+              AND usuario_id = ?
+        ');
+
+        return $stmt->execute([
+            $name,
+            $type,
+            $id,
             $userId
         ]);
     }
