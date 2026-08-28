@@ -12,6 +12,8 @@ if (!isset($incomeCategories) || !is_array($incomeCategories)) {
     $incomeCategories = [];
 }
 
+$chartData = $data['chart_data'] ?? null;
+
 $pageTitle = 'Dashboard - Controle de Gastos';
 $userName = $_SESSION['user_name'] ?? 'Usuário';
 ?>
@@ -69,6 +71,30 @@ $userName = $_SESSION['user_name'] ?? 'Usuário';
                 <button type="submit" class="btn btn-primary">Filtrar</button>
                 <a href="/index.php" class="btn btn-secondary">Limpar</a>
             </form>
+        </section>
+
+        <section class="analytics">
+            <h2>Análises</h2>
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3>Despesas por Categoria</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="chart-expenses-by-category"></canvas>
+                    </div>
+                    <p class="chart-empty" id="chart-category-empty" style="display:none;">
+                        Nenhuma despesa encontrada no período.
+                    </p>
+                </div>
+                <div class="chart-card">
+                    <h3>Receitas x Despesas</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="chart-income-vs-expense"></canvas>
+                    </div>
+                    <p class="chart-empty" id="chart-period-empty" style="display:none;">
+                        Nenhum lançamento encontrado no período.
+                    </p>
+                </div>
+            </div>
         </section>
 
         <section class="add-transaction">
@@ -175,5 +201,10 @@ $userName = $_SESSION['user_name'] ?? 'Usuário';
     </main>
 
     <script src="/js/app.js"></script>
+    <script src="/assets/chart.min.js"></script>
+    <script>
+        window.DASHBOARD_CHART_DATA = <?= json_encode($chartData, JSON_UNESCAPED_UNICODE) ?>;
+    </script>
+    <script src="/js/charts.js"></script>
 </body>
 </html>

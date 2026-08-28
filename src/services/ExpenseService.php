@@ -44,12 +44,50 @@ class ExpenseService
 
         $recentTransactions = array_slice($recentTransactions, 0, 10);
 
+        $groupBy = $this->resolveGroupBy($startDate, $endDate);
+        $incomeByPeriod  = $this->incomeModel->getTotalsByPeriod($userId, $startDate, $endDate, $groupBy);
+        $expenseByPeriod = $this->expenseModel->getTotalsByPeriod($userId, $startDate, $endDate, $groupBy);
+
+        $expensesByCategoryForChart = $this->normalizeExpensesByCategoryForChart($expensesByCategory);
+
         return [
             'total_expenses'       => $totalExpenses,
             'total_incomes'        => $totalIncomes,
             'balance'              => $totalIncomes - $totalExpenses,
             'expenses_by_category' => $expensesByCategory,
             'recent_transactions'  => $recentTransactions,
+            'chart_data'           => [
+                'expenses_by_category' => $expensesByCategoryForChart,
+                'income_by_period'     => $incomeByPeriod,
+                'expense_by_period'    => $expenseByPeriod,
+                'group_by'             => $groupBy,
+            ],
         ];
+    }
+
+    private function resolveGroupBy(?string $startDate, ?string $endDate): string
+    {
+        if (!$startDate || !$endDate) {
+            return 'day';
+        }
+        $start = new DateTime($startDate);
+        $end   = new DateTime($endDate);
+        $diff  = $start->diff($end)->days;
+        return $diff > 60 ? 'month' : 'day';
+    }
+
+    private function normalizeExpensesByCategoryForChart(array $rows): array
+    {
+        $labels = [];
+        $values = [];
+        foreach ($rows as $r) {
+            $total = (float)($r['total'] ?? 0);
+            if ($total <= 0) {
+                continue;
+            }
+            $labels[] = $r['name'] ?? 'Sem categoria';
+            $values[] = $total;
+        }
+        return ['labels' => $labels, 'values' => $values];
     }
 }
