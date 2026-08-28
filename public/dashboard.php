@@ -108,7 +108,7 @@ $userName = $_SESSION['user_name'] ?? 'Usuário';
                             <td>
                                 <form action="/index.php?action=delete" method="POST" style="display:inline">
                                     <input type="hidden" name="id" value="<?= $expense['id'] ?>">
-                                    <input type="hidden" name="type" value="expense">
+                                    <input type="hidden" name="type" value="despesa">
                                     <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Excluir?')">Excluir</button>
                                 </form>
                             </td>
