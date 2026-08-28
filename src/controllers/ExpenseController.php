@@ -83,9 +83,9 @@ class ExpenseController
             $type = $_POST['type'];
             $userId = $_SESSION['user_id'];
 
-            if ($type === 'expense') {
+            if ($type === 'despesa') {
                 $this->expenseModel->delete($id, $userId);
-            } else {
+            } elseif ($type === 'receita') {
                 $this->incomeModel->delete($id, $userId);
             }
 
