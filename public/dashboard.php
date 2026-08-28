@@ -61,7 +61,9 @@ $userName = $_SESSION['user_name'] ?? 'Usuário';
 
         <section class="add-transaction">
             <h2>Adicionar Lançamento</h2>
-            <form action="/index.php?action=store" method="POST" class="transaction-form">
+            <form action="/index.php?action=store" method="POST" class="transaction-form"
+                  data-expense-categories='<?= htmlspecialchars(json_encode($expenseCategories, JSON_UNESCAPED_UNICODE), ENT_QUOTES, "UTF-8") ?>'
+                  data-income-categories='<?= htmlspecialchars(json_encode($incomeCategories, JSON_UNESCAPED_UNICODE), ENT_QUOTES, "UTF-8") ?>'>
                 <select name="type" id="type" required>
                     <option value="despesa">Despesa</option>
                     <option value="receita">Receita</option>
@@ -71,9 +73,6 @@ $userName = $_SESSION['user_name'] ?? 'Usuário';
                 <input type="date" name="date" value="<?= date('Y-m-d') ?>" required>
                 <select name="category_id" id="category_id">
                     <option value="">Sem categoria</option>
-                    <?php foreach ($categories as $cat): ?>
-                        <option value="<?= $cat['id'] ?>"><?= htmlspecialchars($cat['name']) ?></option>
-                    <?php endforeach; ?>
                 </select>
                 <button type="submit" class="btn btn-primary">Adicionar</button>
             </form>
