@@ -17,8 +17,12 @@ class User
 
     public function findByEmail(string $email): ?User
     {
-        $stmt = $this->db->prepare('SELECT * FROM usuarios WHERE email = ?');
+        $stmt = $this->db->prepare(
+            'SELECT * FROM usuarios WHERE email = ?'
+        );
+
         $stmt->execute([$email]);
+
         $data = $stmt->fetch();
 
         if (!$data) {
@@ -30,8 +34,12 @@ class User
 
     public function findById(int $id): ?User
     {
-        $stmt = $this->db->prepare('SELECT * FROM usuarios WHERE id = ?');
+        $stmt = $this->db->prepare(
+            'SELECT * FROM usuarios WHERE id = ?'
+        );
+
         $stmt->execute([$id]);
+
         $data = $stmt->fetch();
 
         if (!$data) {
@@ -41,26 +49,39 @@ class User
         return $this->hydrate($data);
     }
 
-    public function create(string $name, string $email, string $password): bool
-    {
+    public function create(
+        string $name,
+        string $email,
+        string $password
+    ): bool {
         $stmt = $this->db->prepare(
-            'INSERT INTO usuarios (name, email, password_hash) VALUES (?, ?, ?)'
+            'INSERT INTO usuarios (nome, email, senha)
+             VALUES (?, ?, ?)'
         );
-        return $stmt->execute([$name, $email, password_hash($password, PASSWORD_DEFAULT)]);
+
+        return $stmt->execute([
+            $name,
+            $email,
+            password_hash($password, PASSWORD_DEFAULT)
+        ]);
     }
 
     public function verifyPassword(string $password): bool
     {
-        return password_verify($password, $this->password_hash);
+        return password_verify(
+            $password,
+            $this->password_hash
+        );
     }
 
     private function hydrate(array $data): User
     {
-        $this->id = (int)$data['id'];
-        $this->name = $data['name'];
+        $this->id = (int) $data['id'];
+        $this->name = $data['nome'];
         $this->email = $data['email'];
-        $this->password_hash = $data['password_hash'];
+        $this->password_hash = $data['senha'];
         $this->created_at = $data['created_at'];
+
         return $this;
     }
 }
