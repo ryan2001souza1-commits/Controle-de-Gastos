@@ -37,6 +37,8 @@ $action = $_GET['action'] ?? null;
 
 if ($action === 'register') {
     $authController->register();
+} elseif ($action === 'login') {
+    $authController->login();
 } elseif ($action === 'logout') {
     $authController->logout();
 } elseif ($action === 'store') {
