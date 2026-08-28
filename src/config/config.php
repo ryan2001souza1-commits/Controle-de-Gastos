@@ -76,12 +76,20 @@ function getDBConnection(): PDO
     if ($pdo === null) {
         $cfg = getDbConfig();
 
+        $endpointId = '';
+        if (str_contains($cfg['host'], '-pooler.')) {
+            $endpointId = explode('-pooler.', $cfg['host'], 2)[0];
+        } else {
+            $endpointId = explode('.', $cfg['host'], 2)[0];
+        }
+
         $dsn = sprintf(
-            'pgsql:host=%s;port=%d;dbname=%s;sslmode=%s',
+            'pgsql:host=%s;port=%d;dbname=%s;sslmode=%s;options=endpoint=%s',
             $cfg['host'],
             $cfg['port'],
             $cfg['dbname'],
-            $cfg['sslmode']
+            $cfg['sslmode'],
+            $endpointId
         );
 
         try {
