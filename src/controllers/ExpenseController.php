@@ -57,7 +57,7 @@ class ExpenseController
             $userId = $_SESSION['user_id'];
 
             if (empty($description) || $amount <= 0 || empty($date)) {
-                header('Location: /dashboard.php?error=invalid_data');
+                header('Location: /index.php?error=invalid_data');
                 exit;
             }
 
@@ -78,7 +78,7 @@ class ExpenseController
                 );
             }
 
-            header('Location: /dashboard.php?success=1');
+            header('Location: /index.php?success=1');
             exit;
         }
     }
@@ -98,7 +98,7 @@ class ExpenseController
                 $this->incomeModel->delete($id, $userId);
             }
 
-            header('Location: /dashboard.php');
+            header('Location: /index.php');
             exit;
         }
     }
@@ -113,13 +113,13 @@ class ExpenseController
             $userId = $_SESSION['user_id'];
 
             if ($name === '' || !in_array($type, ['despesa', 'receita'], true)) {
-                header('Location: /dashboard.php?error=invalid_category');
+                header('Location: /index.php?error=invalid_category');
                 exit;
             }
 
             $this->categoryModel->create($name, $type, $userId);
 
-            header('Location: /dashboard.php?success=1');
+            header('Location: /index.php?success=1');
             exit;
         }
     }
