@@ -77,19 +77,22 @@ function getDBConnection(): PDO
         $cfg = getDbConfig();
 
         $endpointId = '';
-        if (str_contains($cfg['host'], '-pooler.')) {
+        $isPooler = str_contains($cfg['host'], '-pooler.');
+        $isNeon = $isPooler || (str_contains($cfg['host'], '.neon.tech') || str_contains($cfg['host'], '.neon.'));
+        if ($isPooler) {
             $endpointId = explode('-pooler.', $cfg['host'], 2)[0];
-        } else {
+        } elseif ($isNeon) {
             $endpointId = explode('.', $cfg['host'], 2)[0];
         }
 
+        $dsnExtra = $isNeon ? sprintf('options=endpoint=%s', $endpointId) : '';
         $dsn = sprintf(
-            'pgsql:host=%s;port=%d;dbname=%s;sslmode=%s;options=endpoint=%s',
+            'pgsql:host=%s;port=%d;dbname=%s;sslmode=%s;%s',
             $cfg['host'],
             $cfg['port'],
             $cfg['dbname'],
             $cfg['sslmode'],
-            $endpointId
+            $dsnExtra
         );
 
         try {
