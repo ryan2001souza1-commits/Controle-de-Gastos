@@ -120,16 +120,21 @@ $userName = $_SESSION['user_name'] ?? 'Usuário';
                 </thead>
                 <tbody>
                     <?php foreach ($data['recent_transactions'] as $transaction): ?>
+                        <?php
+                            $txType = $transaction['type'] ?? '';
+                            $txLabel = $txType === 'despesa' ? 'Despesa' : ($txType === 'receita' ? 'Receita' : '');
+                            $txBadge = $txType === 'despesa' ? 'expense' : 'income';
+                        ?>
                         <tr>
-                            <td><span class="badge badge-<?= $transaction['type'] === 'despesa' ? 'expense' : 'income' ?>"><?= ucfirst($transaction['type']) ?></span></td>
-                            <td><?= htmlspecialchars($transaction['description']) ?></td>
+                            <td><span class="badge badge-<?= $txBadge ?>"><?= htmlspecialchars($txLabel) ?></span></td>
+                            <td><?= htmlspecialchars($transaction['description'] ?? '') ?></td>
                             <td><?= htmlspecialchars($transaction['category_name'] ?? '-') ?></td>
-                            <td><?= date('d/m/Y', strtotime($transaction['date'])) ?></td>
-                            <td class="amount-cell">R$ <?= number_format($transaction['amount'], 2, ',', '.') ?></td>
+                            <td><?= isset($transaction['date']) ? date('d/m/Y', strtotime($transaction['date'])) : '-' ?></td>
+                            <td class="amount-cell">R$ <?= number_format((float)($transaction['amount'] ?? 0), 2, ',', '.') ?></td>
                             <td>
                                 <form action="/index.php?action=delete" method="POST" style="display:inline">
-                                    <input type="hidden" name="id" value="<?= $transaction['id'] ?>">
-                                    <input type="hidden" name="type" value="<?= $transaction['type'] ?>">
+                                    <input type="hidden" name="id" value="<?= (int)($transaction['id'] ?? 0) ?>">
+                                    <input type="hidden" name="type" value="<?= htmlspecialchars($txType) ?>">
                                     <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Excluir?')">Excluir</button>
                                 </form>
                             </td>

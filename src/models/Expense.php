@@ -28,6 +28,7 @@ class Expense
                 t.descricao AS description,
                 t.valor AS amount,
                 t.data AS date,
+                t.tipo AS type,
                 t.categoria_id AS category_id,
                 t.usuario_id AS user_id,
                 c.nome AS category_name
