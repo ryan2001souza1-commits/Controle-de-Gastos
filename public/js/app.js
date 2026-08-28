@@ -1,5 +1,51 @@
 document.addEventListener('DOMContentLoaded', () => {
     /* ============================================================
+       AUTH PAGES — toggle de visibilidade da senha
+       ============================================================ */
+    document.querySelectorAll('.toggle-password').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.dataset.target;
+            const input = document.getElementById(targetId);
+            if (!input) return;
+            const showing = input.type === 'text';
+            input.type = showing ? 'password' : 'text';
+            const openIcon  = btn.querySelector('.eye-open');
+            const closedIcon = btn.querySelector('.eye-closed');
+            if (openIcon)   openIcon.style.display   = showing ? 'block' : 'none';
+            if (closedIcon) closedIcon.style.display = showing ? 'none' : 'block';
+        });
+    });
+
+    /* ============================================================
+       AUTH PAGES — validação de confirmação de senha
+       ============================================================ */
+    const pwd        = document.getElementById('password');
+    const pwdConfirm = document.getElementById('password_confirm');
+    const pwdHint    = document.getElementById('passwordMatchHint');
+
+    if (pwd && pwdConfirm && pwdHint) {
+        const validate = () => {
+            if (!pwdConfirm.value) {
+                pwdHint.textContent = '';
+                pwdHint.className = 'input-hint';
+                pwdConfirm.setCustomValidity('');
+                return;
+            }
+            if (pwd.value === pwdConfirm.value) {
+                pwdHint.textContent = '✓ Senhas conferem';
+                pwdHint.className = 'input-hint match';
+                pwdConfirm.setCustomValidity('');
+            } else {
+                pwdHint.textContent = '✕ As senhas não coincidem';
+                pwdHint.className = 'input-hint no-match';
+                pwdConfirm.setCustomValidity('As senhas não coincidem');
+            }
+        };
+        pwd.addEventListener('input', validate);
+        pwdConfirm.addEventListener('input', validate);
+    }
+
+    /* ============================================================
        Filtro dinâmico de categorias (formulário "Novo Lançamento")
        ============================================================ */
     const typeSelect = document.getElementById('type');
