@@ -33,7 +33,7 @@ class Income
               AND tipo = ?
         ';
 
-        $params = [$userId, 'income'];
+        $params = [$userId, 'receita'];
 
         if ($startDate) {
             $sql .= ' AND data >= ?';
@@ -70,7 +70,7 @@ class Income
             $userId,
             $description,
             $amount,
-            'income',
+            'receita',
             $date
         ]);
     }
@@ -87,7 +87,7 @@ class Income
         return $stmt->execute([
             $id,
             $userId,
-            'income'
+            'receita'
         ]);
     }
 
@@ -103,7 +103,7 @@ class Income
               AND tipo = ?
         ';
 
-        $params = [$userId, 'income'];
+        $params = [$userId, 'receita'];
 
         if ($startDate) {
             $sql .= ' AND data >= ?';

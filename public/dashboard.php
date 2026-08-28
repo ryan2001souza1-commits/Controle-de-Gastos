@@ -70,6 +70,18 @@ $userName = $_SESSION['user_name'] ?? 'Usuário';
             </form>
         </section>
 
+        <section class="add-category">
+            <h2>Nova Categoria</h2>
+            <form action="/index.php?action=store_category" method="POST" class="category-form">
+                <input type="text" name="name" placeholder="Nome da categoria" required>
+                <select name="type" required>
+                    <option value="despesa">Despesa</option>
+                    <option value="receita">Receita</option>
+                </select>
+                <button type="submit" class="btn btn-primary">Adicionar Categoria</button>
+            </form>
+        </section>
+
         <section class="categories-summary">
             <h2>Despesas por Categoria</h2>
             <div class="category-list">
@@ -98,23 +110,23 @@ $userName = $_SESSION['user_name'] ?? 'Usuário';
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($data['recent_expenses'] as $expense): ?>
+                    <?php foreach ($data['recent_transactions'] as $transaction): ?>
                         <tr>
-                            <td><span class="badge badge-expense">Despesa</span></td>
-                            <td><?= htmlspecialchars($expense['description']) ?></td>
-                            <td><?= htmlspecialchars($expense['category_name'] ?? '-') ?></td>
-                            <td><?= date('d/m/Y', strtotime($expense['date'])) ?></td>
-                            <td class="amount-cell">R$ <?= number_format($expense['amount'], 2, ',', '.') ?></td>
+                            <td><span class="badge badge-<?= $transaction['type'] === 'despesa' ? 'expense' : 'income' ?>"><?= ucfirst($transaction['type']) ?></span></td>
+                            <td><?= htmlspecialchars($transaction['description']) ?></td>
+                            <td><?= htmlspecialchars($transaction['category_name'] ?? '-') ?></td>
+                            <td><?= date('d/m/Y', strtotime($transaction['date'])) ?></td>
+                            <td class="amount-cell">R$ <?= number_format($transaction['amount'], 2, ',', '.') ?></td>
                             <td>
                                 <form action="/index.php?action=delete" method="POST" style="display:inline">
-                                    <input type="hidden" name="id" value="<?= $expense['id'] ?>">
-                                    <input type="hidden" name="type" value="despesa">
+                                    <input type="hidden" name="id" value="<?= $transaction['id'] ?>">
+                                    <input type="hidden" name="type" value="<?= $transaction['type'] ?>">
                                     <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Excluir?')">Excluir</button>
                                 </form>
                             </td>
                         </tr>
                     <?php endforeach; ?>
-                    <?php if (empty($data['recent_expenses'])): ?>
+                    <?php if (empty($data['recent_transactions'])): ?>
                         <tr><td colspan="6" class="empty">Nenhum lançamento encontrado.</td></tr>
                     <?php endif; ?>
                 </tbody>

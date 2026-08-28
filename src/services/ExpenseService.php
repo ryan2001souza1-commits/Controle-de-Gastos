@@ -17,6 +17,13 @@ class ExpenseService
         $totalIncomes = $this->incomeModel->getTotalByUser($userId, $startDate, $endDate);
         $expensesByCategory = $this->expenseModel->getTotalByCategory($userId, $startDate, $endDate);
         $recentExpenses = array_slice($this->expenseModel->findByUser($userId, $startDate, $endDate), 0, 10);
+        $recentIncomes = array_slice($this->incomeModel->findByUser($userId, $startDate, $endDate), 0, 10);
+
+        $recentTransactions = array_merge($recentExpenses, $recentIncomes);
+        usort($recentTransactions, function ($a, $b) {
+            return strtotime($b['date']) <=> strtotime($a['date']);
+        });
+        $recentTransactions = array_slice($recentTransactions, 0, 10);
 
         return [
             'total_expenses' => $totalExpenses,
@@ -24,6 +31,8 @@ class ExpenseService
             'balance' => $totalIncomes - $totalExpenses,
             'expenses_by_category' => $expensesByCategory,
             'recent_expenses' => $recentExpenses,
+            'recent_incomes' => $recentIncomes,
+            'recent_transactions' => $recentTransactions,
         ];
     }
 }

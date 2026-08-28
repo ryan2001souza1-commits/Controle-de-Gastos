@@ -37,7 +37,7 @@ class Expense
               AND t.tipo = ?
         ';
 
-        $params = [$userId, 'expense'];
+        $params = [$userId, 'despesa'];
 
         if ($startDate) {
             $sql .= ' AND t.data >= ?';
@@ -76,7 +76,7 @@ class Expense
             $categoryId,
             $description,
             $amount,
-            'expense',
+            'despesa',
             $date
         ]);
     }
@@ -108,7 +108,7 @@ class Expense
             $categoryId,
             $id,
             $userId,
-            'expense'
+            'despesa'
         ]);
     }
 
@@ -124,7 +124,7 @@ class Expense
         return $stmt->execute([
             $id,
             $userId,
-            'expense'
+            'despesa'
         ]);
     }
 
@@ -140,7 +140,7 @@ class Expense
               AND tipo = ?
         ';
 
-        $params = [$userId, 'expense'];
+        $params = [$userId, 'despesa'];
 
         if ($startDate) {
             $sql .= ' AND data >= ?';
@@ -174,7 +174,7 @@ class Expense
                 AND t.tipo = ?
         ';
 
-        $params = [$userId, 'expense'];
+        $params = [$userId, 'despesa'];
 
         $sql .= '
             WHERE c.usuario_id = ?
@@ -182,7 +182,7 @@ class Expense
         ';
 
         $params[] = $userId;
-        $params[] = 'expense';
+        $params[] = 'despesa';
 
         if ($startDate) {
             $sql .= ' AND (t.data IS NULL OR t.data >= ?)';

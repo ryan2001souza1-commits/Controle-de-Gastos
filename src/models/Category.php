@@ -17,7 +17,7 @@ class Category
 
     public function findAll(
         int $userId,
-        string $type = 'expense'
+        string $type = 'despesa'
     ): array {
         $stmt = $this->db->prepare('
             SELECT
