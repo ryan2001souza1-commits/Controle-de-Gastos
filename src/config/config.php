@@ -5,18 +5,16 @@
 // Projeto: controle-gastos
 // =========================================================
 
-// --- Credenciais do banco (PREENCHA A SENHA) ---
-// A senha NÃO foi definida aqui por segurança.
-// Defina a variável de ambiente DB_PASS ou altere o valor abaixo.
-define('DB_HOST', 'localhost');
-define('DB_PORT', '5432');
-define('DB_NAME', 'controle_gastos');
-define('DB_USER', 'postgres');
+// --- Credenciais do banco via variáveis de ambiente ---
+// Em deploy (Vercel/Docker), defina DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS.
+// Em desenvolvimento local, os defaults abaixo (localhost/123) funcionam.
+define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+define('DB_PORT', getenv('DB_PORT') ?: '5432');
+define('DB_NAME', getenv('DB_NAME') ?: 'controle_gastos');
+define('DB_USER', getenv('DB_USER') ?: 'postgres');
 
-// Senha do PostgreSQL:
-// 1) Recomendado: defina a variável de ambiente DB_PASS no seu sistema.
-// 2) Alternativa: substitua o valor abaixo diretamente (menos seguro).
-define('DB_PASS', '123');
+// Senha do PostgreSQL: lida de DB_PASS (env). Default local mantido como '123'.
+define('DB_PASS', getenv('DB_PASS') !== false ? getenv('DB_PASS') : '123');
 
 // Função utilitária para obter uma conexão PDO com o PostgreSQL.
 // Retorna sempre a mesma instância durante a requisição (singleton).
@@ -63,7 +61,7 @@ function isLoggedIn(): bool
 function requireLogin(): void
 {
     if (!isLoggedIn()) {
-        header('Location: /login.php');
+        header('Location: /index.php?action=login');
         exit;
     }
 }
