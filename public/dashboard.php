@@ -54,8 +54,8 @@ $userName = $_SESSION['user_name'] ?? 'Usuário';
             <h2>Adicionar Lançamento</h2>
             <form action="/index.php?action=store" method="POST" class="transaction-form">
                 <select name="type" id="type" required>
-                    <option value="expense">Despesa</option>
-                    <option value="income">Receita</option>
+                    <option value="despesa">Despesa</option>
+                    <option value="receita">Receita</option>
                 </select>
                 <input type="text" name="description" placeholder="Descrição" required>
                 <input type="number" name="amount" placeholder="Valor" step="0.01" min="0.01" required>
