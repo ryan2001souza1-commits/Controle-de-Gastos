@@ -52,10 +52,21 @@ class ExpenseController
                 exit;
             }
 
-            if ($type === 'expense') {
-                $this->expenseModel->create($description, $amount, $date, $categoryId, $userId);
-            } else {
-                $this->incomeModel->create($description, $amount, $date, $userId);
+            if ($type === 'despesa') {
+                $this->expenseModel->create(
+                    $description,
+                    $amount,
+                    $date,
+                    $categoryId,
+                    $userId
+                );
+            } elseif ($type === 'receita') {
+                $this->incomeModel->create(
+                    $description,
+                    $amount,
+                    $date,
+                    $userId
+                );
             }
 
             header('Location: /dashboard.php?success=1');
