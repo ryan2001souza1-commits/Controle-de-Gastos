@@ -1,6 +1,6 @@
 <?php
 $pageTitle = 'Dashboard - Controle de Gastos';
-$userName = $authService->getUserName() ?? 'Usuário';
+$userName = $_SESSION['user_name'] ?? 'Usuário';
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
