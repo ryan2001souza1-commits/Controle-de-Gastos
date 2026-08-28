@@ -28,7 +28,8 @@ class ExpenseController
         $endDate = $_GET['end_date'] ?? null;
 
         $data = $this->expenseService->getDashboardData($userId, $startDate, $endDate);
-        $categories = $this->categoryModel->findAll($userId, 'despesa');
+        $expenseCategories = $this->categoryModel->findAll($userId, 'despesa');
+        $incomeCategories = $this->categoryModel->findAll($userId, 'receita');
 
         require basePath('dashboard.php');
     }
