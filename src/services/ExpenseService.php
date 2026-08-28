@@ -115,7 +115,7 @@ class ExpenseService
 
         $sql .= "
             GROUP BY {$periodExpr}, tipo
-            ORDER BY {$periodExpr}
+            ORDER BY " . str_replace('::date', '', $periodExpr) . ", tipo
         ";
 
         $stmt = $db->prepare($sql);
