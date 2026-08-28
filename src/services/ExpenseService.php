@@ -83,39 +83,46 @@ class ExpenseService
         $db = getDBConnection();
 
         if ($groupBy === 'day') {
-            $periodExpr = "DATE_TRUNC('day', data)::date";
-            $labelExpr  = "TO_CHAR(DATE_TRUNC('day', data), 'DD/MM/YYYY')";
+            $truncExpr   = "DATE_TRUNC('day', t.data)";
+            $labelFormat = 'DD/MM/YYYY';
         } else {
-            $periodExpr = "DATE_TRUNC('month', data)";
-            $labelExpr  = "TO_CHAR(DATE_TRUNC('month', data), 'MM/YYYY')";
+            $truncExpr   = "DATE_TRUNC('month', t.data)";
+            $labelFormat = 'MM/YYYY';
         }
 
-        $sql = "
-            SELECT
-                {$periodExpr} AS period_date,
-                {$labelExpr}  AS label,
-                tipo,
-                COALESCE(SUM(valor), 0) AS total
-            FROM transacoes
-            WHERE usuario_id = :uid
-              AND tipo IN ('receita', 'despesa')
-        ";
-
-        $params = [':uid' => $userId];
+        $where  = 'WHERE t.usuario_id = :uid AND t.tipo IN (:tipo_r, :tipo_d)';
+        $params = [
+            ':uid'    => $userId,
+            ':tipo_r' => 'receita',
+            ':tipo_d' => 'despesa',
+        ];
 
         if ($startDate) {
-            $sql .= ' AND data >= :start_date';
+            $where .= ' AND t.data >= :start_date';
             $params[':start_date'] = $startDate;
         }
 
         if ($endDate) {
-            $sql .= ' AND data <= :end_date';
+            $where .= ' AND t.data <= :end_date';
             $params[':end_date'] = $endDate;
         }
 
-        $sql .= "
-            GROUP BY {$periodExpr}, tipo
-            ORDER BY " . str_replace('::date', '', $periodExpr) . ", tipo
+        $sql = "
+            SELECT
+                agrupado.periodo      AS period_date,
+                TO_CHAR(agrupado.periodo, '{$labelFormat}') AS label,
+                agrupado.tipo          AS tipo,
+                agrupado.total         AS total
+            FROM (
+                SELECT
+                    {$truncExpr}              AS periodo,
+                    t.tipo                    AS tipo,
+                    SUM(t.valor)              AS total
+                FROM transacoes t
+                {$where}
+                GROUP BY {$truncExpr}, t.tipo
+            ) AS agrupado
+            ORDER BY agrupado.periodo, agrupado.tipo
         ";
 
         $stmt = $db->prepare($sql);
