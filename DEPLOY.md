@@ -1,74 +1,127 @@
-# Deploy — Controle de Gastos
+# Deploy — Vercel (PHP Serverless Functions)
 
-Este projeto está pronto para deploy na **Vercel** via **FrankenPHP** (Caddy + PHP 8.4 em Docker).
+Este projeto está pronto para deploy na Vercel usando o **runtime nativo `vercel-php@0.9.0`** (sem Docker).
 
-## Estrutura criada
+## Como funciona
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   Vercel Edge                       │
+│                  url: *.vercel.app                  │
+└──────────────────────┬──────────────────────────────┘
+                       │ qualquer URL
+                       ▼
+       ┌──────────────────────────────────┐
+       │  vercel.json (catch-all)         │
+       │  /css, /js, /assets, /*.php, /*  │
+       └──────────┬───────────────────────┘
+                  ▼
+       ┌──────────────────────────────────┐
+       │  api/index.php  (vercel-php)     │
+       │  • serve estáticos de public/    │
+       │  • serve views PHP reais         │
+       │  • inclui public/index.php       │
+       └──────────┬───────────────────────┘
+                  ▼
+       ┌──────────────────────────────────┐
+       │  public/index.php                │
+       │  roteador ?action=...            │
+       │  (controllers, models, services) │
+       └──────────────────────────────────┘
+```
+
+## Arquivos críticos
 
 | Arquivo | Propósito |
 |---|---|
-| `Dockerfile` | Imagem baseada em `dunglas/frankenphp:1.0-php8.4-trixie` com `pdo_pgsql` |
-| `Caddyfile` | Roteamento: estáticos servidos, PHP via `php_server`, fallback para `index.php?action=...` |
-| `vercel.json` | Configura a Vercel para buildar via Docker (`@vercel/docker`) |
-| `docker-compose.yml` | Ambiente de dev local: PostgreSQL 18 + FrankenPHP |
-| `.env.example` | Template de variáveis de ambiente |
-| `.dockerignore` | Exclui `.git`, `.env`, `node_modules`, etc. do contexto Docker |
+| `api/index.php` | **Único entry point** do Vercel. Serve estáticos e delega para `public/index.php` |
+| `public/index.php` | Roteador existente (intocado). Continua funcionando localmente |
+| `vercel.json` | Define `runtime: vercel-php@0.9.0` e rotas catch-all |
+| `src/config/config.php` | Lê `DATABASE_URL` com fallback para `DB_HOST`/`DB_PASS` |
+| `.env.example` | Template de `DATABASE_URL` |
 
-## Alterações aplicadas em arquivos existentes
+## Variáveis de ambiente (obrigatórias)
 
-| Arquivo | Mudança |
-|---|---|
-| `src/config/config.php` | `DB_HOST/PORT/NAME/USER/PASS` agora leem de `getenv()` com defaults locais |
-| `src/config/config.php` | `requireLogin()` redireciona para `/index.php?action=login` (roteador) em vez de `/login.php` direto |
+Configure em **Settings → Environment Variables** da Vercel:
 
-## Variáveis de ambiente obrigatórias
-
-Configure no painel da Vercel (Settings → Environment Variables) ou em `.env` local:
-
-| Variável | Descrição | Default local |
+| Variável | Descrição | Exemplo |
 |---|---|---|
-| `DB_HOST` | Hostname do PostgreSQL | `localhost` |
-| `DB_PORT` | Porta do PostgreSQL | `5432` |
-| `DB_NAME` | Nome do database | `controle_gastos` |
-| `DB_USER` | Usuário do banco | `postgres` |
-| `DB_PASS` | Senha do banco | `123` |
+| `DATABASE_URL` | Connection string completa | `postgres://user:pass@host:5432/db?sslmode=require` |
 
-## Como funciona o roteamento
+Alternativa: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS` (também suportadas).
 
-A aplicação usa `index.php?action=...` como roteador. O Caddyfile traduz qualquer URL para o PHP correto:
+**Provedores recomendados** (todos têm plano gratuito):
 
-- `/login.php` → serve `public/login.php` diretamente
-- `/index.php?action=metas` → serve `public/index.php` (router trata `action=metas`)
-- `/qualquer-coisa` → fallback para `public/index.php?action=qualquer-coisa`
+- **Vercel Postgres** (integrado, ideal para Vercel) — `https://vercel.com/docs/storage/vercel-postgres`
+- **Neon** (PostgreSQL serverless) — `https://neon.tech`
+- **Supabase** — `https://supabase.com`
 
-## Build e teste local
+## Deploy passo a passo
+
+### 1. Subir para o Git
 
 ```bash
-# Subir tudo (PostgreSQL + app)
-docker compose up -d
-
-# Ver logs da aplicação
-docker compose logs -f app
-
-# Parar e limpar volumes
-docker compose down -v
+git init
+git add .
+git commit -m "feat: deploy Vercel vercel-php runtime"
+git remote add origin https://github.com/SEU_USUARIO/controle-de-gastos.git
+git push -u origin main
 ```
 
-Acesse: **http://localhost:8080**
+### 2. Importar na Vercel
 
-## Deploy na Vercel
+1. Acesse [vercel.com](https://vercel.com) → **Add New Project**
+2. Selecione o repositório
+3. A Vercel detecta o `vercel.json` automaticamente
+4. Em **Environment Variables**, adicione `DATABASE_URL`
+5. Clique **Deploy**
 
-1. Instale a CLI da Vercel e faça login: `vercel login`
-2. Em **Settings → Environment Variables**, adicione `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS` apontando para um PostgreSQL acessível (Neon, Supabase, Vercel Postgres, etc.)
-3. Importe o repositório na Vercel — ela detectará o `vercel.json` e usará o `Dockerfile` automaticamente
-4. Após o deploy, o schema do banco precisa ser executado manualmente:
+### 3. Aplicar o schema do banco
+
+Após o primeiro deploy, aplique o schema no PostgreSQL remoto:
 
 ```bash
-psql $DATABASE_URL < database/schema.sql
+# Opção A: usando psql
+PGPASSWORD=senha psql -h host -U user -d dbname -f database/schema.sql
+
+# Opção B: usando a connection string
+psql "postgres://user:pass@host:5432/dbname?sslmode=require" -f database/schema.sql
 ```
 
-## Notas de segurança
+## Como funciona em ambiente serverless
 
-- O cookie de sessão já é gerado pelo PHP sem flags `Secure`/`HttpOnly` (padrão). Em produção com HTTPS, recomenda-se ajustar `session_set_cookie_params()` no `index.php`
-- Senhas armazenadas com `password_hash(PASSWORD_DEFAULT)` (bcrypt/argon2)
-- `PDO::ATTR_EMULATE_PREPARES = false` garante prepared statements reais no PostgreSQL
-- Isolamento por `usuario_id` em 100% das queries (verificado na auditoria)
+- **Conexão PDO**: nova a cada cold start (cold = 200-500ms), reutilizada por request (singleton)
+- **Sessões PHP**: cookies stateless. Cada requisição traz o PHPSESSID. **NÃO persiste entre cold starts** — login expira quando a função "dorme"
+- **Arquivos estáticos**: servidos pelo `api/index.php` lendo de `public/` (com cache `immutable`)
+- **POSTs**: funcionam normalmente, body chega em `php://input` e `$_POST`
+
+## Limitações conhecidas
+
+1. **Sessões em serverless stateless** — sem storage compartilhado, cada função tem seu próprio filesystem. Para produção, use JWT ou Postgres para sessions.
+2. **Cold starts** — primeira requisição após inatividade demora ~500ms
+3. **Timeout 10s** — configurado em `vercel.json`. Aumentar se necessário.
+
+## Testar localmente
+
+```bash
+# Subir PostgreSQL local
+docker run --name pg-test -e POSTGRES_PASSWORD=123 -e POSTGRES_DB=controle_gastos -p 5432:5432 -d postgres:18-alpine
+
+# Criar .env
+cp .env.example .env
+# (ajuste DATABASE_URL se necessário)
+
+# Aplicar schema
+psql "postgres://postgres:123@localhost:5432/controle_gastos" -f database/schema.sql
+
+# Rodar servidor PHP
+php -S localhost:8000 -t public
+
+# Acesse: http://localhost:8000
+```
+
+O servidor local usa o **mesmo** `public/index.php` e **mesmo** `config.php`. Tudo continua funcionando.
+
+## Rollback
+
+Se o deploy falhar, na Vercel: **Deployments → 3 pontos → Promote to Production** em uma versão anterior.

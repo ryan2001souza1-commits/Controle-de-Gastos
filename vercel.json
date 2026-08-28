@@ -1,19 +1,41 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "version": 2,
-  "builds": [
-    {
-      "src": "Dockerfile",
-      "use": "@vercel/docker",
-      "config": {
-        "maxDuration": 60
-      }
+  "functions": {
+    "api/index.php": {
+      "runtime": "vercel-php@0.9.0",
+      "memory": 512,
+      "maxDuration": 10
     }
-  ],
+  },
   "routes": [
     {
+      "src": "/css/(.*)",
+      "dest": "/api/index.php"
+    },
+    {
+      "src": "/js/(.*)",
+      "dest": "/api/index.php"
+    },
+    {
+      "src": "/assets/(.*)",
+      "dest": "/api/index.php"
+    },
+    {
+      "src": "/(.*\\.php)",
+      "dest": "/api/index.php"
+    },
+    {
       "src": "/(.*)",
-      "dest": "/"
+      "dest": "/api/index.php"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
     }
   ]
 }
