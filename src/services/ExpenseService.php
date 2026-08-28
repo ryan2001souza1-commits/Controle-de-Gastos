@@ -11,28 +11,45 @@ class ExpenseService
         $this->incomeModel = $incomeModel;
     }
 
-    public function getDashboardData(int $userId, ?string $startDate = null, ?string $endDate = null): array
-    {
+    public function getDashboardData(
+        int $userId,
+        ?string $startDate = null,
+        ?string $endDate = null
+    ): array {
         $totalExpenses = $this->expenseModel->getTotalByUser($userId, $startDate, $endDate);
-        $totalIncomes = $this->incomeModel->getTotalByUser($userId, $startDate, $endDate);
+        $totalIncomes  = $this->incomeModel->getTotalByUser($userId, $startDate, $endDate);
         $expensesByCategory = $this->expenseModel->getTotalByCategory($userId, $startDate, $endDate);
-        $recentExpenses = array_slice($this->expenseModel->findByUser($userId, $startDate, $endDate), 0, 10);
-        $recentIncomes = array_slice($this->incomeModel->findByUser($userId, $startDate, $endDate), 0, 10);
 
-        $recentTransactions = array_merge($recentExpenses, $recentIncomes);
+        $recentExpenses = $this->expenseModel->findByUser($userId, $startDate, $endDate);
+        $recentIncomes  = $this->incomeModel->findByUser($userId, $startDate, $endDate);
+
+        $normalizedIncomes = array_map(function ($row) {
+            return [
+                'id'            => $row['id']            ?? null,
+                'description'   => $row['description']   ?? '',
+                'amount'        => $row['amount']        ?? 0,
+                'date'          => $row['date']          ?? null,
+                'type'          => $row['type']          ?? 'receita',
+                'category_name' => null,
+            ];
+        }, $recentIncomes);
+
+        $recentTransactions = array_merge($recentExpenses, $normalizedIncomes);
+
         usort($recentTransactions, function ($a, $b) {
-            return strtotime($b['date']) <=> strtotime($a['date']);
+            $da = isset($a['date']) ? strtotime($a['date']) : 0;
+            $db = isset($b['date']) ? strtotime($b['date']) : 0;
+            return $db <=> $da;
         });
+
         $recentTransactions = array_slice($recentTransactions, 0, 10);
 
         return [
-            'total_expenses' => $totalExpenses,
-            'total_incomes' => $totalIncomes,
-            'balance' => $totalIncomes - $totalExpenses,
+            'total_expenses'       => $totalExpenses,
+            'total_incomes'        => $totalIncomes,
+            'balance'              => $totalIncomes - $totalExpenses,
             'expenses_by_category' => $expensesByCategory,
-            'recent_expenses' => $recentExpenses,
-            'recent_incomes' => $recentIncomes,
-            'recent_transactions' => $recentTransactions,
+            'recent_transactions'  => $recentTransactions,
         ];
     }
 }
