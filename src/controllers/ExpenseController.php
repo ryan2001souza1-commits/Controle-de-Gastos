@@ -22,14 +22,22 @@ class ExpenseController
     public function dashboard(): void
     {
         requireLogin();
-
         $userId = $_SESSION['user_id'];
         $startDate = $_GET['start_date'] ?? null;
         $endDate = $_GET['end_date'] ?? null;
-
-        $data = $this->expenseService->getDashboardData($userId, $startDate, $endDate);
-        $expenseCategories = $this->categoryModel->findAll($userId, 'despesa');
-        $incomeCategories = $this->categoryModel->findAll($userId, 'receita');
+        $data = $this->expenseService->getDashboardData(
+            $userId,
+            $startDate,
+            $endDate
+        );
+        $expenseCategories = $this->categoryModel->findAll(
+            $userId,
+            'despesa'
+        );
+        $incomeCategories = $this->categoryModel->findAll(
+            $userId,
+            'receita'
+        );
 
         require basePath('dashboard.php');
     }
