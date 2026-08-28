@@ -78,24 +78,24 @@ class Category
         ';
 
         $params = [];
-        $where  = [];
+        $conditions = [];
 
-        $where[] = 'c.usuario_id = ?';
+        $conditions[] = 'c.usuario_id = ?';
         $params[] = $userId;
 
-        $where[] = 'c.tipo = ?';
+        $conditions[] = 'c.tipo = ?';
         $params[] = $type;
 
         if ($startDate) {
-            $where[] = '(t.data IS NULL OR t.data >= ?)';
+            $conditions[] = '(t.data IS NULL OR t.data >= ?)';
             $params[] = $startDate;
         }
         if ($endDate) {
-            $where[] = '(t.data IS NULL OR t.data <= ?)';
+            $conditions[] = '(t.data IS NULL OR t.data <= ?)';
             $params[] = $endDate;
         }
 
-        $sql .= ' WHERE ' . implode(' AND ', $where);
+        $sql .= ' WHERE ' . implode(' AND ', $conditions);
         $sql .= ' GROUP BY c.id, c.nome, c.tipo, c.usuario_id';
         $sql .= ' ORDER BY c.nome';
 

@@ -255,19 +255,13 @@ class Expense
             FROM categorias c
             LEFT JOIN transacoes t
                 ON c.id = t.categoria_id
-                AND t.usuario_id = ?
+                AND t.usuario_id = c.usuario_id
                 AND t.tipo = ?
-        ';
-
-        $params = [$userId, 'despesa'];
-
-        $sql .= '
             WHERE c.usuario_id = ?
               AND c.tipo = ?
         ';
 
-        $params[] = $userId;
-        $params[] = 'despesa';
+        $params = ['despesa', $userId, 'despesa'];
 
         if ($startDate) {
             $sql .= ' AND (t.data IS NULL OR t.data >= ?)';
