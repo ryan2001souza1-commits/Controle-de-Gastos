@@ -25,6 +25,10 @@ class ExpenseController
         $userId = $_SESSION['user_id'];
         $startDate = $_GET['start_date'] ?? null;
         $endDate = $_GET['end_date'] ?? null;
+
+        if (!$startDate) $startDate = date('Y-m-01');
+        if (!$endDate)   $endDate   = date('Y-m-t');
+
         $data = $this->expenseService->getDashboardData(
             $userId,
             $startDate,

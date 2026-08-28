@@ -201,7 +201,8 @@ class Expense
         $sql = '
             SELECT
                 c.nome AS name,
-                COALESCE(SUM(t.valor), 0) AS total
+                COALESCE(SUM(t.valor), 0) AS total,
+                COUNT(t.id) AS count
             FROM categorias c
             LEFT JOIN transacoes t
                 ON c.id = t.categoria_id

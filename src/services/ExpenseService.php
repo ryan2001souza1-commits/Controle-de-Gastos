@@ -44,11 +44,14 @@ class ExpenseService
         });
         $recentTransactions = array_slice($recentTransactions, 0, 10);
 
-        $groupBy = $this->resolveGroupBy($startDate, $endDate);
-        $periodData = $this->getTotalsByPeriod($userId, $startDate, $endDate, $groupBy);
-        $balanceEvolution = $this->buildBalanceEvolution($periodData['income'], $periodData['expense']);
+        $monthlyData = $this->getTotalsByPeriod($userId, $startDate, $endDate, 'month');
+        $dailyData   = $this->getTotalsByPeriod($userId, $startDate, $endDate, 'day');
+
+        $balanceEvolution = $this->buildBalanceEvolution($dailyData['income'], $dailyData['expense']);
 
         $expensesByCategoryForChart = $this->normalizeExpensesByCategoryForChart($expensesByCategory);
+        $expensesByCategoryForTable = $this->normalizeExpensesByCategoryForTable($expensesByCategory, $totalExpenses);
+        $financialFlow = $this->buildFinancialFlow($dailyData['income'], $dailyData['expense']);
 
         return [
             'total_expenses'       => $totalExpenses,
@@ -58,13 +61,15 @@ class ExpenseService
             'expense_count'        => $expenseCount,
             'income_count'         => $incomeCount,
             'expenses_by_category' => $expensesByCategory,
+            'expenses_by_category_table' => $expensesByCategoryForTable,
             'recent_transactions'  => $recentTransactions,
             'chart_data'           => [
                 'expenses_by_category' => $expensesByCategoryForChart,
-                'income_by_period'     => $periodData['income'],
-                'expense_by_period'    => $periodData['expense'],
+                'income_by_period'     => $monthlyData['income'],
+                'expense_by_period'    => $monthlyData['expense'],
                 'balance_evolution'    => $balanceEvolution,
-                'group_by'             => $groupBy,
+                'financial_flow'       => $financialFlow,
+                'group_by'             => 'month',
             ],
         ];
     }
@@ -77,8 +82,13 @@ class ExpenseService
     ): array {
         $db = getDBConnection();
 
-        $periodExpr = "DATE_TRUNC('month', data)";
-        $labelExpr  = "TO_CHAR(DATE_TRUNC('month', data), 'MM/YYYY')";
+        if ($groupBy === 'day') {
+            $periodExpr = "DATE_TRUNC('day', data)::date";
+            $labelExpr  = "TO_CHAR(DATE_TRUNC('day', data), 'DD/MM/YYYY')";
+        } else {
+            $periodExpr = "DATE_TRUNC('month', data)";
+            $labelExpr  = "TO_CHAR(DATE_TRUNC('month', data), 'MM/YYYY')";
+        }
 
         $sql = "
             SELECT
@@ -131,46 +141,47 @@ class ExpenseService
         return ['income' => $income, 'expense' => $expense];
     }
 
-    private function buildBalanceEvolution(array $income, array $expense): array
+    private function buildFinancialFlow(array $income, array $expense): array
     {
-        $periodMap = [];
+        $map = [];
         foreach ($income as $r) {
-            $periodMap[$r['period']] = [
-                'label'  => $r['label'],
-                'income' => (float) $r['total'],
-                'expense'=> 0.0,
-            ];
+            $map[$r['period']] = ['label' => $r['label'], 'income' => (float) $r['total'], 'expense' => 0.0];
         }
         foreach ($expense as $r) {
-            if (!isset($periodMap[$r['period']])) {
-                $periodMap[$r['period']] = [
-                    'label'  => $r['label'],
-                    'income' => 0.0,
-                    'expense'=> (float) $r['total'],
-                ];
+            if (!isset($map[$r['period']])) {
+                $map[$r['period']] = ['label' => $r['label'], 'income' => 0.0, 'expense' => (float) $r['total']];
             } else {
-                $periodMap[$r['period']]['expense'] = (float) $r['total'];
+                $map[$r['period']]['expense'] = (float) $r['total'];
             }
         }
-
-        ksort($periodMap);
+        ksort($map);
 
         $labels = [];
+        $incomes = [];
+        $expenses = [];
         $balance = [];
         $cumulative = 0.0;
 
-        foreach ($periodMap as $period => $row) {
+        foreach ($map as $period => $row) {
             $cumulative += ($row['income'] - $row['expense']);
-            $labels[]  = $row['label'];
-            $balance[] = round($cumulative, 2);
+            $labels[]   = $row['label'];
+            $incomes[]  = round($row['income'], 2);
+            $expenses[] = round($row['expense'], 2);
+            $balance[]  = round($cumulative, 2);
         }
 
-        return ['labels' => $labels, 'balance' => $balance];
+        return [
+            'labels'   => $labels,
+            'incomes'  => $incomes,
+            'expenses' => $expenses,
+            'balance'  => $balance,
+        ];
     }
 
-    private function resolveGroupBy(?string $startDate, ?string $endDate): string
+    private function buildBalanceEvolution(array $income, array $expense): array
     {
-        return 'month';
+        $flow = $this->buildFinancialFlow($income, $expense);
+        return ['labels' => $flow['labels'], 'balance' => $flow['balance']];
     }
 
     private function normalizeExpensesByCategoryForChart(array $rows): array
@@ -178,21 +189,30 @@ class ExpenseService
         $entries = [];
         foreach ($rows as $r) {
             $total = (float)($r['total'] ?? 0);
-            if ($total <= 0) {
-                continue;
-            }
+            if ($total <= 0) continue;
+            $entries[] = ['name' => $r['name'] ?? 'Sem categoria', 'total' => $total];
+        }
+        usort($entries, function ($a, $b) { return $b['total'] <=> $a['total']; });
+        return [
+            'labels' => array_map(fn($e) => $e['name'], $entries),
+            'values' => array_map(fn($e) => $e['total'], $entries),
+        ];
+    }
+
+    private function normalizeExpensesByCategoryForTable(array $rows, float $totalExpenses): array
+    {
+        $entries = [];
+        foreach ($rows as $r) {
+            $total = (float)($r['total'] ?? 0);
+            if ($total <= 0) continue;
             $entries[] = [
-                'name'  => $r['name'] ?? 'Sem categoria',
-                'total' => $total,
+                'name'       => $r['name'] ?? 'Sem categoria',
+                'count'      => (int)($r['count'] ?? 0),
+                'total'      => $total,
+                'percentage' => $totalExpenses > 0 ? round(($total / $totalExpenses) * 100, 1) : 0.0,
             ];
         }
-        usort($entries, function ($a, $b) {
-            return $b['total'] <=> $a['total'];
-        });
-
-        $labels = array_map(fn($e) => $e['name'], $entries);
-        $values = array_map(fn($e) => $e['total'], $entries);
-
-        return ['labels' => $labels, 'values' => $values];
+        usort($entries, function ($a, $b) { return $b['total'] <=> $a['total']; });
+        return $entries;
     }
 }
