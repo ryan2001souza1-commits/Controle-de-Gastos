@@ -49,7 +49,7 @@ BEGIN
     -- Cada transação é inserida apenas se ainda não existir para este usuário
     -- Usa uma abordagem linha a linha para evitar duplicatas
     INSERT INTO transacoes (usuario_id, categoria_id, descricao, valor, tipo, data, observacao)
-    SELECT v_user_id, c.id, descricao, valor, tipo, data, observacao
+    SELECT v_user_id, c.id, t.descricao, t.valor, t.tipo, t.data, t.observacao
     FROM (VALUES
         ('Salário',     'Salário mensal',                5500.00, 'receita', (CURRENT_DATE - INTERVAL '25 days')::date, 'Salário de CLT'),
         ('Freelance',   'Projeto website',               1800.00, 'receita', (CURRENT_DATE - INTERVAL '15 days')::date, 'Cliente A'),
