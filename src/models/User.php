@@ -17,7 +17,7 @@ class User
 
     public function findByEmail(string $email): ?User
     {
-        $stmt = $this->db->prepare('SELECT * FROM users WHERE email = ?');
+        $stmt = $this->db->prepare('SELECT * FROM usuarios WHERE email = ?');
         $stmt->execute([$email]);
         $data = $stmt->fetch();
 
@@ -30,7 +30,7 @@ class User
 
     public function findById(int $id): ?User
     {
-        $stmt = $this->db->prepare('SELECT * FROM users WHERE id = ?');
+        $stmt = $this->db->prepare('SELECT * FROM usuarios WHERE id = ?');
         $stmt->execute([$id]);
         $data = $stmt->fetch();
 
@@ -44,7 +44,7 @@ class User
     public function create(string $name, string $email, string $password): bool
     {
         $stmt = $this->db->prepare(
-            'INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)'
+            'INSERT INTO usuarios (name, email, password_hash) VALUES (?, ?, ?)'
         );
         return $stmt->execute([$name, $email, password_hash($password, PASSWORD_DEFAULT)]);
     }
