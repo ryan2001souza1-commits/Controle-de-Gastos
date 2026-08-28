@@ -127,7 +127,6 @@ if (PHP_VERSION_ID >= 70300) {
         'samesite' => 'Lax',
     ]);
 }
-session_start();
 
 // =============================================================================
 // 4. Carregar entry point — toda a lógica de negócio é preservada intacta
