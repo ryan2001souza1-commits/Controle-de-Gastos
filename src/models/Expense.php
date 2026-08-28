@@ -58,6 +58,29 @@ class Expense
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function findById(int $id, int $userId): ?array
+    {
+        $stmt = $this->db->prepare('
+            SELECT
+                t.id,
+                t.descricao AS description,
+                t.valor AS amount,
+                t.data AS date,
+                t.tipo AS type,
+                t.categoria_id AS category_id,
+                t.usuario_id AS user_id,
+                c.nome AS category_name
+            FROM transacoes t
+            LEFT JOIN categorias c ON t.categoria_id = c.id
+            WHERE t.id = ?
+              AND t.usuario_id = ?
+              AND t.tipo = ?
+        ');
+        $stmt->execute([$id, $userId, 'despesa']);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     public function create(
         string $description,
         float $amount,

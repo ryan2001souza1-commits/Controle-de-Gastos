@@ -245,12 +245,37 @@ input:focus, select:focus {
 
 .add-transaction,
 .categories-summary,
-.recent-transactions {
+.recent-transactions,
+.edit-transaction {
     background: var(--card-bg);
     padding: 1.5rem;
     border-radius: 0.5rem;
     margin-bottom: 1.5rem;
     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.edit-transaction .transaction-form label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-light);
+    margin-top: 0.5rem;
+}
+
+.edit-transaction .transaction-form input[disabled] {
+    background: var(--bg);
+    color: var(--text-light);
+}
+
+.form-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.form-actions .btn {
+    width: auto;
+    flex: 1;
 }
 
 h2 {

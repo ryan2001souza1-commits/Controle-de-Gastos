@@ -36,7 +36,15 @@ $userName = $_SESSION['user_name'] ?? 'Usuário';
 
     <main class="container">
         <?php if (isset($_GET['success'])): ?>
-            <div class="alert alert-success">Operação realizada com sucesso!</div>
+            <?php
+                $successMessages = [
+                    '1'        => 'Operação realizada com sucesso!',
+                    'updated'  => 'Transação atualizada com sucesso!',
+                ];
+                $successKey = (string)($_GET['success']);
+                $successMsg = $successMessages[$successKey] ?? 'Operação realizada com sucesso!';
+            ?>
+            <div class="alert alert-success"><?= htmlspecialchars($successMsg) ?></div>
         <?php endif; ?>
 
         <section class="summary">
@@ -149,6 +157,7 @@ $userName = $_SESSION['user_name'] ?? 'Usuário';
                             <td><?= isset($transaction['date']) ? date('d/m/Y', strtotime($transaction['date'])) : '-' ?></td>
                             <td class="amount-cell <?= $txBadge ?>">R$ <?= number_format((float)($transaction['amount'] ?? 0), 2, ',', '.') ?></td>
                             <td>
+                                <a href="/index.php?action=edit&id=<?= (int)$transaction['id'] ?>&type=<?= htmlspecialchars($txType) ?>" class="btn btn-secondary btn-sm">Editar</a>
                                 <form action="/index.php?action=delete" method="POST" style="display:inline">
                                     <input type="hidden" name="id" value="<?= (int)($transaction['id'] ?? 0) ?>">
                                     <input type="hidden" name="type" value="<?= htmlspecialchars($txType) ?>">

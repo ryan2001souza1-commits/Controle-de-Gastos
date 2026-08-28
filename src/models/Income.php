@@ -54,6 +54,26 @@ class Income
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function findById(int $id, int $userId): ?array
+    {
+        $stmt = $this->db->prepare('
+            SELECT
+                id,
+                descricao AS description,
+                valor AS amount,
+                data AS date,
+                tipo AS type,
+                usuario_id AS user_id
+            FROM transacoes
+            WHERE id = ?
+              AND usuario_id = ?
+              AND tipo = ?
+        ');
+        $stmt->execute([$id, $userId, 'receita']);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     public function create(
         string $description,
         float $amount,
@@ -73,6 +93,34 @@ class Income
             $amount,
             'receita',
             $date
+        ]);
+    }
+
+    public function update(
+        int $id,
+        string $description,
+        float $amount,
+        string $date,
+        int $userId
+    ): bool {
+        $stmt = $this->db->prepare('
+            UPDATE transacoes
+            SET
+                descricao = ?,
+                valor = ?,
+                data = ?
+            WHERE id = ?
+              AND usuario_id = ?
+              AND tipo = ?
+        ');
+
+        return $stmt->execute([
+            $description,
+            $amount,
+            $date,
+            $id,
+            $userId,
+            'receita'
         ]);
     }
 

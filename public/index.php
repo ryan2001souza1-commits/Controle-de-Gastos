@@ -34,6 +34,10 @@ if ($action === 'register') {
     $expenseController->storeCategory();
 } elseif ($action === 'delete') {
     $expenseController->delete();
+} elseif ($action === 'edit') {
+    $expenseController->edit();
+} elseif ($action === 'update') {
+    $expenseController->update();
 } elseif (isLoggedIn()) {
     $expenseController->dashboard();
 } else {
