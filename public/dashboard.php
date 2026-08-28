@@ -27,12 +27,7 @@ $topCategory = !empty($categoriesTable) ? $categoriesTable[0] : null;
 $topCategoryName = $topCategory['name'] ?? null;
 $topCategoryTotal = $topCategory['total'] ?? 0;
 
-$recentExpenses = array_filter($recentTransactions, fn($t) => ($t['type'] ?? '') === 'despesa');
-$largestExpense = null;
-if (!empty($recentExpenses)) {
-    usort($recentExpenses, fn($a, $b) => ($b['amount'] ?? 0) <=> ($a['amount'] ?? 0));
-    $largestExpense = $recentExpenses[0];
-}
+$largestExpense = $data['largest_expense'] ?? null;
 
 function fmtBRL($value) {
     return number_format((float)$value, 2, ',', '.');

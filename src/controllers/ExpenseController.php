@@ -59,6 +59,12 @@ class ExpenseController
                 exit;
             }
 
+            $d = DateTime::createFromFormat('Y-m-d', $date);
+            if (!$d || $d->format('Y-m-d') !== $date) {
+                header('Location: /index.php?error=invalid_data');
+                exit;
+            }
+
             if ($type === 'despesa') {
                 $this->expenseModel->create($description, $amount, $date, $categoryId, $userId);
             } elseif ($type === 'receita') {
@@ -85,8 +91,7 @@ class ExpenseController
                 $this->incomeModel->delete($id, $userId);
             }
 
-            $referer = $_SERVER['HTTP_REFERER'] ?? '/index.php';
-            header('Location: ' . $referer);
+            header('Location: ' . $this->safeReferer());
             exit;
         }
     }
@@ -112,7 +117,7 @@ class ExpenseController
 
             $this->categoryModel->create($name, $type, $userId);
 
-            $referer = $_SERVER['HTTP_REFERER'] ?? '/index.php';
+            $referer = $this->safeReferer();
             header('Location: ' . $referer . (strpos($referer, '?') !== false ? '&' : '?') . 'success=1');
             exit;
         }
@@ -203,12 +208,26 @@ class ExpenseController
         }
 
         if ($ok) {
-            $referer = $_SERVER['HTTP_REFERER'] ?? '/index.php';
+            $referer = $this->safeReferer();
             header('Location: ' . $referer . (strpos($referer, '?') !== false ? '&' : '?') . 'success=updated');
         } else {
             header("Location: /index.php?action=edit&id={$id}&type={$type}&error=update_failed");
         }
         exit;
+    }
+
+    private function safeReferer(): string
+    {
+        $default = '/index.php';
+        $referer = $_SERVER['HTTP_REFERER'] ?? $default;
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+        if ($host !== '' && $referer !== '' && stripos($referer, $host) === false) {
+            return $default;
+        }
+        if (!preg_match('#^/[^/]#', $referer)) {
+            return $default;
+        }
+        return $referer;
     }
 
     /* ================================================================

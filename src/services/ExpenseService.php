@@ -44,6 +44,8 @@ class ExpenseService
         });
         $recentTransactions = array_slice($recentTransactions, 0, 10);
 
+        $largestExpense = $this->findLargestExpense($recentExpenses);
+
         $monthlyData = $this->getTotalsByPeriod($userId, $startDate, $endDate, 'month');
         $dailyData   = $this->getTotalsByPeriod($userId, $startDate, $endDate, 'day');
 
@@ -63,6 +65,7 @@ class ExpenseService
             'expenses_by_category' => $expensesByCategory,
             'expenses_by_category_table' => $expensesByCategoryForTable,
             'recent_transactions'  => $recentTransactions,
+            'largest_expense'      => $largestExpense,
             'chart_data'           => [
                 'expenses_by_category' => $expensesByCategoryForChart,
                 'income_by_period'     => $monthlyData['income'],
@@ -72,6 +75,20 @@ class ExpenseService
                 'group_by'             => 'month',
             ],
         ];
+    }
+
+    private function findLargestExpense(array $expenses): ?array
+    {
+        if (empty($expenses)) {
+            return null;
+        }
+        $largest = $expenses[0];
+        foreach ($expenses as $row) {
+            if (($row['amount'] ?? 0) > ($largest['amount'] ?? 0)) {
+                $largest = $row;
+            }
+        }
+        return $largest;
     }
 
     private function getTotalsByPeriod(

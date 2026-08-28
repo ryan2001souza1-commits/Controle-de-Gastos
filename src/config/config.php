@@ -39,9 +39,9 @@ function getDBConnection(): PDO
                 PDO::ATTR_EMULATE_PREPARES   => false,
             ]);
         } catch (PDOException $e) {
-            // Em produção, registre em log em vez de expor detalhes.
+            error_log('[DB] Falha de conexão: ' . $e->getMessage());
             throw new PDOException(
-                'Erro ao conectar ao PostgreSQL: ' . $e->getMessage(),
+                'Não foi possível conectar ao banco de dados. Tente novamente em instantes.',
                 (int) $e->getCode()
             );
         }
