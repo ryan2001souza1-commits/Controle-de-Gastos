@@ -53,11 +53,11 @@ class Mailer
     {
         $payload = json_encode([
             'sender' => [
-                'name' => $this->fromName,
+                'name'  => $this->fromName,
                 'email' => $this->from,
             ],
-            'to' => [['email' => $to]],
-            'subject' => $subject,
+            'to'          => [['email' => $to]],
+            'subject'     => $subject,
             'htmlContent' => $html,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
@@ -70,7 +70,7 @@ class Mailer
                     CURLOPT_HTTPHEADER     => [
                         'accept: application/json',
                         'content-type: application/json',
-                        'api-key: ' . $apiKey,
+                        'x-keysib-key: ' . $apiKey,
                     ],
                     CURLOPT_RETURNTRANSFER => true,
                     CURLOPT_TIMEOUT        => 15,
@@ -79,10 +79,17 @@ class Mailer
                 $resp = curl_exec($ch);
                 $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 $err = curl_error($ch);
-                if ($resp !== false && $status >= 200 && $status < 300) return true;
+                if ($resp !== false && $status >= 200 && $status < 300) {
+                    $body = json_decode((string)$resp, true);
+                    $msgId = is_array($body) ? ($body['messageId'] ?? 'sem-messageId') : 'sem-messageId';
+                    error_log('[Mailer:Brevo OK] HTTP ' . $status . ' para ' . $to . ' from=' . $this->from . ' messageId=' . $msgId);
+                    return true;
+                }
                 $body = json_decode((string)$resp, true);
-                $msg = is_array($body) ? ($body['message'] ?? ($body['errors'][0]['message'] ?? '')) : '';
-                error_log('[Mailer:Brevo cURL] HTTP ' . $status . ' err=' . ($err ?: 'nenhum') . ' msg=' . $msg);
+                $msg   = is_array($body) ? ($body['message'] ?? '') : '';
+                $ecode = is_array($body) ? ($body['code'] ?? '') : '';
+                $ebody = is_array($body) ? ($body['errors'][0]['message'] ?? '') : '';
+                error_log('[Mailer:Brevo ERRO] HTTP ' . $status . ' from=' . $this->from . ' para=' . $to . ' curl_err=' . ($err ?: 'nenhum') . ' api_code=' . $ecode . ' msg=' . $msg . ' err_msg=' . $ebody);
                 return false;
             }
 
@@ -95,7 +102,7 @@ class Mailer
                         'header'        => implode("\r\n", [
                             'accept: application/json',
                             'content-type: application/json',
-                            'api-key: ' . $apiKey,
+                            'x-keysib-key: ' . $apiKey,
                         ]),
                         'content' => $payload,
                     ],
@@ -103,10 +110,16 @@ class Mailer
                 ]);
                 $resp = @file_get_contents('https://api.brevo.com/v3/smtp/email', false, $ctx);
                 $status = $this->parseStatus($http_response_header ?? []);
-                if ($resp !== false && $status >= 200 && $status < 300) return true;
+                if ($resp !== false && $status >= 200 && $status < 300) {
+                    $body = json_decode((string)$resp, true);
+                    $msgId = is_array($body) ? ($body['messageId'] ?? 'sem-messageId') : 'sem-messageId';
+                    error_log('[Mailer:Brevo OK] HTTP ' . $status . ' para ' . $to . ' from=' . $this->from . ' messageId=' . $msgId);
+                    return true;
+                }
                 $body = json_decode((string)$resp, true);
-                $msg = is_array($body) ? ($body['message'] ?? ($body['errors'][0]['message'] ?? '')) : '';
-                error_log('[Mailer:Brevo fopen] HTTP ' . $status . ' msg=' . $msg);
+                $msg   = is_array($body) ? ($body['message'] ?? '') : '';
+                $ecode = is_array($body) ? ($body['code'] ?? '') : '';
+                error_log('[Mailer:Brevo ERRO] HTTP ' . $status . ' from=' . $this->from . ' para=' . $to . ' msg=' . $msg . ' code=' . $ecode);
             }
         } catch (Throwable $e) {
             error_log('[Mailer:Brevo] Exceção: ' . $e->getMessage());
