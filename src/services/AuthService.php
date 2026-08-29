@@ -109,10 +109,20 @@ class AuthService
             "Abra este link para redefinir sua senha (válido por 1 minuto): {$resetUrl}"
         );
 
+        if (!$mailSent) {
+            error_log("[AuthService] Falha ao enviar e-mail de recuperação para {$user->email} — verifique RESEND_API_KEY e MAIL_FROM na Vercel");
+            // Em dev local, loga link para teste manual sem expor na UI
+            if (getenv('APP_ENV') === 'development' || getenv('APP_DEBUG') === 'true') {
+                error_log("[AuthService:DEV] Link de recuperação (válido 1 min): {$resetUrl}");
+            }
+        }
+
+        // NUNCA expõe resetUrl na resposta — usuário recebe exclusivamente por e-mail.
+        // Em produção o fallback anterior exibia o link na tela; agora retorna null sempre.
         return [
             'success'  => true,
             'message'  => $generic,
-            'resetUrl' => $mailSent ? null : $resetUrl, // fallback dev: mostra na UI
+            'resetUrl' => null,
             'mailSent' => $mailSent,
         ];
     }

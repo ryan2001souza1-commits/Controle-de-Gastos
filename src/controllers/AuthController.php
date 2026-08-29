@@ -58,10 +58,8 @@ class AuthController
 
     public function forgot(): void
     {
-        $error     = null;
-        $success   = null;
-        $resetUrl  = null;
-        $mailSent  = false;
+        $error   = null;
+        $success = null;
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $email = trim($_POST['email'] ?? '');
@@ -70,9 +68,7 @@ class AuthController
             if (!$result['success']) {
                 $error = $result['message'];
             } else {
-                $success  = $result['message'];
-                $resetUrl = $result['resetUrl'] ?? null;
-                $mailSent = (bool)($result['mailSent'] ?? false);
+                $success = $result['message'];
             }
         }
 
