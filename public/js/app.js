@@ -1,20 +1,38 @@
-document.addEventListener('DOMContentLoaded', () => {
-    /* ============================================================
-       AUTH PAGES — toggle de visibilidade da senha
-       ============================================================ */
-    document.querySelectorAll('.toggle-password, .auth-toggle-pw').forEach(btn => {
-        btn.addEventListener('click', () => {
+function initPasswordToggles(root = document) {
+    root.querySelectorAll('.toggle-password, .auth-toggle-pw').forEach(btn => {
+        if (btn.dataset.bound === '1') return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
             const targetId = btn.dataset.target;
             const input = document.getElementById(targetId);
             if (!input) return;
-            const showing = input.type === 'text';
-            input.type = showing ? 'password' : 'text';
+            const willShow = input.type === 'password';
+            const hadFocus = document.activeElement === input;
+            const selStart = input.selectionStart;
+            const selEnd = input.selectionEnd;
+            input.type = willShow ? 'text' : 'password';
+            if (hadFocus) {
+                input.focus();
+                try { input.setSelectionRange(selStart, selEnd); } catch (_) {}
+            }
             const openIcon  = btn.querySelector('.eye-open, .auth-eye-open');
             const closedIcon = btn.querySelector('.eye-closed, .auth-eye-closed');
-            if (openIcon)   openIcon.style.display   = showing ? 'block' : 'none';
-            if (closedIcon) closedIcon.style.display = showing ? 'none' : 'block';
+            if (openIcon)   openIcon.style.display   = willShow ? 'none' : '';
+            if (closedIcon) closedIcon.style.display = willShow ? '' : 'none';
+            btn.setAttribute('aria-label', willShow ? 'Ocultar senha' : 'Mostrar senha');
+            btn.setAttribute('aria-pressed', willShow ? 'true' : 'false');
         });
     });
+}
+
+function whenReady(fn) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+    else fn();
+}
+
+whenReady(() => {
+    initPasswordToggles();
 
     /* ============================================================
        AUTH PAGES — validação de confirmação de senha
