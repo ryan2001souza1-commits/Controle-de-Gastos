@@ -86,16 +86,6 @@
                     <div class="auth-alert auth-alert-error"><?= htmlspecialchars($error) ?></div>
                 <?php endif; ?>
 
-                <?php if (!empty($resetUrl)): ?>
-                    <div class="auth-alert auth-alert-info forgot-token-box">
-                        <strong>Ambiente sem envio de e-mail configurado.</strong>
-                        <span>Use o link abaixo para definir uma nova senha (válido por 1 minuto):</span>
-                        <a href="<?= htmlspecialchars($resetUrl) ?>" class="forgot-token-link">
-                            <?= htmlspecialchars($resetUrl) ?>
-                        </a>
-                    </div>
-                <?php endif; ?>
-
                 <form action="/index.php?action=forgot" method="POST" class="auth-form" novalidate>
                     <div class="auth-field">
                         <label for="email">E-mail</label>
@@ -139,7 +129,7 @@
                         <path d="M8 11V8a4 4 0 0 1 8 0v3"/>
                     </svg>
                 </span>
-                <p>Para sua segurança, o link de recuperação<br>irá expirar em 1 hora.</p>
+                <p>Para sua segurança, o link de recuperação<br>irá expirar em 1 minuto.</p>
             </div>
 
             <p class="auth-footer">&copy; <?= date('Y') ?> Controle de Gastos · Desenvolvido por Ryan Souza</p>
