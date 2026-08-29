@@ -77,7 +77,10 @@ if ($isStatic) {
         ];
         $ext = strrchr($pathInfo, '.');
         $mime = $mimeTypes[$ext] ?? 'application/octet-stream';
-        $maxAge = in_array($ext, ['.css', '.js', '.woff2', '.woff', '.ttf', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp'], true)
+        // app.js contém lógica crítica (mostrar senha) — nunca cachear como immutable para garantir correção imediata
+        $isImmutable = in_array($ext, ['.css', '.woff2', '.woff', '.ttf', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp'], true)
+            || ($ext === '.js' && $pathInfo !== '/js/app.js');
+        $maxAge = $isImmutable
             ? 'public, max-age=31536000, immutable'
             : 'no-cache';
 

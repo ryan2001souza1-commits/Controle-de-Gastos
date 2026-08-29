@@ -194,7 +194,7 @@
             <p class="auth-footer">&copy; <?= date('Y') ?> Controle de Gastos · Desenvolvido por Ryan Souza</p>
         </main>
     </div>
-    <script src="/js/app.js" defer></script>
+    <script src="/js/app.js?v=20250829" defer></script>
     <script>
     (function () {
         const pwd = document.getElementById('password');
