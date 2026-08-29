@@ -43,9 +43,11 @@ body.auth-body {
     color: #ffffff;
     overflow: hidden;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 3rem 3.5rem;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 3rem 3.5rem 1.5rem;
+    isolation: isolate;
 }
 
 .auth-hero-bg {
@@ -62,16 +64,17 @@ body.auth-body {
 
 .auth-hero-content {
     position: relative;
-    z-index: 1;
+    z-index: 2;
     max-width: 480px;
     width: 100%;
+    margin-top: 1rem;
 }
 
 .auth-brand {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    margin-bottom: 3rem;
+    margin-bottom: 2rem;
 }
 
 .auth-brand-logo {
@@ -132,9 +135,13 @@ body.auth-body {
     display: flex;
     align-items: flex-start;
     gap: 0.75rem;
-    margin-top: 3rem;
+    margin-top: auto;
+    padding-top: 1rem;
     color: rgba(255, 255, 255, 0.85);
     font-size: 0.85rem;
+    position: relative;
+    z-index: 5;
+    max-width: 260px;
 }
 
 .auth-shield {
@@ -178,16 +185,16 @@ body.auth-body {
 
 .auth-card {
     width: 100%;
-    max-width: 440px;
+    max-width: 460px;
     background: #ffffff;
-    border-radius: 18px;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.08);
-    padding: 2.5rem 2.25rem;
+    border-radius: 16px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 32px rgba(15, 23, 42, 0.08);
+    padding: 2.5rem 2.25rem 2rem;
 }
 
 .auth-icon {
-    width: 56px;
-    height: 56px;
+    width: 60px;
+    height: 60px;
     border-radius: 50%;
     background: #eef2ff;
     color: #4f46e5;
@@ -195,7 +202,7 @@ body.auth-body {
     align-items: center;
     justify-content: center;
     margin: 0 auto 1.25rem;
-    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);
+    box-shadow: 0 4px 14px rgba(79, 70, 229, 0.12);
 }
 
 .auth-title {
@@ -282,7 +289,7 @@ body.auth-body {
 
 .auth-input-wrap input {
     width: 100%;
-    height: 46px;
+    height: 48px;
     padding: 0 2.75rem 0 2.75rem;
     font-size: 0.9375rem;
     color: #0f172a;
@@ -444,21 +451,21 @@ body.auth-body {
 
 .auth-submit {
     width: 100%;
-    height: 48px;
+    height: 50px;
     font-size: 0.9375rem;
     font-weight: 600;
     border-radius: 10px;
     border: none;
     color: #ffffff;
-    background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
-    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+    box-shadow: 0 6px 16px rgba(79, 70, 229, 0.3);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
     letter-spacing: 0.01em;
-    margin-top: 0.25rem;
+    margin-top: 0.5rem;
     transition: transform 0.18s ease, box-shadow 0.18s ease;
     font-family: inherit;
 }
@@ -694,19 +701,21 @@ body.auth-body {
 
 /* Card "Metas" (register) */
 .auth-card-metas {
-    top: 50%;
-    left: 6%;
-    width: 200px;
-    transform: rotate(-4deg);
+    top: 48%;
+    left: 5%;
+    width: 195px;
+    transform: rotate(-5deg);
+    z-index: 3;
 }
-.auth-card-metas .auth-progress { margin-top: 0.45rem; }
+.auth-card-metas .auth-progress { margin-top: 0.5rem; }
 
 /* Card "Organização" (register) */
 .auth-card-org {
-    top: 60%;
-    left: 50%;
+    top: 64%;
+    right: 8%;
     width: 150px;
-    transform: rotate(3deg);
+    transform: rotate(4deg);
+    z-index: 3;
 }
 .auth-card-mini-head-row {
     justify-content: space-between;
@@ -732,12 +741,12 @@ body.auth-body {
 .auth-card-phone {
     position: absolute;
     top: 22%;
-    right: 6%;
-    width: 175px;
+    right: 14%;
+    width: 200px;
     padding: 0;
     background: transparent;
     box-shadow: none;
-    transform: rotate(6deg);
+    transform: rotate(7deg);
     z-index: 1;
 }
 .auth-phone-frame {
@@ -762,7 +771,7 @@ body.auth-body {
     background: #f8fafc;
     border-radius: 24px;
     padding: 28px 8px 8px;
-    min-height: 320px;
+    min-height: 360px;
     display: flex;
     flex-direction: column;
     position: relative;
@@ -856,25 +865,25 @@ body.auth-body {
 /* Moedas e adereços */
 .auth-illu-coin {
     position: absolute;
-    z-index: 1;
+    z-index: 3;
     filter: drop-shadow(0 6px 12px rgba(245, 158, 11, 0.4));
 }
-.auth-illu-coin-1 { bottom: 4%; right: 28%; transform: rotate(-8deg); }
-.auth-illu-coin-2 { bottom: 2%; right: 12%; transform: rotate(12deg); }
-.auth-illu-coin-3 { bottom: 8%; right: 20%; transform: rotate(-3deg); }
+.auth-illu-coin-1 { bottom: 4%; left: 12%; transform: rotate(-10deg); }
+.auth-illu-coin-2 { bottom: 1%; left: 18%; transform: rotate(6deg); }
+.auth-illu-coin-3 { bottom: 8%; left: 22%; transform: rotate(-2deg); }
 
 .auth-illu-wallet {
     position: absolute;
-    bottom: 6%;
-    right: 4%;
+    bottom: 4%;
+    left: 38%;
     z-index: 1;
     filter: drop-shadow(0 14px 30px rgba(124, 58, 237, 0.45));
 }
 .auth-illu-plant {
     position: absolute;
     bottom: 0;
-    left: 2%;
-    z-index: 1;
+    left: 0;
+    z-index: 2;
     filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.35));
 }
 
@@ -943,11 +952,11 @@ body.auth-body {
 .auth-pwd-rules {
     display: flex;
     align-items: flex-start;
-    gap: 0.75rem;
-    background: #f5f3ff;
+    gap: 0.85rem;
+    background: #f8f7ff;
     border: 1px solid #ede9fe;
     border-radius: 12px;
-    padding: 0.85rem 1rem;
+    padding: 1rem 1.1rem;
     color: #0f172a;
     margin-top: 0.25rem;
 }
@@ -1018,16 +1027,19 @@ body.auth-body {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.75rem;
-    margin: 1.5rem 0 0;
+    gap: 0.85rem;
+    margin: 1.75rem 0 0;
     font-size: 0.875rem;
     color: #64748b;
+    white-space: nowrap;
+    flex-wrap: nowrap;
 }
+.auth-foot-link-text { white-space: nowrap; }
 .auth-foot-line {
     flex: 1;
     height: 1px;
     background: #e2e8f0;
-    max-width: 80px;
+    max-width: 60px;
 }
 .auth-foot-link-divider a {
     color: #4f46e5;

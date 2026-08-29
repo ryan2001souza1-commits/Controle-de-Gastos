@@ -33,7 +33,7 @@
                     </div>
                 </div>
 
-                <h1 class="auth-hero-title">Comece agora e<br>transforme sua <em>vida<br>financeira</em></h1>
+                <h1 class="auth-hero-title">Comece agora e<br>transforme sua<br><em>vida financeira</em></h1>
                 <p class="auth-hero-text">É rápido, fácil e gratuito! Junte-se a milhares de pessoas que já organizam suas finanças com inteligência.</p>
             </div>
 
@@ -141,22 +141,31 @@
                 </div>
 
                 <div class="auth-illu-wallet" aria-hidden="true">
-                    <svg viewBox="0 0 120 90" width="120" height="90">
-                        <path d="M10 22 Q10 12 20 12 H95 a10 10 0 0 1 10 10 V72 a10 10 0 0 1 -10 10 H20 a10 10 0 0 1 -10 -10 Z" fill="#7c3aed"/>
-                        <rect x="55" y="35" width="60" height="34" rx="6" fill="#6d28d9"/>
-                        <rect x="60" y="44" width="22" height="16" rx="3" fill="#c4b5fd"/>
-                        <rect x="64" y="48" width="14" height="8" rx="1.5" fill="#a78bfa"/>
+                    <svg viewBox="0 0 140 110" width="140" height="110">
+                        <!-- credit cards sticking out the top -->
+                        <rect x="35" y="0" width="78" height="34" rx="5" fill="#16a34a"/>
+                        <rect x="42" y="6" width="20" height="6" rx="1.5" fill="#bbf7d0"/>
+                        <rect x="22" y="10" width="78" height="34" rx="5" fill="#1e293b"/>
+                        <rect x="30" y="22" width="22" height="6" rx="1.5" fill="#475569"/>
+                        <!-- wallet body -->
+                        <path d="M10 40 Q10 30 20 30 H120 a10 10 0 0 1 10 10 V92 a10 10 0 0 1 -10 10 H20 a10 10 0 0 1 -10 -10 Z" fill="#7c3aed"/>
+                        <rect x="86" y="56" width="46" height="32" rx="5" fill="#6d28d9"/>
+                        <rect x="92" y="64" width="22" height="16" rx="2.5" fill="#c4b5fd"/>
+                        <rect x="96" y="68" width="14" height="8" rx="1.5" fill="#a78bfa"/>
+                        <circle cx="120" cy="72" r="3" fill="#a78bfa"/>
                     </svg>
                 </div>
 
                 <div class="auth-illu-plant" aria-hidden="true">
-                    <svg viewBox="0 0 80 110" width="80" height="110">
-                        <ellipse cx="40" cy="100" rx="22" ry="6" fill="#0f172a" opacity="0.35"/>
-                        <path d="M28 78 Q40 60 52 78 L50 100 H30 Z" fill="#e2e8f0"/>
-                        <path d="M30 78 Q35 70 40 78" fill="none" stroke="#cbd5e1" stroke-width="1"/>
-                        <path d="M40 80 C 30 60 18 50 22 30 C 32 32 42 50 42 70 Z" fill="#22c55e"/>
-                        <path d="M40 80 C 50 60 62 50 58 30 C 48 32 38 50 38 70 Z" fill="#16a34a"/>
-                        <path d="M40 80 C 40 50 36 30 40 14 C 44 30 44 50 44 70 Z" fill="#15803d"/>
+                    <svg viewBox="0 0 110 130" width="110" height="130">
+                        <ellipse cx="55" cy="120" rx="38" ry="6" fill="#0f172a" opacity="0.4"/>
+                        <!-- pot (white ceramic) -->
+                        <path d="M26 90 Q26 78 40 78 H70 Q84 78 84 90 V108 a8 8 0 0 1 -8 8 H34 a8 8 0 0 1 -8 -8 Z" fill="#f1f5f9"/>
+                        <path d="M26 90 Q26 78 40 78 H70 Q84 78 84 90 V96 H26 Z" fill="#cbd5e1"/>
+                        <!-- 3 leaves -->
+                        <path d="M55 90 C 35 70 18 60 24 28 C 40 30 56 56 58 80 Z" fill="#22c55e"/>
+                        <path d="M55 90 C 75 70 92 60 86 28 C 70 30 54 56 52 80 Z" fill="#16a34a"/>
+                        <path d="M55 90 C 55 56 51 30 55 8 C 59 30 59 56 59 80 Z" fill="#15803d"/>
                     </svg>
                 </div>
             </div>
@@ -300,9 +309,9 @@
                     </button>
                 </form>
 
-                <p class="auth-foot-link auth-foot-link-divider">
+                <p class="auth-foot-link-divider">
                     <span class="auth-foot-line"></span>
-                    Já tem conta? <a href="/index.php?action=login">Faça login</a>
+                    <span class="auth-foot-link-text">Já tem conta? <a href="/index.php?action=login">Faça login</a></span>
                     <span class="auth-foot-line"></span>
                 </p>
             </div>
