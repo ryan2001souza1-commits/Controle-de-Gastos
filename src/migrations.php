@@ -101,9 +101,23 @@ function runMigrations(PDO $db): void
     $addColumnIfMissing = [
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS reset_token VARCHAR(128)",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS reset_expires TIMESTAMP",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS provider VARCHAR(20) DEFAULT NULL",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS provider_sub VARCHAR(255) DEFAULT NULL",
     ];
     foreach ($addColumnIfMissing as $sql) {
         $db->exec($sql);
+    }
+
+    try {
+        $db->exec("ALTER TABLE usuarios ALTER COLUMN senha DROP NOT NULL");
+    } catch (PDOException $e) {
+        // pode falhar se já é nullable — ignora
+    }
+
+    try {
+        $db->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_provider ON usuarios(provider, provider_sub) WHERE provider IS NOT NULL AND provider_sub IS NOT NULL");
+    } catch (PDOException $e) {
+        // índice pode existir — ignora
     }
 
     try {

@@ -3,10 +3,14 @@
 class AuthController
 {
     private AuthService $authService;
+    private GoogleAuthService $googleAuth;
+    private User $userModel;
 
-    public function __construct(AuthService $authService)
+    public function __construct(AuthService $authService, GoogleAuthService $googleAuth, User $userModel)
     {
         $this->authService = $authService;
+        $this->googleAuth  = $googleAuth;
+        $this->userModel   = $userModel;
     }
 
     public function login(): void
@@ -107,5 +111,139 @@ class AuthController
         }
 
         require basePath('reset.php');
+    }
+
+    /**
+     * Inicia o fluxo Google OAuth redirecionando o usuário para o Google.
+     */
+    public function googleLogin(): void
+    {
+        if (!$this->googleAuth->isConfigured()) {
+            error_log('[Google] GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET não configurados na Vercel');
+            header('Location: /index.php?action=login&google_error=1');
+            exit;
+        }
+
+        $state = bin2hex(random_bytes(16));
+        $_SESSION['google_oauth_state'] = $state;
+
+        $redirectUri = $this->getBaseUrl() . '/index.php?action=google-callback';
+        $params = http_build_query([
+            'client_id'     => $this->googleAuth->getClientId(),
+            'redirect_uri'  => $redirectUri,
+            'response_type' => 'code',
+            'scope'         => 'openid email profile',
+            'state'         => $state,
+            'access_type'   => 'online',
+            'prompt'        => 'select_account',
+        ]);
+        header('Location: https://accounts.google.com/o/oauth2/v2/auth?' . $params);
+        exit;
+    }
+
+    /**
+     * Callback do Google OAuth: troca code por tokens, valida id_token,
+     * identifica/cria usuário e inicia sessão.
+     */
+    public function googleCallback(): void
+    {
+        $code  = $_GET['code']  ?? '';
+        $state = $_GET['state'] ?? '';
+        $error = $_GET['error'] ?? '';
+
+        if ($error !== '') {
+            header('Location: /index.php?action=login&google_error=cancelled');
+            exit;
+        }
+
+        $expectedState = $_SESSION['google_oauth_state'] ?? '';
+        unset($_SESSION['google_oauth_state']);
+        if ($expectedState === '' || !hash_equals($expectedState, (string)$state)) {
+            error_log('[Google] state inválido');
+            header('Location: /index.php?action=login&google_error=state');
+            exit;
+        }
+
+        if ($code === '') {
+            header('Location: /index.php?action=login&google_error=code');
+            exit;
+        }
+
+        $redirectUri = $this->getBaseUrl() . '/index.php?action=google-callback';
+        $tokens = $this->googleAuth->exchangeCodeForTokens($code, $redirectUri);
+        if ($tokens === null) {
+            error_log('[Google] falha na troca de code por tokens');
+            header('Location: /index.php?action=login&google_error=exchange');
+            exit;
+        }
+
+        $claims = $this->googleAuth->validateIdToken($tokens['id_token']);
+        if ($claims === null) {
+            error_log('[Google] id_token inválido');
+            header('Location: /index.php?action=login&google_error=invalid_token');
+            exit;
+        }
+
+        $sub   = (string)($claims['sub'] ?? '');
+        $email = (string)($claims['email'] ?? '');
+        $name  = (string)($claims['name'] ?? '');
+        if ($sub === '' || $email === '') {
+            error_log('[Google] claims incompletos');
+            header('Location: /index.php?action=login&google_error=claims');
+            exit;
+        }
+
+        $user = $this->userModel->findByGoogleId($sub);
+
+        if (!$user) {
+            $existing = $this->userModel->findByEmail($email);
+            if ($existing && ($existing->password_hash !== null && $existing->password_hash !== '')) {
+                // Conta com e-mail/senha já existe — bloqueia vínculo automático.
+                // Usuário precisa logar com senha e vincular depois (futuro).
+                error_log('[Google] tentativa de login com e-mail já cadastrado por senha: ' . $email);
+                header('Location: /index.php?action=login&google_error=email_exists');
+                exit;
+            }
+
+            try {
+                $this->userModel->createOAuthUser($name !== '' ? $name : $email, $email, 'google', $sub);
+            } catch (\PDOException $e) {
+                error_log('[Google] falha ao criar usuário: ' . $e->getMessage());
+                header('Location: /index.php?action=login&google_error=create_failed');
+                exit;
+            }
+            $user = $this->userModel->findByGoogleId($sub);
+            if (!$user) {
+                header('Location: /index.php?action=login&google_error=create_failed');
+                exit;
+            }
+        }
+
+        $_SESSION['user_id']    = $user->id;
+        $_SESSION['user_name']  = $user->name;
+        $_SESSION['user_email'] = $user->email;
+        $_SESSION['user_provider'] = 'google';
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
+        header('Location: /index.php');
+        exit;
+    }
+
+    private function getBaseUrl(): string
+    {
+        $env = getenv('APP_URL');
+        if ($env) return rtrim($env, '/');
+        $vercel = getenv('VERCEL_URL');
+        if ($vercel) return 'https://' . ltrim($vercel, '/');
+        $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $host = strtolower(trim($host));
+        $host = preg_replace('/:\d+$/', '', $host);
+        if (!preg_match('/^[a-z0-9.-]+$/', $host) || str_contains($host, '..')) {
+            $host = 'localhost';
+        }
+        return ($https ? 'https' : 'http') . '://' . $host;
     }
 }

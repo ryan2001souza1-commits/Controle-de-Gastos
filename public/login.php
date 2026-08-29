@@ -142,6 +142,23 @@
                     <div class="auth-alert auth-alert-error"><?= htmlspecialchars($error) ?></div>
                 <?php endif; ?>
 
+                <?php if (isset($_GET['google_error'])):
+                    $gErr = (string)$_GET['google_error'];
+                    $gMsg = match ($gErr) {
+                        'cancelled'     => 'Login com Google cancelado.',
+                        'state'         => 'Falha de segurança no login com Google. Tente novamente.',
+                        'code'          => 'Código de autorização inválido.',
+                        'exchange'      => 'Não foi possível validar o login com Google.',
+                        'invalid_token' => 'Token do Google inválido ou expirado.',
+                        'claims'        => 'Não foi possível obter seus dados do Google.',
+                        'email_exists'  => 'Já existe uma conta com esse e-mail. Faça login com senha e vincule o Google nas configurações.',
+                        'create_failed' => 'Não foi possível criar a conta com Google.',
+                        default         => 'Falha no login com Google. Tente novamente.',
+                    };
+                ?>
+                    <div class="auth-alert auth-alert-error"><?= htmlspecialchars($gMsg) ?></div>
+                <?php endif; ?>
+
                 <form action="/index.php?action=login" method="POST" class="auth-form" novalidate>
                     <div class="auth-field">
                         <label for="email">E-mail</label>
@@ -201,7 +218,7 @@
                 <div class="auth-divider"><span>ou continue com</span></div>
 
                 <div class="auth-social">
-                    <button type="button" class="auth-social-btn" aria-label="Entrar com Google">
+                    <button type="button" class="auth-social-btn" aria-label="Entrar com Google" id="googleSignInBtn" onclick="window.location.href='/index.php?action=google-login'">
                         <svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true">
                             <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/>
                             <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>

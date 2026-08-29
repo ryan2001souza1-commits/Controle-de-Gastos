@@ -27,6 +27,7 @@ require_once __DIR__ . '/../src/models/Budget.php';
 require_once __DIR__ . '/../src/models/PasswordReset.php';
 require_once __DIR__ . '/../src/services/Mailer.php';
 require_once __DIR__ . '/../src/services/AuthService.php';
+require_once __DIR__ . '/../src/services/GoogleAuthService.php';
 require_once __DIR__ . '/../src/services/ExpenseService.php';
 require_once __DIR__ . '/../src/services/ReportService.php';
 require_once __DIR__ . '/../src/services/GoalService.php';
@@ -48,7 +49,7 @@ $authService = new AuthService($userModel, $resetModel, $mailer, $db);
 $expenseService = new ExpenseService($expenseModel, $incomeModel);
 $goalService = new GoalService($goalModel);
 $budgetService = new BudgetService($budgetModel, $categoryModel);
-$authController = new AuthController($authService);
+$authController = new AuthController($authService, new GoogleAuthService(), $userModel);
 $expenseController = new ExpenseController($expenseModel, $incomeModel, $categoryModel, $expenseService, $budgetModel, $budgetService);
 $goalController = new GoalController($goalModel, $goalService);
 
@@ -64,6 +65,10 @@ if ($action === 'register') {
     $authController->forgot();
 } elseif ($action === 'reset') {
     $authController->reset();
+} elseif ($action === 'google-login') {
+    $authController->googleLogin();
+} elseif ($action === 'google-callback') {
+    $authController->googleCallback();
 } elseif ($action === 'store') {
     $expenseController->store();
 } elseif ($action === 'store_category') {

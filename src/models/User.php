@@ -5,10 +5,12 @@ class User
     public ?int $id = null;
     public string $name;
     public string $email;
-    public string $password_hash;
+    public ?string $password_hash = null;
     public ?string $reset_token = null;
     public ?string $reset_expires = null;
     public ?string $created_at = null;
+    public ?string $provider = null;
+    public ?string $provider_sub = null;
 
     private PDO $db;
 
@@ -120,8 +122,34 @@ class User
         ]);
     }
 
+    public function findByGoogleId(string $sub): ?User
+    {
+        $stmt = $this->db->prepare(
+            'SELECT * FROM usuarios WHERE provider = ? AND provider_sub = ?'
+        );
+        $stmt->execute(['google', $sub]);
+        $data = $stmt->fetch();
+        if (!$data) {
+            return null;
+        }
+        $user = new User($this->db);
+        return $user->hydrate($data);
+    }
+
+    public function createOAuthUser(string $name, string $email, string $provider, string $sub): bool
+    {
+        $stmt = $this->db->prepare(
+            'INSERT INTO usuarios (nome, email, senha, provider, provider_sub)
+             VALUES (?, ?, NULL, ?, ?)'
+        );
+        return $stmt->execute([$name, $email, $provider, $sub]);
+    }
+
     public function verifyPassword(string $password): bool
     {
+        if ($this->password_hash === null || $this->password_hash === '') {
+            return false;
+        }
         return password_verify(
             $password,
             $this->password_hash
@@ -133,10 +161,12 @@ class User
         $this->id = (int) $data['id'];
         $this->name = $data['nome'];
         $this->email = $data['email'];
-        $this->password_hash = $data['senha'];
+        $this->password_hash = $data['senha'] ?? null;
         $this->reset_token = $data['reset_token'] ?? null;
         $this->reset_expires = $data['reset_expires'] ?? null;
-        $this->created_at = $data['created_at'];
+        $this->created_at = $data['created_at'] ?? null;
+        $this->provider = $data['provider'] ?? null;
+        $this->provider_sub = $data['provider_sub'] ?? null;
 
         return $this;
     }
