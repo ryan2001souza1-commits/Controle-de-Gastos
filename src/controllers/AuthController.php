@@ -58,9 +58,10 @@ class AuthController
 
     public function forgot(): void
     {
-        $error   = null;
-        $success = null;
-        $resetToken = null;
+        $error     = null;
+        $success   = null;
+        $resetUrl  = null;
+        $mailSent  = false;
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $email = trim($_POST['email'] ?? '');
@@ -69,8 +70,9 @@ class AuthController
             if (!$result['success']) {
                 $error = $result['message'];
             } else {
-                $success = $result['message'];
-                $resetToken = $result['token'] ?? null;
+                $success  = $result['message'];
+                $resetUrl = $result['resetUrl'] ?? null;
+                $mailSent = (bool)($result['mailSent'] ?? false);
             }
         }
 
@@ -79,19 +81,32 @@ class AuthController
 
     public function reset(): void
     {
-        $token = $_GET['token'] ?? ($_POST['token'] ?? '');
-        $error = null;
+        $token   = $_GET['token'] ?? ($_POST['token'] ?? '');
+        $error   = null;
         $success = null;
 
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $newPassword = $_POST['password'] ?? '';
-            $confirm     = $_POST['password_confirm'] ?? '';
-            $result = $this->authService->resetPasswordWithToken($token, $newPassword, $confirm);
+        // Valida token antes de exibir a tela (GET) ou redefinir (POST)
+        $tokenValid = $this->authService->validateResetToken($token);
 
-            if (!$result['success']) {
-                $error = $result['message'];
+        if (!$tokenValid) {
+            $error = 'Token inválido, expirado ou já utilizado. Solicite um novo link.';
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            if (!$tokenValid) {
+                // mantém erro acima; não processa
             } else {
-                $success = $result['message'];
+                $newPassword = $_POST['password'] ?? '';
+                $confirm     = $_POST['password_confirm'] ?? '';
+                $result = $this->authService->resetPasswordWithToken($token, $newPassword, $confirm);
+
+                if (!$result['success']) {
+                    $error = $result['message'];
+                } else {
+                    // Redireciona para login com flag de sucesso
+                    header('Location: /index.php?action=login&reset=1');
+                    exit;
+                }
             }
         }
 

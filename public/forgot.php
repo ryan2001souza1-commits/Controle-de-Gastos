@@ -86,12 +86,12 @@
                     <div class="auth-alert auth-alert-error"><?= htmlspecialchars($error) ?></div>
                 <?php endif; ?>
 
-                <?php if (!empty($resetToken)): ?>
+                <?php if (!empty($resetUrl)): ?>
                     <div class="auth-alert auth-alert-info forgot-token-box">
                         <strong>Ambiente sem envio de e-mail configurado.</strong>
-                        <span>Use o link abaixo para definir uma nova senha (válido por 1 hora):</span>
-                        <a href="/index.php?action=reset&amp;token=<?= htmlspecialchars($resetToken) ?>" class="forgot-token-link">
-                            /index.php?action=reset&amp;token=<?= htmlspecialchars($resetToken) ?>
+                        <span>Use o link abaixo para definir uma nova senha (válido por 1 minuto):</span>
+                        <a href="<?= htmlspecialchars($resetUrl) ?>" class="forgot-token-link">
+                            <?= htmlspecialchars($resetUrl) ?>
                         </a>
                     </div>
                 <?php endif; ?>

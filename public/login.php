@@ -50,6 +50,10 @@
                     <div class="auth-alert auth-alert-success">Cadastro realizado! Faça login.</div>
                 <?php endif; ?>
 
+                <?php if (isset($_GET['reset']) && $_GET['reset'] == '1'): ?>
+                    <div class="auth-alert auth-alert-success">Senha redefinida com sucesso! Você já pode fazer login.</div>
+                <?php endif; ?>
+
                 <?php if (isset($error)): ?>
                     <div class="auth-alert auth-alert-error"><?= htmlspecialchars($error) ?></div>
                 <?php endif; ?>

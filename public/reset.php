@@ -95,13 +95,15 @@
                 <h2 class="auth-title">Defina sua nova senha</h2>
                 <p class="auth-subtitle forgot-subtitle">Digite sua nova senha e confirme para garantir a segurança da sua conta.</p>
 
-                <?php if (!empty($success)): ?>
-                    <div class="auth-alert auth-alert-success"><?= htmlspecialchars($success) ?></div>
-                <?php endif; ?>
-
                 <?php if (!empty($error)): ?>
                     <div class="auth-alert auth-alert-error"><?= htmlspecialchars($error) ?></div>
                 <?php endif; ?>
+
+                <?php if (!empty($error) && str_contains($error, 'Token')): ?>
+                    <p class="auth-foot-link" style="margin-top:0;">
+                        <a href="/index.php?action=forgot">← Solicitar um novo link de recuperação</a>
+                    </p>
+                <?php else: ?>
 
                 <form action="/index.php?action=reset" method="POST" class="auth-form" novalidate>
                     <input type="hidden" name="token" value="<?= htmlspecialchars($_GET['token'] ?? '') ?>">
@@ -167,6 +169,8 @@
                         <span>Redefinir senha</span>
                     </button>
                 </form>
+
+                <?php endif; ?>
 
                 <a href="/index.php?action=login" class="reset-back">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
