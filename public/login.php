@@ -114,7 +114,7 @@
                     Não tem conta? <a href="/index.php?action=register">Cadastre-se</a>
                 </p>
             </div>
-            <p class="auth-footer">&copy; <?= date('Y') ?> Controle de Gastos · Todos os direitos reservados</p>
+            <p class="auth-footer">&copy; <?= date('Y') ?> Controle de Gastos · Desenvolvido por Ryan Souza</p>
         </main>
     </div>
     <script src="/js/app.js" defer></script>
