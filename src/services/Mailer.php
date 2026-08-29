@@ -71,7 +71,7 @@ class Mailer
                     CURLOPT_HTTPHEADER     => [
                         'accept: application/json',
                         'content-type: application/json',
-                        'x-keysib-key: ' . $apiKey,
+                        'api-key: ' . $apiKey,
                     ],
                     CURLOPT_RETURNTRANSFER => true,
                     CURLOPT_TIMEOUT        => 15,
@@ -110,7 +110,7 @@ class Mailer
                         'header'        => implode("\r\n", [
                             'accept: application/json',
                             'content-type: application/json',
-                            'x-keysib-key: ' . $apiKey,
+                            'api-key: ' . $apiKey,
                         ]),
                         'content' => $payload,
                     ],
