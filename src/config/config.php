@@ -101,6 +101,9 @@ function getDBConnection(): PDO
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES   => false,
             ]);
+
+            require_once __DIR__ . '/../migrations.php';
+            runMigrations($pdo);
         } catch (PDOException $e) {
             throw new PDOException(
                 'ERRO REAL DO POSTGRES: ' . $e->getMessage(),
