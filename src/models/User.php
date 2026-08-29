@@ -20,7 +20,7 @@ class User
     public function findByEmail(string $email): ?User
     {
         $stmt = $this->db->prepare(
-            'SELECT * FROM usuarios WHERE email = ?'
+            'SELECT * FROM usuarios WHERE LOWER(TRIM(email)) = LOWER(TRIM(?))'
         );
 
         $stmt->execute([$email]);
