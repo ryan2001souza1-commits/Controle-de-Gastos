@@ -22,9 +22,9 @@
                     <div class="auth-brand-logo">
                         <svg viewBox="0 0 32 32" width="32" height="32" aria-hidden="true">
                             <circle cx="16" cy="16" r="14" fill="#6366f1"/>
-                            <path d="M16 4 a12 12 0 0 1 10.4 6 L16 16 Z" fill="#8b5cf6"/>
-                            <path d="M26.4 10 a12 12 0 0 1 0 12 L16 16 Z" fill="#a855f7"/>
-                            <path d="M5.6 22 a12 12 0 0 0 10.4 6 L16 16 Z" fill="#22c55e"/>
+                            <path d="M16 2 a14 14 0 0 1 12.12 7 L16 16 Z" fill="#8b5cf6"/>
+                            <path d="M28.12 9 a14 14 0 0 1 0 14 L16 16 Z" fill="#a855f7"/>
+                            <path d="M3.88 23 a14 14 0 0 0 12.12 7 L16 16 Z" fill="#22c55e"/>
                         </svg>
                     </div>
                     <div class="auth-brand-text">
