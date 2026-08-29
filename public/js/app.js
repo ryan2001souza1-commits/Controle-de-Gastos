@@ -1,27 +1,31 @@
+function togglePassword(btn) {
+    const targetId = btn.dataset.target;
+    const input = document.getElementById(targetId);
+    if (!input) return;
+    const willShow = input.type === 'password';
+    const hadFocus = document.activeElement === input;
+    const selStart = input.selectionStart;
+    const selEnd = input.selectionEnd;
+    input.type = willShow ? 'text' : 'password';
+    if (hadFocus) {
+        input.focus();
+        try { input.setSelectionRange(selStart, selEnd); } catch (_) {}
+    }
+    const openIcon  = btn.querySelector('.eye-open, .auth-eye-open');
+    const closedIcon = btn.querySelector('.eye-closed, .auth-eye-closed');
+    if (openIcon)   openIcon.style.display   = willShow ? 'none' : '';
+    if (closedIcon) closedIcon.style.display = willShow ? '' : 'none';
+    btn.setAttribute('aria-label', willShow ? 'Ocultar senha' : 'Mostrar senha');
+    btn.setAttribute('aria-pressed', willShow ? 'true' : 'false');
+}
+
 function initPasswordToggles(root = document) {
     root.querySelectorAll('.toggle-password, .auth-toggle-pw').forEach(btn => {
         if (btn.dataset.bound === '1') return;
         btn.dataset.bound = '1';
         btn.addEventListener('click', (e) => {
             e.preventDefault();
-            const targetId = btn.dataset.target;
-            const input = document.getElementById(targetId);
-            if (!input) return;
-            const willShow = input.type === 'password';
-            const hadFocus = document.activeElement === input;
-            const selStart = input.selectionStart;
-            const selEnd = input.selectionEnd;
-            input.type = willShow ? 'text' : 'password';
-            if (hadFocus) {
-                input.focus();
-                try { input.setSelectionRange(selStart, selEnd); } catch (_) {}
-            }
-            const openIcon  = btn.querySelector('.eye-open, .auth-eye-open');
-            const closedIcon = btn.querySelector('.eye-closed, .auth-eye-closed');
-            if (openIcon)   openIcon.style.display   = willShow ? 'none' : '';
-            if (closedIcon) closedIcon.style.display = willShow ? '' : 'none';
-            btn.setAttribute('aria-label', willShow ? 'Ocultar senha' : 'Mostrar senha');
-            btn.setAttribute('aria-pressed', willShow ? 'true' : 'false');
+            togglePassword(btn);
         });
     });
 }
@@ -33,6 +37,15 @@ function whenReady(fn) {
 
 whenReady(() => {
     initPasswordToggles();
+    // delegado — garante clique no ícone/SVG e em conteúdo carregado depois
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.auth-toggle-pw, .toggle-password');
+        if (!btn) return;
+        // se já tem bound direto, deixa o handler direto cuidar e evita duplo toggle
+        if (btn.dataset.bound === '1') return;
+        e.preventDefault();
+        togglePassword(btn);
+    });
 
     /* ============================================================
        AUTH PAGES — validação de confirmação de senha

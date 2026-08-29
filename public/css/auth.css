@@ -327,7 +327,9 @@ body.auth-body {
     align-items: center;
     border-radius: 6px;
     transition: color 0.18s ease, background 0.18s ease;
+    z-index: 2;
 }
+.auth-toggle-pw svg { pointer-events: none; }
 
 .auth-toggle-pw:hover {
     color: #0f172a;
