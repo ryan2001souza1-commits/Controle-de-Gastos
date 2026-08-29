@@ -5,12 +5,14 @@ class AuthService
     private User $userModel;
     private PasswordReset $resetModel;
     private Mailer $mailer;
+    private PDO $db;
 
-    public function __construct(User $userModel, PasswordReset $resetModel, Mailer $mailer)
+    public function __construct(User $userModel, PasswordReset $resetModel, Mailer $mailer, PDO $db)
     {
         $this->userModel  = $userModel;
         $this->resetModel = $resetModel;
         $this->mailer     = $mailer;
+        $this->db         = $db;
     }
 
     public function login(string $email, string $password): bool
@@ -128,7 +130,7 @@ class AuthService
         );
 
         if (!$mailSent) {
-            error_log("[AuthService] Falha ao enviar e-mail de recuperação para {$user->email} — verifique RESEND_API_KEY e MAIL_FROM na Vercel");
+            error_log("[AuthService] Falha ao enviar e-mail de recuperação para {$user->email} — verifique BREVO_API_KEY e MAIL_FROM na Vercel");
             if ($this->envAny('APP_DEBUG') === 'true' || $this->envAny('APP_ENV') === 'development') {
                 error_log("[AuthService:DEV] Link de recuperação (válido 1 min): {$resetUrl}");
             }
@@ -181,7 +183,7 @@ class AuthService
         $userId = (int)$reset['user_id'];
 
         // Transação atômica: senha + invalidação do token
-        $db = getDBConnection();
+        $db = $this->db;
         try {
             $db->beginTransaction();
             if (!$this->userModel->updatePassword($userId, $newPassword)) {
