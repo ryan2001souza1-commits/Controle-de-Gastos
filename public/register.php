@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
     <title><?= $pageTitle ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,6 +16,7 @@
     <div class="auth-wrapper">
         <aside class="auth-hero" aria-hidden="true">
             <div class="auth-hero-bg"></div>
+
             <div class="auth-hero-content">
                 <div class="auth-brand">
                     <div class="auth-brand-logo">
@@ -30,19 +32,145 @@
                         <span>Gastos</span>
                     </div>
                 </div>
+
                 <h1 class="auth-hero-title">Comece agora e<br>transforme sua <em>vida<br>financeira</em></h1>
                 <p class="auth-hero-text">É rápido, fácil e gratuito! Junte-se a milhares de pessoas que já organizam suas finanças com inteligência.</p>
-                <div class="auth-hero-foot">
-                    <span class="auth-shield" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 2 4 5v6c0 5 3.5 9.5 8 11 4.5-1.5 8-6 8-11V5l-8-3z"/>
-                            <polyline points="9 12 11 14 15 10"/>
-                        </svg>
-                    </span>
-                    <div>
-                        <strong>Seus dados estão seguros conosco.</strong>
-                        <span>Privacidade e segurança são prioridade.</span>
+            </div>
+
+            <div class="auth-hero-illu" aria-hidden="true">
+                <div class="auth-card-mini auth-card-phone">
+                    <div class="auth-phone-frame">
+                        <div class="auth-phone-notch"></div>
+                        <div class="auth-phone-screen">
+                            <div class="auth-phone-statusbar">
+                                <span>11:14</span>
+                                <span class="auth-phone-status-icons">
+                                    <svg viewBox="0 0 18 12" width="18" height="12" aria-hidden="true"><rect x="0" y="7" width="3" height="5" rx="0.5" fill="#0f172a"/><rect x="5" y="5" width="3" height="7" rx="0.5" fill="#0f172a"/><rect x="10" y="2" width="3" height="10" rx="0.5" fill="#0f172a"/><rect x="15" y="0" width="3" height="12" rx="0.5" fill="#cbd5e1"/></svg>
+                                    <svg viewBox="0 0 16 12" width="16" height="12" aria-hidden="true"><path d="M8 9.5a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" fill="#0f172a"/><path d="M3 5a8 8 0 0 1 10 0l-1 1.2a6.4 6.4 0 0 0-8 0z" fill="#0f172a"/><path d="M5.5 7.5a4.6 4.6 0 0 1 5 0l-1 1.2a3 3 0 0 0-3 0z" fill="#0f172a"/></svg>
+                                    <svg viewBox="0 0 26 12" width="26" height="12" aria-hidden="true"><rect x="0" y="1" width="22" height="10" rx="2" fill="none" stroke="#0f172a"/><rect x="2" y="3" width="14" height="6" rx="1" fill="#0f172a"/><rect x="23" y="4" width="2" height="4" rx="0.5" fill="#0f172a"/></svg>
+                                </span>
+                            </div>
+                            <div class="auth-phone-app">
+                                <div class="auth-phone-head">
+                                    <span class="auth-phone-back">‹</span>
+                                    <span>Resumo</span>
+                                </div>
+                                <div class="auth-phone-card">
+                                    <small>Resumo do mês</small>
+                                    <em>Saldo atual</em>
+                                    <strong>R$ 2.540,00</strong>
+                                    <div class="auth-phone-line"><span>Receitas</span><span class="ok">R$ 5.300,00</span></div>
+                                    <div class="auth-phone-line"><span>Despesas</span><span class="bad">R$ 2.760,00</span></div>
+                                </div>
+                                <div class="auth-phone-card auth-phone-card-sm">
+                                    <small>Gastos por categoria</small>
+                                    <div class="auth-phone-donut">
+                                        <svg viewBox="0 0 60 60" width="50" height="50" aria-hidden="true">
+                                            <circle cx="30" cy="30" r="20" fill="none" stroke="#e2e8f0" stroke-width="9"/>
+                                            <circle cx="30" cy="30" r="20" fill="none" stroke="#22c55e" stroke-width="9" stroke-dasharray="50 126" transform="rotate(-90 30 30)"/>
+                                            <circle cx="30" cy="30" r="20" fill="none" stroke="#6366f1" stroke-width="9" stroke-dasharray="32 126" stroke-dashoffset="-50" transform="rotate(-90 30 30)"/>
+                                            <circle cx="30" cy="30" r="20" fill="none" stroke="#f59e0b" stroke-width="9" stroke-dasharray="22 126" stroke-dashoffset="-82" transform="rotate(-90 30 30)"/>
+                                            <circle cx="30" cy="30" r="20" fill="none" stroke="#0ea5e9" stroke-width="9" stroke-dasharray="14 126" stroke-dashoffset="-104" transform="rotate(-90 30 30)"/>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="auth-phone-tabbar">
+                                    <span class="active">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="#6366f1"><path d="M12 3 3 11h2v9h5v-6h4v6h5v-9h2z"/></svg>
+                                        <em>Início</em>
+                                    </span>
+                                    <span>
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#94a3b8" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/></svg>
+                                        <em>Resumo</em>
+                                    </span>
+                                    <span>
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#94a3b8" stroke-width="2.5"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                                    </span>
+                                    <span>
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#94a3b8" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>
+                                        <em>Metas</em>
+                                    </span>
+                                    <span>
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#94a3b8" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+                                        <em>Perfil</em>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
+                </div>
+
+                <div class="auth-card-mini auth-card-metas">
+                    <div class="auth-card-mini-head">
+                        <span class="auth-card-mini-goal-icon">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#a855f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg>
+                        </span>
+                        <div>
+                            <strong>Metas</strong>
+                            <small>8 de 12 concluídas</small>
+                        </div>
+                    </div>
+                    <div class="auth-progress"><span style="width:66%"></span></div>
+                </div>
+
+                <div class="auth-card-mini auth-card-org">
+                    <div class="auth-card-mini-head auth-card-mini-head-row">
+                        <div>
+                            <strong>Organização</strong>
+                            <small>é liberdade!</small>
+                        </div>
+                        <span class="auth-card-org-chart" aria-hidden="true">
+                            <svg viewBox="0 0 32 24" width="32" height="24">
+                                <rect x="2"  y="14" width="4" height="10" rx="1" fill="#22c55e"/>
+                                <rect x="9"  y="9"  width="4" height="15" rx="1" fill="#16a34a"/>
+                                <rect x="16" y="6"  width="4" height="18" rx="1" fill="#15803d"/>
+                                <rect x="23" y="11" width="4" height="13" rx="1" fill="#22c55e"/>
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="auth-illu-coin auth-illu-coin-1" aria-hidden="true">
+                    <svg viewBox="0 0 64 64" width="48" height="48"><circle cx="32" cy="32" r="28" fill="#f59e0b"/><circle cx="32" cy="32" r="22" fill="#fbbf24"/><text x="32" y="40" text-anchor="middle" font-size="22" font-weight="800" fill="#92400e" font-family="Inter,sans-serif">$</text></svg>
+                </div>
+                <div class="auth-illu-coin auth-illu-coin-2" aria-hidden="true">
+                    <svg viewBox="0 0 64 64" width="40" height="40"><circle cx="32" cy="32" r="28" fill="#f59e0b"/><circle cx="32" cy="32" r="22" fill="#fbbf24"/><text x="32" y="40" text-anchor="middle" font-size="20" font-weight="800" fill="#92400e" font-family="Inter,sans-serif">$</text></svg>
+                </div>
+                <div class="auth-illu-coin auth-illu-coin-3" aria-hidden="true">
+                    <svg viewBox="0 0 64 64" width="36" height="36"><circle cx="32" cy="32" r="28" fill="#f59e0b"/><circle cx="32" cy="32" r="22" fill="#fbbf24"/><text x="32" y="40" text-anchor="middle" font-size="18" font-weight="800" fill="#92400e" font-family="Inter,sans-serif">$</text></svg>
+                </div>
+
+                <div class="auth-illu-wallet" aria-hidden="true">
+                    <svg viewBox="0 0 120 90" width="120" height="90">
+                        <path d="M10 22 Q10 12 20 12 H95 a10 10 0 0 1 10 10 V72 a10 10 0 0 1 -10 10 H20 a10 10 0 0 1 -10 -10 Z" fill="#7c3aed"/>
+                        <rect x="55" y="35" width="60" height="34" rx="6" fill="#6d28d9"/>
+                        <rect x="60" y="44" width="22" height="16" rx="3" fill="#c4b5fd"/>
+                        <rect x="64" y="48" width="14" height="8" rx="1.5" fill="#a78bfa"/>
+                    </svg>
+                </div>
+
+                <div class="auth-illu-plant" aria-hidden="true">
+                    <svg viewBox="0 0 80 110" width="80" height="110">
+                        <ellipse cx="40" cy="100" rx="22" ry="6" fill="#0f172a" opacity="0.35"/>
+                        <path d="M28 78 Q40 60 52 78 L50 100 H30 Z" fill="#e2e8f0"/>
+                        <path d="M30 78 Q35 70 40 78" fill="none" stroke="#cbd5e1" stroke-width="1"/>
+                        <path d="M40 80 C 30 60 18 50 22 30 C 32 32 42 50 42 70 Z" fill="#22c55e"/>
+                        <path d="M40 80 C 50 60 62 50 58 30 C 48 32 38 50 38 70 Z" fill="#16a34a"/>
+                        <path d="M40 80 C 40 50 36 30 40 14 C 44 30 44 50 44 70 Z" fill="#15803d"/>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="auth-hero-foot">
+                <span class="auth-shield" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2 4 5v6c0 5 3.5 9.5 8 11 4.5-1.5 8-6 8-11V5l-8-3z"/>
+                        <polyline points="9 12 11 14 15 10"/>
+                    </svg>
+                </span>
+                <div>
+                    <strong>Seus dados estão seguros conosco.</strong>
+                    <span>Privacidade e segurança são prioridade.</span>
                 </div>
             </div>
         </aside>
@@ -102,7 +230,7 @@
                                     </svg>
                                 </span>
                                 <input type="password" id="password" name="password" placeholder="Sua senha" autocomplete="new-password" minlength="8" required>
-                                <button type="button" class="auth-toggle-pw" aria-label="Mostrar/ocultar senha" data-target="password">
+                                <button type="button" class="auth-toggle-pw" aria-label="Mostrar senha" aria-pressed="false" data-target="password">
                                     <svg class="auth-eye-open" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/>
                                         <circle cx="12" cy="12" r="3"/>
@@ -126,7 +254,7 @@
                                     </svg>
                                 </span>
                                 <input type="password" id="password_confirm" name="password_confirm" placeholder="Repita a senha" autocomplete="new-password" minlength="8" required>
-                                <button type="button" class="auth-toggle-pw" aria-label="Mostrar/ocultar senha" data-target="password_confirm">
+                                <button type="button" class="auth-toggle-pw" aria-label="Mostrar senha" aria-pressed="false" data-target="password_confirm">
                                     <svg class="auth-eye-open" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/>
                                         <circle cx="12" cy="12" r="3"/>
@@ -141,6 +269,21 @@
                         </div>
                     </div>
                     <small class="auth-hint" id="passwordMatchHint"></small>
+
+                    <div class="auth-pwd-rules" id="passwordRules" aria-live="polite">
+                        <div class="auth-pwd-rules-icon">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+                        </div>
+                        <div class="auth-pwd-rules-body">
+                            <strong>Sua senha deve conter:</strong>
+                            <ul>
+                                <li data-rule="len"><span class="auth-pwd-check"></span>Pelo menos 8 caracteres</li>
+                                <li data-rule="upper"><span class="auth-pwd-check"></span>Uma letra maiúscula</li>
+                                <li data-rule="num"><span class="auth-pwd-check"></span>Um número</li>
+                                <li data-rule="special"><span class="auth-pwd-check"></span>Um caractere especial</li>
+                            </ul>
+                        </div>
+                    </div>
 
                     <label class="auth-check auth-terms">
                         <input type="checkbox" name="terms" id="terms" required>
@@ -157,8 +300,10 @@
                     </button>
                 </form>
 
-                <p class="auth-foot-link">
+                <p class="auth-foot-link auth-foot-link-divider">
+                    <span class="auth-foot-line"></span>
                     Já tem conta? <a href="/index.php?action=login">Faça login</a>
+                    <span class="auth-foot-line"></span>
                 </p>
             </div>
             <p class="auth-footer">&copy; <?= date('Y') ?> Controle de Gastos · Desenvolvido por Ryan Souza</p>

@@ -77,6 +77,29 @@ whenReady(() => {
     }
 
     /* ============================================================
+       AUTH PAGES — requisitos visuais de senha (cadastro)
+       ============================================================ */
+    const pwdRules = document.getElementById('passwordRules');
+    if (pwd && pwdRules) {
+        const checks = {
+            len:     v => v.length >= 8,
+            upper:   v => /[A-Z]/.test(v),
+            num:     v => /\d/.test(v),
+            special: v => /[^A-Za-z0-9]/.test(v),
+        };
+        const items = pwdRules.querySelectorAll('li[data-rule]');
+        const validate = () => {
+            items.forEach(li => {
+                const rule = li.dataset.rule;
+                const ok = checks[rule] ? checks[rule](pwd.value) : false;
+                li.classList.toggle('ok', ok);
+            });
+        };
+        pwd.addEventListener('input', validate);
+        validate();
+    }
+
+    /* ============================================================
        Filtro dinâmico de categorias (formulário "Novo Lançamento")
        ============================================================ */
     const typeSelect = document.getElementById('type');
