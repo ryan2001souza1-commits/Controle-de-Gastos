@@ -109,9 +109,13 @@ class AuthService
         $generic = 'Se o e-mail estiver cadastrado, você receberá as instruções para recuperar sua senha.';
 
         if (!$user) {
+            // E-mail não existe no banco — interrompe aqui.
+            // Não gera token, não salva recuperação, não envia e-mail.
+            // Retorna sucesso genérico para não revelar se o e-mail existe.
             return ['success' => true, 'message' => $generic, 'resetUrl' => null, 'mailSent' => false];
         }
 
+        // E-mail existe — prossegue com geração de token e envio.
         $tokenPlain = bin2hex(random_bytes(32));
         $tokenHash  = hash('sha256', $tokenPlain);
 
