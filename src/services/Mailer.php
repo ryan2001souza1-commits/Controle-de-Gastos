@@ -79,7 +79,6 @@ class Mailer
                 $resp = curl_exec($ch);
                 $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 $err = curl_error($ch);
-                curl_close($ch);
                 if ($resp !== false && $status >= 200 && $status < 300) return true;
                 $body = json_decode((string)$resp, true);
                 $msg = is_array($body) ? ($body['message'] ?? ($body['errors'][0]['message'] ?? '')) : '';
