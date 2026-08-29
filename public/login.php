@@ -98,7 +98,7 @@
                             <span class="auth-check-box"></span>
                             <span>Lembrar-me</span>
                         </label>
-                        <a href="#" class="auth-link-text">Esqueci minha senha</a>
+                        <a href="/forgot.php" class="auth-link-text">Esqueci minha senha</a>
                     </div>
 
                     <button type="submit" class="auth-submit">
