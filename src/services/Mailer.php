@@ -1,22 +1,27 @@
 <?php
 /**
- * Mailer — envio real de e-mail compatível com PHP/Vercel Serverless.
+ * Mailer — envio real compatível com Vercel Serverless + Gmail.
  *
- * Prioridade de envio:
- *   1. Resend API HTTPS  (RESEND_API_KEY + MAIL_FROM)  — recomendado Vercel
- *   2. SMTP direto       (SMTP_HOST/SMTP_USER/SMTP_PASS) — compat legado
- *   3. mail() nativo     — último recurso (falha na Vercel sem sendmail)
+ * Ordem de tentativa:
+ *   1) Resend API HTTPS (RESEND_API_KEY + MAIL_FROM) — funciona na Vercel (HTTPS liberado)
+ *   2) SMTP direto      (SMTP_HOST/SMTP_USER/SMTP_PASS) — Gmail / SendGrid / Brevo
+ *   3) mail() nativo    — falha na Vercel (sem sendmail), último recurso
  *
- * ENV obrigatórias em produção (Vercel → Settings → Environment Variables):
- *   RESEND_API_KEY = re_xxxxxxxxxxxxxxxxxxxxxxxx  (obter em https://resend.com/api-keys)
- *   MAIL_FROM      = Controle de Gastos <onboarding@resend.dev>  OU seu domínio verificado
- *   MAIL_FROM_NAME = Controle de Gastos  (opcional, extraído de MAIL_FROM se contiver nome)
+ * PRODUÇÃO (Vercel → Settings → Environment Variables):
+ *   Opção A — Resend (recomendado Vercel):
+ *     RESEND_API_KEY = re_xxxxxxxx  (https://resend.com/api-keys)
+ *     MAIL_FROM      = Controle de Gastos <onboarding@resend.dev> ou domínio verificado
  *
- * Alternativa SMTP (se já usa SendGrid/Brevo/SES):
- *   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM
+ *   Opção B — Gmail (envio via smtp.gmail.com com Senha de App):
+ *     SMTP_HOST = smtp.gmail.com
+ *     SMTP_PORT = 587
+ *     SMTP_USER = seu.email@gmail.com
+ *     SMTP_PASS = sua_senha_de_app_16_letras  (SEM espaços, NÃO é a senha normal!)
+ *     MAIL_FROM = seu.email@gmail.com  (DEVE ser igual ao SMTP_USER para Gmail)
+ *     MAIL_FROM_NAME = Controle de Gastos
+ *     → Gere a Senha de App em: https://myaccount.google.com/apppasswords (precisa 2FA ativo)
  *
- * Sem credenciais o envio falha silenciosamente (log em error_log) e o
- * AuthService retorna mensagem genérica — nunca expõe o link.
+ * Localmente sem credenciais, o envio falha e AuthService loga o link em error_log quando APP_DEBUG=true.
  */
 class Mailer
 {
@@ -25,14 +30,20 @@ class Mailer
 
     public function __construct()
     {
-        [$name, $addr] = $this->parseFrom((string)getenv('MAIL_FROM'));
-        $this->from     = $addr ?: 'onboarding@resend.dev';
-        $this->fromName = (string)(getenv('MAIL_FROM_NAME') ?: ($name ?: 'Controle de Gastos'));
-        // se MAIL_FROM já veio no formato "Nome <email>", o parse acima extrai ambos
-        if ($addr === '' && getenv('MAIL_FROM')) {
-            // fallback: getenv retornou apenas string sem parse
-            $this->from = (string)getenv('MAIL_FROM');
+        $rawFrom = trim((string)getenv('MAIL_FROM'));
+        [$name, $addr] = $this->parseFrom($rawFrom);
+        $smtpUser = trim((string)getenv('SMTP_USER'));
+
+        // Se MAIL_FROM vazio mas SMTP_USER é um e-mail (caso Gmail), usa SMTP_USER como remetente
+        if ($addr === '' && filter_var($smtpUser, FILTER_VALIDATE_EMAIL)) {
+            $addr = $smtpUser;
         }
+        // fallback Resend para desenvolvimento
+        if ($addr === '') $addr = 'onboarding@resend.dev';
+        // se MAIL_FROM veio como "Nome <email>", $name já foi extraído
+        $envName = trim((string)getenv('MAIL_FROM_NAME'));
+        $this->from     = $addr;
+        $this->fromName = $envName ?: ($name ?: 'Controle de Gastos');
     }
 
     public function send(string $to, string $subject, string $htmlBody, string $altBody = ''): bool
@@ -41,21 +52,30 @@ class Mailer
         $subject = trim($subject);
         if ($to === '' || $subject === '') return false;
 
-        // 1) Resend HTTPS — funciona na Vercel (outbound HTTPS liberado, porta 25 bloqueada)
         $resendKey = trim((string)getenv('RESEND_API_KEY'));
+        $smtpHost  = trim((string)getenv('SMTP_HOST'));
+
+        // Diagnóstico: nenhuma credencial configurada
+        if ($resendKey === '' && $smtpHost === '') {
+            error_log('[Mailer] NENHUMA credencial de e-mail configurada. Defina RESEND_API_KEY ou SMTP_HOST/SMTP_USER/SMTP_PASS na Vercel → Settings → Environment Variables');
+        }
+
+        // 1) Resend HTTPS — mais confiável na Vercel (porta 587 pode ser bloqueada)
         if ($resendKey !== '' && $this->from !== '') {
             if ($this->sendViaResend($to, $subject, $htmlBody, $resendKey)) return true;
-            // se Resend falhou, tenta SMTP/mail como fallback antes de desistir
             error_log('[Mailer] Resend falhou, tentando fallback SMTP/mail');
         }
 
-        // 2) SMTP direto (legado)
-        $smtpHost = trim((string)getenv('SMTP_HOST'));
+        // 2) SMTP direto (Gmail / SendGrid / Brevo)
         if ($smtpHost !== '') {
-            if ($this->sendSmtp($to, $subject, $htmlBody, $altBody)) return true;
+            if ($this->sendSmtp($to, $subject, $htmlBody)) return true;
+            // Se foi Gmail e falhou, pode ser senha normal ao invés de App Password
+            if (str_contains(strtolower($smtpHost), 'gmail')) {
+                error_log('[Mailer] Gmail SMTP falhou — verifique se SMTP_PASS é Senha de App (16 letras, https://myaccount.google.com/apppasswords) e não a senha normal. Verifique também se MAIL_FROM == SMTP_USER');
+            }
         }
 
-        // 3) mail() nativo
+        // 3) mail() nativo — falha na Vercel
         $headers  = "From: {$this->fromName} <{$this->from}>\r\n";
         $headers .= "Reply-To: {$this->from}\r\n";
         $headers .= "MIME-Version: 1.0\r\n";
@@ -63,7 +83,7 @@ class Mailer
         $sent = @mail($to, $subject, $htmlBody, $headers);
         if (!$sent) {
             $e = error_get_last();
-            error_log('[Mailer] mail() falhou para ' . $to . ': ' . ($e['message'] ?? 'sem sendmail') . ' — configure RESEND_API_KEY e MAIL_FROM na Vercel');
+            error_log('[Mailer] mail() falhou para ' . $to . ': ' . ($e['message'] ?? 'sem sendmail') . ' — configure RESEND_API_KEY ou SMTP_HOST na Vercel');
         }
         return $sent;
     }
@@ -77,7 +97,6 @@ class Mailer
             'html'    => $html,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-        // Tenta file_get_contents (requere allow_url_fopen + openssl)
         if (ini_get('allow_url_fopen')) {
             $ctx = stream_context_create([
                 'http' => [
@@ -97,10 +116,9 @@ class Mailer
             $status = $this->parseStatus($http_response_header ?? []);
             if ($resp !== false && $status >= 200 && $status < 300) return true;
             if ($resp !== false) error_log("[Mailer:Resend] HTTP $status: $resp");
-            else error_log('[Mailer:Resend] file_get_contents falhou — host bloqueado ou sem openssl');
+            else error_log('[Mailer:Resend] file_get_contents falhou — sem openssl ou host bloqueado');
         }
 
-        // Fallback: cURL se disponível
         if (function_exists('curl_init')) {
             $ch = curl_init('https://api.resend.com/emails');
             curl_setopt_array($ch, [
@@ -120,50 +138,122 @@ class Mailer
             if ($resp !== false && $status >= 200 && $status < 300) return true;
             error_log("[Mailer:Resend cURL] HTTP $status err=$err resp=$resp");
         }
-
         return false;
     }
 
-    // — SMTP legado (mantido para quem já usa) —
-    private function sendSmtp(string $to, string $subject, string $htmlBody, string $altBody): bool
+    private function sendSmtp(string $to, string $subject, string $htmlBody): bool
     {
         $host = trim((string)getenv('SMTP_HOST'));
         $port = (int)(getenv('SMTP_PORT') ?: '587');
         $user = trim((string)getenv('SMTP_USER'));
         $pass = trim((string)getenv('SMTP_PASS'));
+        // Gmail exige que o remetente seja o próprio usuário autenticado
+        $from = $this->from;
+        if (str_contains(strtolower($host), 'gmail') && filter_var($user, FILTER_VALIDATE_EMAIL)) {
+            $from = $user;
+        }
         $timeout = 12;
         $addr = ($port === 465 ? 'ssl://' : '') . $host . ':' . $port;
         $fp = @stream_socket_client($addr, $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT);
         if (!$fp) { error_log("[Mailer:SMTP] connect $host:$port [$errno] $errstr"); return false; }
         stream_set_timeout($fp, $timeout);
-        $r = $this->smtpRead($fp); if (!$this->smtpOk($r)) { fclose($fp); return false; }
+
+        // Banner inicial (pode ser multiline)
+        $r = $this->smtpReadMultiline($fp);
+        if (!$this->smtpOk($r)) { error_log("[Mailer:SMTP] banner $r"); fclose($fp); return false; }
+
         $lh = gethostname() ?: 'localhost';
-        $this->smtpWrite($fp, "EHLO $lh\r\n"); $r = $this->smtpRead($fp);
-        if (!$this->smtpOk($r)) { $this->smtpWrite($fp, "HELO $lh\r\n"); $r = $this->smtpRead($fp); if (!$this->smtpOk($r)) { fclose($fp); return false; } }
+        $this->smtpWrite($fp, "EHLO $lh\r\n");
+        $r = $this->smtpReadMultiline($fp);
+        if (!$this->smtpOk($r)) {
+            $this->smtpWrite($fp, "HELO $lh\r\n");
+            $r = $this->smtpReadMultiline($fp);
+            if (!$this->smtpOk($r)) { error_log("[Mailer:SMTP] EHLO/HELO $r"); fclose($fp); return false; }
+        }
+
         if ($port === 587) {
-            $this->smtpWrite($fp, "STARTTLS\r\n"); $r = $this->smtpRead($fp); if (!$this->smtpOk($r)) { fclose($fp); return false; }
-            if (!@stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) { error_log('[Mailer:SMTP] STARTTLS fail'); fclose($fp); return false; }
-            $this->smtpWrite($fp, "EHLO $lh\r\n"); $this->smtpRead($fp);
+            $this->smtpWrite($fp, "STARTTLS\r\n");
+            $r = $this->smtpReadMultiline($fp);
+            if (!$this->smtpOk($r)) { error_log("[Mailer:SMTP] STARTTLS $r"); fclose($fp); return false; }
+            if (!@stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+                error_log('[Mailer:SMTP] stream_socket_enable_crypto falhou — openssl desabilitado?');
+                fclose($fp); return false;
+            }
+            $this->smtpWrite($fp, "EHLO $lh\r\n");
+            $r = $this->smtpReadMultiline($fp);
+            if (!$this->smtpOk($r)) { error_log("[Mailer:SMTP] EHLO pós-TLS $r"); fclose($fp); return false; }
         }
+
         if ($user !== '' && $pass !== '') {
-            $this->smtpWrite($fp, "AUTH LOGIN\r\n"); if (!$this->smtpOk($this->smtpRead($fp))) { fclose($fp); return false; }
-            $this->smtpWrite($fp, base64_encode($user) . "\r\n"); if (!$this->smtpOk($this->smtpRead($fp))) { fclose($fp); return false; }
-            $this->smtpWrite($fp, base64_encode($pass) . "\r\n"); $r = $this->smtpRead($fp); if (!str_starts_with(trim($r), '235')) { error_log("[Mailer:SMTP] AUTH fail $r"); fclose($fp); return false; }
+            // Tenta AUTH LOGIN (Gmail/Brevo) — também suporta AUTH PLAIN se LOGIN falhar
+            $this->smtpWrite($fp, "AUTH LOGIN\r\n");
+            $r = $this->smtpReadMultiline($fp);
+            if (str_starts_with($r, '334')) {
+                $this->smtpWrite($fp, base64_encode($user) . "\r\n");
+                $r = $this->smtpReadMultiline($fp);
+                if (!str_starts_with($r, '334')) { error_log("[Mailer:SMTP] AUTH user $r"); fclose($fp); return false; }
+                $this->smtpWrite($fp, base64_encode($pass) . "\r\n");
+                $r = $this->smtpReadMultiline($fp);
+                if (!str_starts_with(trim($r), '235')) { error_log("[Mailer:SMTP] AUTH pass $r"); fclose($fp); return false; }
+            } elseif ($this->smtpOk($r)) {
+                // Servidor aceitou sem challenge — tenta PLAIN
+                $this->smtpWrite($fp, base64_encode("\0$user\0$pass") . "\r\n");
+                $r = $this->smtpReadMultiline($fp);
+                if (!str_starts_with(trim($r), '235')) { error_log("[Mailer:SMTP] AUTH PLAIN $r"); fclose($fp); return false; }
+            } else {
+                error_log("[Mailer:SMTP] AUTH LOGIN rejeitado $r"); fclose($fp); return false;
+            }
         }
-        $this->smtpWrite($fp, "MAIL FROM:<{$this->from}>\r\n"); if (!$this->smtpOk($this->smtpRead($fp))) { fclose($fp); return false; }
-        $this->smtpWrite($fp, "RCPT TO:<$to>\r\n"); if (!$this->smtpOk($this->smtpRead($fp))) { fclose($fp); return false; }
-        $this->smtpWrite($fp, "DATA\r\n"); if (!$this->smtpOk($this->smtpRead($fp))) { fclose($fp); return false; }
-        $msg = "Subject: $subject\r\n" . $this->buildHeaders($to) . "\r\n\r\n" . $htmlBody;
-        $this->smtpWrite($fp, $msg . "\r\n.\r\n"); $r = $this->smtpRead($fp); $ok = str_starts_with(trim($r), '250');
-        $this->smtpWrite($fp, "QUIT\r\n"); fclose($fp);
-        if (!$ok) error_log("[Mailer:SMTP] DATA $r");
+
+        $this->smtpWrite($fp, "MAIL FROM:<$from>\r\n");
+        $r = $this->smtpReadMultiline($fp);
+        if (!$this->smtpOk($r)) { error_log("[Mailer:SMTP] MAIL FROM $r"); fclose($fp); return false; }
+
+        $this->smtpWrite($fp, "RCPT TO:<$to>\r\n");
+        $r = $this->smtpReadMultiline($fp);
+        if (!$this->smtpOk($r)) { error_log("[Mailer:SMTP] RCPT TO $r"); fclose($fp); return false; }
+
+        $this->smtpWrite($fp, "DATA\r\n");
+        $r = $this->smtpReadMultiline($fp);
+        if (!$this->smtpOk($r) && !str_starts_with($r, '354')) { error_log("[Mailer:SMTP] DATA $r"); fclose($fp); return false; }
+
+        $headers = $this->buildHeaders($to, $from);
+        $msg = "Subject: $subject\r\n" . $headers . "\r\n\r\n" . $htmlBody;
+        // Dot-stuffing: escapa linhas começando com ponto
+        $msg = preg_replace('/^\./m', '..', $msg);
+        $this->smtpWrite($fp, $msg . "\r\n.\r\n");
+        $r = $this->smtpReadMultiline($fp);
+        $ok = str_starts_with(trim($r), '250');
+        if (!$ok) error_log("[Mailer:SMTP] DATA end $r");
+        $this->smtpWrite($fp, "QUIT\r\n");
+        @fclose($fp);
         return $ok;
     }
+
     private function smtpWrite($fp, string $d): void { fwrite($fp, $d); }
-    private function smtpRead($fp): string { $l = fgets($fp); return $l !== false ? $l : ''; }
-    private function smtpOk(string $l): bool { $c = substr(trim($l), 0, 3); return $c !== '' && $c[0] === '2'; }
-    private function buildHeaders(string $to): string {
-        return "From: {$this->fromName} <{$this->from}>\r\nReply-To: {$this->from}\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\nTo: $to\r\n";
+    /** Lê resposta SMTP completa (multiline: linhas com "250-" continuam, "250 " termina) */
+    private function smtpReadMultiline($fp): string {
+        $resp = '';
+        while (($line = fgets($fp)) !== false) {
+            $resp .= $line;
+            // Formato: "XYZ-" continua, "XYZ " termina
+            if (strlen($line) >= 4 && $line[3] === ' ') break;
+            // timeout protection
+            $m = stream_get_meta_data($fp);
+            if ($m['timed_out']) break;
+        }
+        return $resp;
+    }
+    private function smtpOk(string $resp): bool {
+        if ($resp === '') return false;
+        // verifica última linha do multiline
+        $lines = explode("\n", trim($resp));
+        $last = end($lines);
+        $code = substr(trim($last), 0, 3);
+        return $code !== '' && $code[0] === '2';
+    }
+    private function buildHeaders(string $to, string $from): string {
+        return "From: {$this->fromName} <{$from}>\r\nReply-To: {$from}\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\nTo: $to\r\n";
     }
     private function parseStatus(array $h): int { foreach ($h as $l) if (preg_match('/^HTTP\/\S+\s+(\d+)/i', $l, $m)) return (int)$m[1]; return 0; }
     private function parseFrom(string $from): array {
