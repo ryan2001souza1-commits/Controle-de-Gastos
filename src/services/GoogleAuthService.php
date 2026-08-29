@@ -26,12 +26,23 @@ class GoogleAuthService
 
     public function isConfigured(): bool
     {
-        return $this->clientId !== '' && $this->clientSecret !== '';
+        // Re-lê a cada requisição (no serverless o construtor roda no cold start;
+        // se a env var foi alterada via redeploy, o objeto pode estar stale).
+        $cid = $this->env('GOOGLE_CLIENT_ID');
+        $cs  = $this->env('GOOGLE_CLIENT_SECRET');
+        return $cid !== '' && $cs !== '';
     }
 
     public function getClientId(): string
     {
-        return $this->clientId;
+        $v = $this->env('GOOGLE_CLIENT_ID');
+        return $v !== '' ? $v : $this->clientId;
+    }
+
+    public function getClientSecret(): string
+    {
+        $v = $this->env('GOOGLE_CLIENT_SECRET');
+        return $v !== '' ? $v : $this->clientSecret;
     }
 
     /**
@@ -41,8 +52,8 @@ class GoogleAuthService
     {
         $resp = $this->httpPostForm('https://oauth2.googleapis.com/token', [
             'code'          => $code,
-            'client_id'     => $this->clientId,
-            'client_secret' => $this->clientSecret,
+            'client_id'     => $this->getClientId(),
+            'client_secret' => $this->getClientSecret(),
             'redirect_uri'  => $redirectUri,
             'grant_type'    => 'authorization_code',
         ]);
@@ -68,7 +79,7 @@ class GoogleAuthService
         if (!is_array($header) || !is_array($payload) || $sig === '') return null;
         if (($header['alg'] ?? '') !== 'RS256') return null;
         if (($payload['iss'] ?? '') !== 'https://accounts.google.com' && ($payload['iss'] ?? '') !== 'accounts.google.com') return null;
-        if (($payload['aud'] ?? '') !== $this->clientId) return null;
+        if (($payload['aud'] ?? '') !== $this->getClientId()) return null;
         if (!isset($payload['exp']) || time() >= (int)$payload['exp']) return null;
         if (($payload['email_verified'] ?? false) !== true) return null;
 

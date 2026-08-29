@@ -119,9 +119,15 @@ class AuthController
     public function googleLogin(): void
     {
         if (!$this->googleAuth->isConfigured()) {
-            $cid = $this->googleAuth->getClientId();
-            $cs  = getenv('GOOGLE_CLIENT_SECRET') ?: ($_ENV['GOOGLE_CLIENT_SECRET'] ?? ($_SERVER['GOOGLE_CLIENT_SECRET'] ?? ''));
-            error_log('[Google] não configurado: GOOGLE_CLIENT_ID=' . ($cid !== '' ? 'OK' : 'VAZIO') . ' GOOGLE_CLIENT_SECRET=' . ($cs !== '' ? 'OK' : 'VAZIO'));
+            // Diagnóstico: informa exatamente qual env var está faltando
+            $env = function (string $k): string {
+                $v = getenv($k);
+                if ($v !== false && $v !== '') return 'OK';
+                if (isset($_ENV[$k]) && $_ENV[$k] !== '') return 'OK(_ENV)';
+                if (isset($_SERVER[$k]) && $_SERVER[$k] !== '') return 'OK(_SERVER)';
+                return 'VAZIO';
+            };
+            error_log('[Google] não configurado: GOOGLE_CLIENT_ID=' . $env('GOOGLE_CLIENT_ID') . ' GOOGLE_CLIENT_SECRET=' . $env('GOOGLE_CLIENT_SECRET') . ' APP_ENV=' . ($env('APP_ENV') ?: 'VAZIO') . ' VERCEL_ENV=' . ($env('VERCEL_ENV') ?: 'VAZIO'));
             header('Location: /index.php?action=login&google_error=not_configured');
             exit;
         }
