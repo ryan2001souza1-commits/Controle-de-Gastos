@@ -112,7 +112,7 @@ if ($pathInfo !== '/index.php' && $pathInfo !== '/' && !str_starts_with($pathInf
     $publicReal = realpath($ROOT . '/public');
     if ($real && $publicReal && str_starts_with($real, $publicReal) && is_file($real) && is_readable($real)) {
         // Apenas arquivos de view permitidos (evita incluir .env, config, etc.)
-        $allowed = ['/login.php','/register.php','/forgot.php','/reset.php','/dashboard.php','/lancamentos.php','/categorias.php','/metas.php','/orcamentos.php','/relatorios.php','/edit.php'];
+        $allowed = ['/login.php','/register.php','/forgot.php','/reset.php','/dashboard.php','/lancamentos.php','/categorias.php','/metas.php','/orcamentos.php','/relatorios.php','/edit.php','/diag.php'];
         if (in_array($pathInfo, $allowed, true)) {
             include $real;
             return;
