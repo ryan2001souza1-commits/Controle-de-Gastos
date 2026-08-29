@@ -1,0 +1,131 @@
+/* =====================================================
+   RESET PASSWORD — estilos específicos da tela de nova senha
+   Reaproveita auth.css + forgot.css
+   ===================================================== */
+
+/* Indicador de força da senha */
+.reset-strength {
+    margin-top: 0.6rem;
+    margin-bottom: 0.25rem;
+}
+
+.reset-strength-bar {
+    width: 100%;
+    height: 4px;
+    background: #e2e8f0;
+    border-radius: 9999px;
+    overflow: hidden;
+}
+
+.reset-strength-bar span {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: #e2e8f0;
+    border-radius: 9999px;
+    transition: width 0.25s ease, background 0.25s ease;
+}
+
+.reset-hint {
+    display: block;
+    font-size: 0.75rem;
+    color: #94a3b8;
+    line-height: 1.4;
+}
+
+.reset-hint.is-weak  { color: #ef4444; }
+.reset-hint.is-ok    { color: #eab308; }
+.reset-hint.is-strong{ color: #16a34a; }
+
+/* Link "Voltar para o login" centralizado, abaixo do botão */
+.reset-back {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+    padding: 0.5rem 0.75rem;
+    color: #4f46e5;
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-decoration: none;
+    border-radius: 8px;
+    transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.reset-back:hover {
+    background: #eef2ff;
+    color: #4338ca;
+}
+
+.reset-back:hover svg {
+    transform: translateX(-2px);
+}
+
+.reset-back svg {
+    transition: transform 0.18s ease;
+}
+
+/* Aviso de segurança abaixo do card */
+.reset-security {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 0.65rem 1rem;
+    max-width: 460px;
+    width: 100%;
+    margin: 0 auto;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.reset-security-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: #eef2ff;
+    color: #4f46e5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.reset-security p {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: #475569;
+    line-height: 1.45;
+}
+
+/* ============================================
+   RESPONSIVO
+   ============================================ */
+@media (max-width: 1023px) {
+    .forgot-hero { padding: 2rem 1.5rem; }
+    .forgot-illustration { margin-top: 1.5rem; }
+    .forgot-card { padding: 2.25rem 2rem; }
+}
+
+@media (max-width: 767px) {
+    .forgot-hero { padding: 1.5rem 1.25rem; }
+    .forgot-illustration { display: none; }
+    .forgot-card { padding: 2rem 1.5rem; }
+    .reset-security { padding: 0.625rem 0.875rem; }
+}
+
+@media (max-width: 480px) {
+    .forgot-hero { padding: 1.25rem 1rem 0.75rem; }
+    .forgot-title { font-size: 1.4rem; }
+    .forgot-illustration { display: none; }
+    .forgot-card { padding: 1.5rem 1.125rem; }
+    .forgot-subtitle { font-size: 0.85rem; }
+    .reset-security p { font-size: 0.75rem; }
+}
+
+@media (max-width: 360px) {
+    .forgot-card { padding: 1.25rem 0.875rem; }
+    .reset-security { padding: 0.5rem 0.75rem; }
+}
