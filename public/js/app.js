@@ -2,15 +2,15 @@ document.addEventListener('DOMContentLoaded', () => {
     /* ============================================================
        AUTH PAGES — toggle de visibilidade da senha
        ============================================================ */
-    document.querySelectorAll('.toggle-password').forEach(btn => {
+    document.querySelectorAll('.toggle-password, .auth-toggle-pw').forEach(btn => {
         btn.addEventListener('click', () => {
             const targetId = btn.dataset.target;
             const input = document.getElementById(targetId);
             if (!input) return;
             const showing = input.type === 'text';
             input.type = showing ? 'password' : 'text';
-            const openIcon  = btn.querySelector('.eye-open');
-            const closedIcon = btn.querySelector('.eye-closed');
+            const openIcon  = btn.querySelector('.eye-open, .auth-eye-open');
+            const closedIcon = btn.querySelector('.eye-closed, .auth-eye-closed');
             if (openIcon)   openIcon.style.display   = showing ? 'block' : 'none';
             if (closedIcon) closedIcon.style.display = showing ? 'none' : 'block';
         });
@@ -27,17 +27,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const validate = () => {
             if (!pwdConfirm.value) {
                 pwdHint.textContent = '';
-                pwdHint.className = 'input-hint';
+                pwdHint.className = 'auth-hint';
                 pwdConfirm.setCustomValidity('');
                 return;
             }
             if (pwd.value === pwdConfirm.value) {
                 pwdHint.textContent = '✓ Senhas conferem';
-                pwdHint.className = 'input-hint match';
+                pwdHint.className = 'auth-hint match';
                 pwdConfirm.setCustomValidity('');
             } else {
                 pwdHint.textContent = '✕ As senhas não coincidem';
-                pwdHint.className = 'input-hint no-match';
+                pwdHint.className = 'auth-hint no-match';
                 pwdConfirm.setCustomValidity('As senhas não coincidem');
             }
         };
