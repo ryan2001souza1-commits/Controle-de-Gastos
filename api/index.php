@@ -97,17 +97,26 @@ if ($isStatic) {
 }
 
 // =============================================================================
-// 2. Servir views PHP existentes que existem como arquivos reais
-//    Exemplos: /login.php → public/login.php
-//              /dashboard.php → public/dashboard.php
+// 2. Servir views PHP existentes — whitelist restrita e sem expor testes
+//    Bloqueia test_db.php e qualquer arquivo fora de /public
 // =============================================================================
+$blocked = ['/test_db.php', '/test_db.php/', '/.env', '/.env.example'];
+if (in_array($pathInfo, $blocked, true)) {
+    http_response_code(404);
+    echo '404 Not Found';
+    return;
+}
 if ($pathInfo !== '/index.php' && $pathInfo !== '/' && !str_starts_with($pathInfo, '/api/')) {
     $viewFile = $ROOT . '/public' . $pathInfo;
-    if (is_file($viewFile) && is_readable($viewFile)) {
-        // Arquivo PHP real encontrado — incluir diretamente
-        // e terminar aqui (não chama o roteador principal)
-        include $viewFile;
-        return;
+    $real = realpath($viewFile);
+    $publicReal = realpath($ROOT . '/public');
+    if ($real && $publicReal && str_starts_with($real, $publicReal) && is_file($real) && is_readable($real)) {
+        // Apenas arquivos de view permitidos (evita incluir .env, config, etc.)
+        $allowed = ['/login.php','/register.php','/forgot.php','/reset.php','/dashboard.php','/lancamentos.php','/categorias.php','/metas.php','/orcamentos.php','/relatorios.php','/edit.php'];
+        if (in_array($pathInfo, $allowed, true)) {
+            include $real;
+            return;
+        }
     }
 }
 

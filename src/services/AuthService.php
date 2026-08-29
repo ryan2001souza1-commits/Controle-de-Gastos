@@ -17,7 +17,12 @@ class AuthService
     {
         $user = $this->userModel->findByEmail($email);
 
-        if (!$user || !$user->verifyPassword($password)) {
+        // Mitiga enumeração por timing: sempre verifica dummy hash quando usuário não existe
+        if (!$user) {
+            password_verify($password, '$2y$10$usesomesillystringfore2uDLvp1Ii2e./U9C8sBjqp8I90dH6hi');
+            return false;
+        }
+        if (!$user->verifyPassword($password)) {
             return false;
         }
 
@@ -54,8 +59,17 @@ class AuthService
             return ['success' => false, 'message' => 'E-mail já cadastrado.'];
         }
 
-        if (!$this->userModel->create($name, $email, $password)) {
-            return ['success' => false, 'message' => 'E-mail já cadastrado.'];
+        try {
+            if (!$this->userModel->create($name, $email, $password)) {
+                return ['success' => false, 'message' => 'E-mail já cadastrado.'];
+            }
+        } catch (PDOException $e) {
+            // UNIQUE violation (23505) — corrida de dois cadastros simultâneos com mesmo e-mail
+            if (($e->getCode() === '23505' || str_contains($e->getMessage(), 'duplicate'))) {
+                return ['success' => false, 'message' => 'E-mail já cadastrado.'];
+            }
+            error_log('[AuthService] register error: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Erro ao criar conta. Tente novamente.'];
         }
 
         return ['success' => true, 'message' => 'Usuário cadastrado com sucesso.'];
@@ -63,6 +77,11 @@ class AuthService
 
     public function logout(): void
     {
+        $_SESSION = [];
+        if (ini_get('session.use_cookies')) {
+            $p = session_get_cookie_params();
+            setcookie(session_name(), '', time() - 42000, $p['path'], $p['domain'] ?? '', $p['secure'] ?? false, $p['httponly'] ?? true);
+        }
         session_unset();
         session_destroy();
         header('Location: /login.php');
@@ -93,11 +112,10 @@ class AuthService
 
         $tokenPlain = bin2hex(random_bytes(32));
         $tokenHash  = hash('sha256', $tokenPlain);
-        $expiresAt  = date('Y-m-d H:i:s', time() + 60); // 1 minuto
 
         // Invalida tokens anteriores válidos do mesmo usuário
         $this->resetModel->invalidateForUser($user->id);
-        $this->resetModel->create($user->id, $tokenHash, $expiresAt);
+        $this->resetModel->create($user->id, $tokenHash); // expira em 1 min via DB NOW()
 
         $baseUrl = $this->getBaseUrl();
         $resetUrl = $baseUrl . '/index.php?action=reset&token=' . $tokenPlain;
@@ -163,13 +181,22 @@ class AuthService
 
         $userId = (int)$reset['user_id'];
 
-        if (!$this->userModel->updatePassword($userId, $newPassword)) {
-            return ['success' => false, 'message' => 'Não foi possível atualizar a senha. Tente novamente.'];
+        // Transação atômica: senha + invalidação do token
+        $db = getDBConnection();
+        try {
+            $db->beginTransaction();
+            if (!$this->userModel->updatePassword($userId, $newPassword)) {
+                $db->rollBack();
+                return ['success' => false, 'message' => 'Não foi possível atualizar a senha. Tente novamente.'];
+            }
+            $this->resetModel->markUsed((int)$reset['id']);
+            $this->resetModel->invalidateForUser($userId);
+            $db->commit();
+        } catch (Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            error_log('[AuthService] reset transaction error: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Erro ao redefinir senha. Tente novamente.'];
         }
-
-        // Marca o token como usado e invalida qualquer outro válido do mesmo usuário
-        $this->resetModel->markUsed((int)$reset['id']);
-        $this->resetModel->invalidateForUser($userId);
 
         return ['success' => true, 'message' => 'Senha redefinida com sucesso. Você já pode fazer login.'];
     }
@@ -180,12 +207,23 @@ class AuthService
         if ($env) {
             return rtrim($env, '/');
         }
+        // Vercel fornece VERCEL_URL (ex: controle-de-gastos-xxx.vercel.app) — confiável
+        $vercelUrl = getenv('VERCEL_URL');
+        if ($vercelUrl) {
+            return 'https://' . ltrim($vercelUrl, '/');
+        }
         $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
             || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
             || (($_SERVER['HTTP_X_VERCEL_FORWARDED_PROTO'] ?? '') === 'https')
             || (getenv('VERCEL_ENV') !== false);
         $scheme = $https ? 'https' : 'http';
-        $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        // Sanitiza host para evitar Host Header Injection
+        $host = strtolower(trim($host));
+        $host = preg_replace('/:\d+$/', '', $host); // remove porta
+        if (!preg_match('/^[a-z0-9.-]+$/', $host) || str_contains($host, '..')) {
+            $host = 'localhost';
+        }
         return $scheme . '://' . $host;
     }
 

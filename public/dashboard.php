@@ -103,7 +103,7 @@ $activeMenu = 'dashboard';
                 <h2 class="topbar-title">Dashboard</h2>
                 <span class="topbar-period">
                     <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                    <?= date('01/m/Y') ?> — <?= date('t/m/Y') ?>
+                    <?= htmlspecialchars(date('d/m/Y', strtotime($startDate ?? 'first day of this month'))) ?> — <?= htmlspecialchars(date('d/m/Y', strtotime($endDate ?? 'last day of this month'))) ?>
                 </span>
             </div>
             <div class="topbar-right">
@@ -487,8 +487,8 @@ $activeMenu = 'dashboard';
 
 <script src="/assets/chart.min.js"></script>
 <script>
-    window.DASHBOARD_CHART_DATA = <?= json_encode($chartData, JSON_UNESCAPED_UNICODE) ?>;
-    window.DASHBOARD_MONTHLY_COMPARISON = <?= json_encode($data['monthly_comparison'] ?? [], JSON_UNESCAPED_UNICODE) ?>;
+    window.DASHBOARD_CHART_DATA = <?= json_encode($chartData, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP|JSON_UNESCAPED_UNICODE) ?>;
+    window.DASHBOARD_MONTHLY_COMPARISON = <?= json_encode($data['monthly_comparison'] ?? [], JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP|JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <script src="/js/charts.js"></script>
 <script src="/js/app.js"></script>

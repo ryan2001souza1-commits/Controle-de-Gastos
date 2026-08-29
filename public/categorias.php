@@ -68,7 +68,7 @@ $activeMenu = 'categorias';
                 <h2 class="topbar-title">Categorias</h2>
                 <span class="topbar-period">
                     <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                    <?= date('01/m/Y') ?> — <?= date('t/m/Y') ?>
+                    <?= htmlspecialchars(date('d/m/Y', strtotime($startDate))) ?> — <?= htmlspecialchars(date('d/m/Y', strtotime($endDate))) ?>
                 </span>
             </div>
             <div class="topbar-right">
@@ -192,7 +192,7 @@ $activeMenu = 'categorias';
                                     <td><?= (int)($c['tx_count'] ?? 0) ?></td>
                                     <td class="text-expense"><strong>R$ <?= number_format((float)($c['tx_total'] ?? 0), 2, ',', '.') ?></strong></td>
                                     <td class="actions-cell">
-                                        <button class="btn btn-ghost btn-xs" type="button" onclick="editCategory(<?= (int)$c['id'] ?>, '<?= htmlspecialchars(addslashes($c['name']), ENT_QUOTES) ?>', 'despesa')">Editar</button>
+                                        <button class="btn btn-ghost btn-xs" type="button" onclick="editCategory(<?= (int)$c['id'] ?>, <?= json_encode($c['name'], JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP) ?>, 'despesa')">Editar</button>
                                         <form action="/index.php?action=delete_category" method="POST" class="delete-form">
                                             <input type="hidden" name="id" value="<?= (int)$c['id'] ?>">
                                             <button type="submit" class="btn btn-danger btn-xs">Excluir</button>
@@ -230,7 +230,7 @@ $activeMenu = 'categorias';
                                     <td><?= (int)($c['tx_count'] ?? 0) ?></td>
                                     <td class="text-income"><strong>R$ <?= number_format((float)($c['tx_total'] ?? 0), 2, ',', '.') ?></strong></td>
                                     <td class="actions-cell">
-                                        <button class="btn btn-ghost btn-xs" type="button" onclick="editCategory(<?= (int)$c['id'] ?>, '<?= htmlspecialchars(addslashes($c['name']), ENT_QUOTES) ?>', 'receita')">Editar</button>
+                                        <button class="btn btn-ghost btn-xs" type="button" onclick="editCategory(<?= (int)$c['id'] ?>, <?= json_encode($c['name'], JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP) ?>, 'receita')">Editar</button>
                                         <form action="/index.php?action=delete_category" method="POST" class="delete-form">
                                             <input type="hidden" name="id" value="<?= (int)$c['id'] ?>">
                                             <button type="submit" class="btn btn-danger btn-xs">Excluir</button>

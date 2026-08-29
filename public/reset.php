@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
     <title><?= $pageTitle ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -106,7 +107,7 @@
                 <?php else: ?>
 
                 <form action="/index.php?action=reset" method="POST" class="auth-form" novalidate>
-                    <input type="hidden" name="token" value="<?= htmlspecialchars($_GET['token'] ?? '') ?>">
+                    <input type="hidden" name="token" value="<?= htmlspecialchars($token ?? $_GET['token'] ?? '') ?>">
 
                     <div class="auth-field">
                         <label for="password">Nova senha</label>

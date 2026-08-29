@@ -1,8 +1,23 @@
 <?php
 
-session_start();
-
 require_once __DIR__ . '/../src/config/config.php';
+
+$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
+    || (($_SERVER['HTTP_X_VERCEL_FORWARDED_PROTO'] ?? '') === 'https')
+    || (getenv('VERCEL_ENV') !== false);
+if (PHP_VERSION_ID >= 70300 && session_status() === PHP_SESSION_NONE) {
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path'     => '/',
+        'secure'   => $isHttps,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+}
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 require_once __DIR__ . '/../src/models/User.php';
 require_once __DIR__ . '/../src/models/Category.php';
 require_once __DIR__ . '/../src/models/Expense.php';

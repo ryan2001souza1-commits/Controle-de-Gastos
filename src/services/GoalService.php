@@ -36,12 +36,12 @@ class GoalService
                 $dl = new DateTime($deadline);
                 $diff = $now->diff($dl);
                 $daysLeft = $diff->invert === 0 ? $diff->days : -$diff->days;
-                if ($daysLeft < 0) {
+                if ($percentage >= 100) {
+                    $status = 'completed';
+                } elseif ($daysLeft < 0) {
                     $status = 'overdue';
                 } elseif ($daysLeft <= 30) {
                     $status = 'near';
-                } elseif ($percentage >= 100) {
-                    $status = 'completed';
                 } else {
                     $status = 'active';
                 }

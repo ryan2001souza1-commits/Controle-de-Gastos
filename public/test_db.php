@@ -1,4 +1,10 @@
 <?php
+// Bloqueado em produção — apenas desenvolvimento local
+if (getenv('VERCEL_ENV') !== false || getenv('APP_ENV') === 'production') {
+    http_response_code(404);
+    echo '404 Not Found';
+    exit;
+}
 
 require_once __DIR__ . '/../src/config/config.php';
 

@@ -105,8 +105,9 @@ function getDBConnection(): PDO
             require_once __DIR__ . '/../migrations.php';
             runMigrations($pdo);
         } catch (PDOException $e) {
+            error_log('[DB] ' . $e->getMessage());
             throw new PDOException(
-                'ERRO REAL DO POSTGRES: ' . $e->getMessage(),
+                'Erro de conexão com o banco. Tente novamente em instantes.',
                 (int) $e->getCode()
             );
         }

@@ -255,7 +255,7 @@ $activeMenu = 'relatorios';
 
 <script src="/assets/chart.min.js"></script>
 <script>
-    window.DASHBOARD_CHART_DATA = <?= json_encode($report['chart_data'] ?? [], JSON_UNESCAPED_UNICODE) ?>;
+    window.DASHBOARD_CHART_DATA = <?= json_encode($report['chart_data'] ?? [], JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP|JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <script src="/js/charts.js"></script>
 <script src="/js/app.js"></script>

@@ -156,7 +156,7 @@ $successMsgs = [
                     <p style="margin-top:0.5rem;font-size:0.8rem;color:var(--text-light)"><?= htmlspecialchars($g['description']) ?></p>
                     <?php endif; ?>
                     <div style="margin-top:0.75rem;display:flex;gap:0.5rem">
-                        <button class="btn btn-ghost btn-xs" type="button" onclick="editGoal(<?= (int)$g['id'] ?>, '<?= htmlspecialchars(addslashes($g['name']), ENT_QUOTES) ?>', <?= $g['target'] ?>, <?= $g['saved'] ?>, '<?= $g['deadline'] ? htmlspecialchars($g['deadline']) : '' ?>', '<?= htmlspecialchars(addslashes($g['description'] ?? ''), ENT_QUOTES) ?>')">Editar</button>
+                        <button class="btn btn-ghost btn-xs" type="button" onclick="editGoal(<?= (int)$g['id'] ?>, <?= json_encode($g['name'], JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP) ?>, <?= $g['target'] ?>, <?= $g['saved'] ?>, <?= json_encode($g['deadline'] ?? '', JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP) ?>, <?= json_encode($g['description'] ?? '', JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP) ?>)">Editar</button>
                         <form action="/index.php?action=delete_goal" method="POST" class="delete-form" style="display:inline">
                             <input type="hidden" name="id" value="<?= (int)$g['id'] ?>">
                             <button type="submit" class="btn btn-danger btn-xs">Excluir</button>
