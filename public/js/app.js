@@ -131,18 +131,35 @@ whenReady(() => {
     }
 
     /* ============================================================
-       Sidebar toggle (mobile)
+       Sidebar toggle (mobile) + backdrop
        ============================================================ */
     const sidebar = document.getElementById('sidebar');
     const toggle = document.getElementById('sidebarToggle');
+    const backdrop = document.getElementById('sidebarBackdrop');
     if (sidebar && toggle) {
-        toggle.addEventListener('click', () => sidebar.classList.toggle('open'));
+        const openSidebar = () => {
+            sidebar.classList.add('open');
+            toggle.setAttribute('aria-expanded', 'true');
+            if (backdrop) backdrop.classList.add('is-open');
+        };
+        const closeSidebar = () => {
+            sidebar.classList.remove('open');
+            toggle.setAttribute('aria-expanded', 'false');
+            if (backdrop) backdrop.classList.remove('is-open');
+        };
+        toggle.addEventListener('click', () => {
+            sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
+        });
+        backdrop && backdrop.addEventListener('click', closeSidebar);
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && sidebar.classList.contains('open')) closeSidebar();
+        });
         document.addEventListener('click', (e) => {
             if (window.innerWidth <= 768 &&
                 !sidebar.contains(e.target) &&
                 !toggle.contains(e.target) &&
                 sidebar.classList.contains('open')) {
-                sidebar.classList.remove('open');
+                closeSidebar();
             }
         });
     }
@@ -156,7 +173,14 @@ whenReady(() => {
 
     if (startInput && endInput && filterForm) {
         document.querySelectorAll('.filter-shortcut').forEach(btn => {
+            btn.setAttribute('role', 'tab');
             btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-shortcut').forEach(b => {
+                    b.removeAttribute('aria-selected');
+                    b.classList.remove('is-active');
+                });
+                btn.setAttribute('aria-selected', 'true');
+                btn.classList.add('is-active');
                 const range = btn.dataset.range;
                 const today = new Date();
                 let start, end;

@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!data) return;
 
     var catColors = [
-        '#4f46e5', '#16a34a', '#dc2626', '#f59e0b', '#0ea5e9',
+        '#4f46e5', '#10b981', '#ef4444', '#f59e0b', '#0ea5e9',
         '#a855f7', '#ec4899', '#14b8a6', '#eab308', '#64748b',
         '#06b6d4', '#84cc16', '#f97316', '#8b5cf6', '#db2777'
     ];
@@ -68,20 +68,20 @@ document.addEventListener('DOMContentLoaded', function () {
                         {
                             label: 'Receitas',
                             data: ff.incomes,
-                            borderColor: '#16a34a',
-                            backgroundColor: 'rgba(22, 163, 74, 0.10)',
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.10)',
                             tension: 0.35, fill: true, borderWidth: 2.2,
                             pointRadius: 3, pointHoverRadius: 6,
-                            pointBackgroundColor: '#16a34a', pointBorderColor: '#fff', pointBorderWidth: 1.5
+                            pointBackgroundColor: '#10b981', pointBorderColor: '#fff', pointBorderWidth: 1.5
                         },
                         {
                             label: 'Despesas',
                             data: ff.expenses,
-                            borderColor: '#dc2626',
-                            backgroundColor: 'rgba(220, 38, 38, 0.10)',
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.10)',
                             tension: 0.35, fill: true, borderWidth: 2.2,
                             pointRadius: 3, pointHoverRadius: 6,
-                            pointBackgroundColor: '#dc2626', pointBorderColor: '#fff', pointBorderWidth: 1.5
+                            pointBackgroundColor: '#ef4444', pointBorderColor: '#fff', pointBorderWidth: 1.5
                         },
                         {
                             label: 'Saldo',
@@ -99,10 +99,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     animation: { duration: 600, easing: 'easeOutQuart' },
                     interaction: { mode: 'index', intersect: false },
                     plugins: {
-                        legend: {
-                            position: 'top', align: 'end',
-                            labels: { padding: 14, usePointStyle: true, pointStyle: 'circle', boxWidth: 8, font: { size: 12, weight: '500' } }
-                        },
+                        legend: { display: false },
                         tooltip: {
                             backgroundColor: 'rgba(15, 23, 42, 0.95)',
                             titleColor: '#fff', bodyColor: '#e2e8f0',
@@ -197,8 +194,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 data: {
                     labels: pLabels,
                     datasets: [
-                        { label: 'Receitas', data: iData, backgroundColor: 'rgba(22, 163, 74, 0.85)', borderColor: '#16a34a', borderWidth: 1.5, borderRadius: 6, borderSkipped: false, maxBarThickness: 32 },
-                        { label: 'Despesas', data: eData, backgroundColor: 'rgba(220, 38, 38, 0.85)', borderColor: '#dc2626', borderWidth: 1.5, borderRadius: 6, borderSkipped: false, maxBarThickness: 32 }
+                        { label: 'Receitas', data: iData, backgroundColor: 'rgba(16, 185, 129, 0.85)', borderColor: '#10b981', borderWidth: 0, borderRadius: 6, borderSkipped: false, maxBarThickness: 28 },
+                        { label: 'Despesas', data: eData, backgroundColor: 'rgba(239, 68, 68, 0.85)', borderColor: '#ef4444', borderWidth: 0, borderRadius: 6, borderSkipped: false, maxBarThickness: 28 }
                     ]
                 },
                 options: {
@@ -239,7 +236,7 @@ document.addEventListener('DOMContentLoaded', function () {
             destroy('chart-balance-evolution');
 
             var gradient = balCanvas.getContext('2d').createLinearGradient(0, 0, 0, 280);
-            gradient.addColorStop(0, 'rgba(79, 70, 229, 0.25)');
+            gradient.addColorStop(0, 'rgba(79, 70, 229, 0.18)');
             gradient.addColorStop(1, 'rgba(79, 70, 229, 0.00)');
 
             new Chart(balCanvas.getContext('2d'), {
@@ -304,8 +301,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 data: {
                     labels: mLabels,
                     datasets: [
-                        { label: 'Receitas', data: mIncomes, backgroundColor: 'rgba(22, 163, 74, 0.85)', borderColor: '#16a34a', borderWidth: 1.5, borderRadius: 6, borderSkipped: false, maxBarThickness: 32 },
-                        { label: 'Despesas', data: mExpense, backgroundColor: 'rgba(220, 38, 38, 0.85)', borderColor: '#dc2626', borderWidth: 1.5, borderRadius: 6, borderSkipped: false, maxBarThickness: 32 },
+                        { label: 'Receitas', data: mIncomes, backgroundColor: 'rgba(16, 185, 129, 0.85)', borderColor: '#10b981', borderWidth: 0, borderRadius: 6, borderSkipped: false, maxBarThickness: 28 },
+                        { label: 'Despesas', data: mExpense, backgroundColor: 'rgba(239, 68, 68, 0.85)', borderColor: '#ef4444', borderWidth: 0, borderRadius: 6, borderSkipped: false, maxBarThickness: 28 },
                         {
                             type: 'line', label: 'Saldo',
                             data: mBalance, borderColor: '#4f46e5',

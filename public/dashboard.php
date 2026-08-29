@@ -42,57 +42,58 @@ $activeMenu = 'dashboard';
     <title><?= $pageTitle ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/dashboard.css">
 </head>
 <body>
 <div class="app-wrapper">
 
     <!-- ========== SIDEBAR ========== -->
-    <aside class="sidebar" id="sidebar">
+    <aside class="sidebar" id="sidebar" aria-label="Navegação principal">
         <div class="sidebar-header">
-            <div class="sidebar-logo">CG</div>
+            <div class="sidebar-logo" aria-hidden="true">CG</div>
             <span class="sidebar-brand">Controle de Gastos</span>
         </div>
-        <nav class="sidebar-nav">
+        <nav class="sidebar-nav" aria-label="Menu principal">
             <div class="sidebar-section-label">Menu</div>
-            <a href="/index.php" class="sidebar-link <?= $activeMenu === 'dashboard' ? 'active' : '' ?>">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+            <a href="/index.php" class="sidebar-link <?= $activeMenu === 'dashboard' ? 'active' : '' ?>" aria-current="<?= $activeMenu === 'dashboard' ? 'page' : 'false' ?>">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
                 Dashboard
             </a>
             <a href="/index.php?action=lancamentos" class="sidebar-link <?= $activeMenu === 'lancamentos' ? 'active' : '' ?>">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
                 Lançamentos
             </a>
             <a href="/index.php?action=categorias" class="sidebar-link <?= $activeMenu === 'categorias' ? 'active' : '' ?>">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
                 Categorias
             </a>
             <a href="/index.php?action=relatorios" class="sidebar-link <?= $activeMenu === 'relatorios' ? 'active' : '' ?>">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
                 Relatórios
             </a>
             <a href="/index.php?action=orcamentos" class="sidebar-link <?= $activeMenu === 'orcamentos' ? 'active' : '' ?>">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                 Orçamentos
             </a>
             <a href="/index.php?action=metas" class="sidebar-link <?= $activeMenu === 'metas' ? 'active' : '' ?>">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
                 Metas
             </a>
         </nav>
         <div class="sidebar-footer">
             <a href="/index.php?action=logout" class="sidebar-link">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
                 Sair
             </a>
         </div>
     </aside>
 
-    <!-- ========== TOGGLE (mobile) ========== -->
-    <button class="sidebar-toggle" id="sidebarToggle" aria-label="Abrir menu">
-        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    <button class="sidebar-toggle" id="sidebarToggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="sidebar">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     </button>
+    <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
 
     <!-- ========== MAIN ========== -->
     <main class="main-content">
@@ -100,139 +101,217 @@ $activeMenu = 'dashboard';
         <!-- TOPBAR -->
         <header class="topbar">
             <div class="topbar-left">
-                <h2 class="topbar-title">Dashboard</h2>
+                <div class="topbar-eyebrow">Visão geral</div>
+                <h1 class="topbar-title">Dashboard</h1>
                 <span class="topbar-period">
-                    <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                    <?= htmlspecialchars(date('d/m/Y', strtotime($startDate ?? 'first day of this month'))) ?> — <?= htmlspecialchars(date('d/m/Y', strtotime($endDate ?? 'last day of this month'))) ?>
+                    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <?= htmlspecialchars(date('d/m/Y', strtotime($startDate))) ?> — <?= htmlspecialchars(date('d/m/Y', strtotime($endDate))) ?>
                 </span>
             </div>
             <div class="topbar-right">
-                <span class="topbar-greeting">Olá, <strong><?= htmlspecialchars($userName) ?></strong></span>
-                <div class="topbar-avatar"><?= $userInitials ?></div>
+                <button type="button" class="icon-btn" aria-label="Notificações">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+                    <span class="icon-btn-dot" aria-hidden="true"></span>
+                </button>
+                <div class="topbar-divider" aria-hidden="true"></div>
+                <div class="topbar-user">
+                    <div class="topbar-avatar" aria-hidden="true"><?= $userInitials ?></div>
+                    <div class="topbar-user-meta">
+                        <span class="topbar-greeting">Olá, <strong><?= htmlspecialchars($userName) ?></strong></span>
+                        <span class="topbar-role">Conta pessoal</span>
+                    </div>
+                </div>
             </div>
         </header>
 
         <!-- ALERTS -->
         <?php if (isset($_GET['success'])): ?>
-            <div class="alert alert-success">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-                <?= htmlspecialchars(['1' => 'Operação realizada com sucesso!', 'updated' => 'Transação atualizada com sucesso!'][$_GET['success']] ?? 'Operação realizada com sucesso!') ?>
+            <div class="alert alert-success" role="status">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                <span><?= htmlspecialchars(['1' => 'Operação realizada com sucesso!', 'updated' => 'Transação atualizada com sucesso!'][$_GET['success']] ?? 'Operação realizada com sucesso!') ?></span>
             </div>
         <?php endif; ?>
         <?php if (isset($_GET['error'])): ?>
-            <div class="alert alert-error">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                <?= htmlspecialchars(['invalid_data' => 'Dados inválidos. Verifique e tente novamente.', 'invalid_category' => 'Categoria inválida.', 'not_found' => 'Lançamento não encontrado.', 'update_failed' => 'Erro ao atualizar.'][$_GET['error']] ?? 'Ocorreu um erro.') ?>
+            <div class="alert alert-error" role="alert">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span><?= htmlspecialchars(['invalid_data' => 'Dados inválidos. Verifique e tente novamente.', 'invalid_category' => 'Categoria inválida.', 'not_found' => 'Lançamento não encontrado.', 'update_failed' => 'Erro ao atualizar.'][$_GET['error']] ?? 'Ocorreu um erro.') ?></span>
             </div>
         <?php endif; ?>
 
-        <!-- ========== CARDS ========== -->
-        <section class="cards-grid">
-            <div class="fin-card fin-card-balance">
-                <div class="fin-card-icon">
-                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        <!-- ========== FILTER ========== -->
+        <section class="filter-bar" aria-label="Filtros de período">
+            <form method="GET" action="/index.php" class="filter-form" id="filterForm">
+                <div class="filter-shortcuts" role="tablist" aria-label="Atalhos de período">
+                    <button type="button" class="filter-shortcut" data-range="today" role="tab">Hoje</button>
+                    <button type="button" class="filter-shortcut" data-range="month" role="tab">Este mês</button>
+                    <button type="button" class="filter-shortcut" data-range="last-month" role="tab">Mês anterior</button>
                 </div>
-                <div class="fin-card-body">
-                    <span class="fin-card-label">Saldo Atual</span>
-                    <span class="fin-card-value <?= $balance < 0 ? 'text-danger' : ($balance > 0 ? 'text-primary' : 'text-muted') ?>">R$ <?= fmtBRL($balance) ?></span>
-                    <span class="fin-card-sub"><?= $txCount ?> lançamento(s) no período</span>
+                <div class="filter-fields">
+                    <div class="filter-group">
+                        <label for="inputStartDate">De</label>
+                        <input type="date" name="start_date" id="inputStartDate" value="<?= htmlspecialchars($startDate) ?>">
+                    </div>
+                    <div class="filter-separator" aria-hidden="true">até</div>
+                    <div class="filter-group">
+                        <label for="inputEndDate">Até</label>
+                        <input type="date" name="end_date" id="inputEndDate" value="<?= htmlspecialchars($endDate) ?>">
+                    </div>
+                    <div class="filter-actions">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                            Aplicar
+                        </button>
+                        <a href="/index.php" class="btn btn-ghost btn-sm">Limpar</a>
+                    </div>
                 </div>
-            </div>
-            <div class="fin-card fin-card-income">
-                <div class="fin-card-icon">
-                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            </form>
+        </section>
+
+        <!-- ========== KPI CARDS ========== -->
+        <section class="kpi-grid" aria-label="Indicadores financeiros">
+            <article class="kpi-card kpi-card-balance">
+                <header class="kpi-header">
+                    <span class="kpi-label">Saldo atual</span>
+                    <div class="kpi-icon" aria-hidden="true">
+                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                    </div>
+                </header>
+                <div class="kpi-body">
+                    <span class="kpi-value <?= $balance < 0 ? 'is-negative' : ($balance > 0 ? 'is-positive' : '') ?>">R$ <?= fmtBRL($balance) ?></span>
+                    <span class="kpi-sub"><?= $txCount ?> lançamento(s) no período</span>
                 </div>
-                <div class="fin-card-body">
-                    <span class="fin-card-label">Receitas</span>
-                    <span class="fin-card-value text-income">R$ <?= fmtBRL($totalIncomes) ?></span>
-                    <span class="fin-card-sub"><?= $incomeCount ?> receita(s)</span>
+                <footer class="kpi-foot">
+                    <span class="kpi-foot-dot"></span>
+                    Atualizado agora
+                </footer>
+            </article>
+
+            <article class="kpi-card kpi-card-income">
+                <header class="kpi-header">
+                    <span class="kpi-label">Receitas</span>
+                    <div class="kpi-icon" aria-hidden="true">
+                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                    </div>
+                </header>
+                <div class="kpi-body">
+                    <span class="kpi-value">R$ <?= fmtBRL($totalIncomes) ?></span>
+                    <span class="kpi-sub"><?= $incomeCount ?> receita(s) confirmada(s)</span>
                 </div>
-            </div>
-            <div class="fin-card fin-card-expense">
-                <div class="fin-card-icon">
-                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
+                <div class="kpi-trend kpi-trend-up" aria-hidden="true">
+                    <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.25" viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg>
+                    Entradas
                 </div>
-                <div class="fin-card-body">
-                    <span class="fin-card-label">Despesas</span>
-                    <span class="fin-card-value text-expense">R$ <?= fmtBRL($totalExpenses) ?></span>
-                    <span class="fin-card-sub"><?= $expenseCount ?> despesa(s)</span>
+            </article>
+
+            <article class="kpi-card kpi-card-expense">
+                <header class="kpi-header">
+                    <span class="kpi-label">Despesas</span>
+                    <div class="kpi-icon" aria-hidden="true">
+                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
+                    </div>
+                </header>
+                <div class="kpi-body">
+                    <span class="kpi-value">R$ <?= fmtBRL($totalExpenses) ?></span>
+                    <span class="kpi-sub"><?= $expenseCount ?> despesa(s) registrada(s)</span>
                 </div>
-            </div>
-            <div class="fin-card fin-card-economy">
-                <div class="fin-card-icon">
-                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                <div class="kpi-trend kpi-trend-down" aria-hidden="true">
+                    <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.25" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+                    Saídas
                 </div>
-                <div class="fin-card-body">
-                    <span class="fin-card-label">Economia</span>
-                    <span class="fin-card-value <?= $economyPct > 0 ? 'text-income' : ($economyPct < 0 ? 'text-danger' : 'text-muted') ?>"><?= $economyPct > 0 ? '+' : '' ?><?= $economyPct ?>%</span>
-                    <span class="fin-card-sub"><?= $totalIncomes > 0 ? 'do lucro retido' : 'sem receitas' ?></span>
+            </article>
+
+            <article class="kpi-card kpi-card-economy">
+                <header class="kpi-header">
+                    <span class="kpi-label">Taxa de economia</span>
+                    <div class="kpi-icon" aria-hidden="true">
+                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                    </div>
+                </header>
+                <div class="kpi-body">
+                    <span class="kpi-value <?= $economyPct > 0 ? 'is-positive' : ($economyPct < 0 ? 'is-negative' : '') ?>"><?= $economyPct > 0 ? '+' : '' ?><?= $economyPct ?>%</span>
+                    <span class="kpi-sub"><?= $totalIncomes > 0 ? 'do lucro retido' : 'sem receitas no período' ?></span>
                 </div>
-            </div>
+                <div class="kpi-progress" aria-hidden="true">
+                    <div class="kpi-progress-track">
+                        <div class="kpi-progress-fill" style="width: <?= max(0, min(100, (float)$economyPct)) ?>%"></div>
+                    </div>
+                </div>
+            </article>
         </section>
 
         <!-- ========== INDICATORS ========== -->
-        <section class="indicators-grid">
-            <?php
-            $topCat = $data['indicators']['top_category'] ?? null;
-            $topCatName = $topCat['name'] ?? null;
-            $topCatTotal = $topCat['total'] ?? 0;
-            ?>
+        <?php
+        $topCat = $data['indicators']['top_category'] ?? null;
+        $topCatName = $topCat['name'] ?? null;
+        $topCatTotal = $topCat['total'] ?? 0;
+        $committedPct = (float)($data['indicators']['committed_pct'] ?? 0);
+        $economyVal = (float)($data['indicators']['economy'] ?? 0);
+        $avgExpense = (float)($data['indicators']['avg_expense'] ?? 0);
+        $avgIncome = (float)($data['indicators']['avg_income'] ?? 0);
+        ?>
+        <section class="indicators" aria-label="Indicadores complementares">
             <div class="indicator">
-                <span class="indicator-label">Maior Categoria</span>
+                <span class="indicator-label">Maior categoria</span>
                 <span class="indicator-value"><?= $topCatName ? htmlspecialchars($topCatName) : '—' ?></span>
+                <span class="indicator-sub"><?= $topCatName ? 'R$ ' . fmtBRL($topCatTotal) : 'Sem dados' ?></span>
             </div>
             <div class="indicator">
-                <span class="indicator-label">Valor Maior Categoria</span>
-                <span class="indicator-value text-expense"><?= $topCatName ? 'R$ ' . fmtBRL($topCatTotal) : '—' ?></span>
+                <span class="indicator-label">Maior despesa</span>
+                <span class="indicator-value is-negative"><?= $largestExpense ? 'R$ ' . fmtBRL($largestExpense['amount']) : '—' ?></span>
+                <span class="indicator-sub"><?= $largestExpense ? htmlspecialchars($largestExpense['description'] ?? '') : 'Sem dados' ?></span>
             </div>
             <div class="indicator">
-                <span class="indicator-label">Maior Despesa</span>
-                <span class="indicator-value text-expense"><?= $largestExpense ? 'R$ ' . fmtBRL($largestExpense['amount']) : '—' ?></span>
-            </div>
-            <div class="indicator">
-                <span class="indicator-label">Total Lançamentos</span>
+                <span class="indicator-label">Lançamentos</span>
                 <span class="indicator-value"><?= $txCount ?></span>
+                <span class="indicator-sub">total no período</span>
             </div>
             <div class="indicator">
-                <span class="indicator-label">Média Despesas/Mês</span>
-                <span class="indicator-value text-expense">R$ <?= fmtBRL($data['indicators']['avg_expense'] ?? 0) ?></span>
+                <span class="indicator-label">Média mensal — despesas</span>
+                <span class="indicator-value is-negative">R$ <?= fmtBRL($avgExpense) ?></span>
+                <span class="indicator-sub">mês a mês</span>
             </div>
             <div class="indicator">
-                <span class="indicator-label">Média Receitas/Mês</span>
-                <span class="indicator-value text-income">R$ <?= fmtBRL($data['indicators']['avg_income'] ?? 0) ?></span>
+                <span class="indicator-label">Média mensal — receitas</span>
+                <span class="indicator-value is-positive">R$ <?= fmtBRL($avgIncome) ?></span>
+                <span class="indicator-sub">mês a mês</span>
             </div>
             <div class="indicator">
-                <span class="indicator-label">Renda Comprometida</span>
-                <span class="indicator-value <?= ($data['indicators']['committed_pct'] ?? 0) > 80 ? 'text-danger' : 'text-primary' ?>"><?= $data['indicators']['committed_pct'] ?? 0 ?>%</span>
+                <span class="indicator-label">Renda comprometida</span>
+                <span class="indicator-value <?= $committedPct > 80 ? 'is-negative' : '' ?>"><?= $committedPct ?>%</span>
+                <span class="indicator-sub">das receitas em despesas</span>
             </div>
             <div class="indicator">
                 <span class="indicator-label">Economizado</span>
-                <span class="indicator-value <?= ($data['indicators']['economy'] ?? 0) >= 0 ? 'text-income' : 'text-danger' ?>">R$ <?= fmtBRL($data['indicators']['economy'] ?? 0) ?></span>
+                <span class="indicator-value <?= $economyVal >= 0 ? 'is-positive' : 'is-negative' ?>">R$ <?= fmtBRL($economyVal) ?></span>
+                <span class="indicator-sub">saldo do período</span>
             </div>
         </section>
 
         <!-- ========== FILTER ========== -->
-        <section class="filter-bar">
+        <section class="filter-bar" aria-label="Filtros de período">
             <form method="GET" action="/index.php" class="filter-form" id="filterForm">
-                <div class="filter-group">
-                    <label>Data Início</label>
-                    <input type="date" name="start_date" value="<?= htmlspecialchars($startDate) ?>" id="inputStartDate">
+                <div class="filter-shortcuts" role="tablist" aria-label="Atalhos de período">
+                    <button type="button" class="filter-shortcut" data-range="today" role="tab">Hoje</button>
+                    <button type="button" class="filter-shortcut" data-range="month" role="tab">Este mês</button>
+                    <button type="button" class="filter-shortcut" data-range="last-month" role="tab">Mês anterior</button>
                 </div>
-                <div class="filter-group">
-                    <label>Data Fim</label>
-                    <input type="date" name="end_date" value="<?= htmlspecialchars($endDate) ?>" id="inputEndDate">
-                </div>
-                <div class="filter-actions">
-                    <button type="submit" class="btn btn-primary btn-sm">
-                        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-                        Filtrar
-                    </button>
-                    <a href="/index.php" class="btn btn-ghost btn-sm">Limpar</a>
-                </div>
-                <div class="filter-shortcuts">
-                    <button type="button" class="filter-shortcut" data-range="today">Hoje</button>
-                    <button type="button" class="filter-shortcut" data-range="month">Este mês</button>
-                    <button type="button" class="filter-shortcut" data-range="last-month">Mês anterior</button>
+                <div class="filter-fields">
+                    <div class="filter-group">
+                        <label for="inputStartDate">De</label>
+                        <input type="date" name="start_date" id="inputStartDate" value="<?= htmlspecialchars($startDate) ?>">
+                    </div>
+                    <div class="filter-separator" aria-hidden="true">até</div>
+                    <div class="filter-group">
+                        <label for="inputEndDate">Até</label>
+                        <input type="date" name="end_date" id="inputEndDate" value="<?= htmlspecialchars($endDate) ?>">
+                    </div>
+                    <div class="filter-actions">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                            Aplicar
+                        </button>
+                        <a href="/index.php" class="btn btn-ghost btn-sm">Limpar</a>
+                    </div>
                 </div>
             </form>
         </section>
@@ -241,99 +320,114 @@ $activeMenu = 'dashboard';
         <section class="charts-section">
             <!-- Row 1: Fluxo Financeiro (full) -->
             <div class="chart-full">
-                <div class="chart-card">
-                    <div class="chart-card-header">
-                        <div>
-                            <h3>Fluxo Financeiro</h3>
-                            <span class="chart-subtitle">Receitas, despesas e saldo por dia no período</span>
+                <article class="chart-card">
+                    <header class="chart-card-header">
+                        <div class="chart-card-titles">
+                            <h3>Fluxo financeiro</h3>
+                            <p>Receitas, despesas e saldo diário no período.</p>
                         </div>
-                    </div>
+                        <div class="chart-legend">
+                            <span class="legend-item"><span class="legend-swatch swatch-income"></span>Receitas</span>
+                            <span class="legend-item"><span class="legend-swatch swatch-expense"></span>Despesas</span>
+                            <span class="legend-item"><span class="legend-swatch swatch-balance"></span>Saldo</span>
+                        </div>
+                    </header>
                     <div class="chart-wrap">
                         <canvas id="chart-financial-flow"></canvas>
                     </div>
                     <div class="chart-empty" id="chart-flow-empty">Sem lançamentos no período.</div>
-                </div>
+                </article>
             </div>
             <!-- Row 2: Categorias + Comparativo -->
             <div class="charts-row-2">
-                <div class="chart-card">
-                    <div class="chart-card-header">
-                        <div>
-                            <h3>Despesas por Categoria</h3>
-                            <span class="chart-subtitle">Distribuição das despesas no período</span>
+                <article class="chart-card">
+                    <header class="chart-card-header">
+                        <div class="chart-card-titles">
+                            <h3>Despesas por categoria</h3>
+                            <p>Distribuição dos gastos no período.</p>
                         </div>
-                    </div>
+                    </header>
                     <div class="chart-wrap chart-wrap-sm">
                         <canvas id="chart-expenses-by-category"></canvas>
                     </div>
                     <div class="chart-empty" id="chart-category-empty">Nenhuma despesa registrada no período.</div>
-                </div>
-                <div class="chart-card">
-                    <div class="chart-card-header">
-                        <div>
-                            <h3>Receitas x Despesas</h3>
-                            <span class="chart-subtitle">Comparativo por período</span>
+                </article>
+                <article class="chart-card">
+                    <header class="chart-card-header">
+                        <div class="chart-card-titles">
+                            <h3>Receitas × despesas</h3>
+                            <p>Comparativo por período selecionado.</p>
                         </div>
-                    </div>
+                    </header>
                     <div class="chart-wrap chart-wrap-sm">
                         <canvas id="chart-income-vs-expense"></canvas>
                     </div>
                     <div class="chart-empty" id="chart-period-empty">Nenhum lançamento no período.</div>
-                </div>
+                </article>
             </div>
             <!-- Row 3: Evolução do Saldo (full) -->
             <div class="chart-full">
-                <div class="chart-card">
-                    <div class="chart-card-header">
-                        <div>
-                            <h3>Evolução do Saldo</h3>
-                            <span class="chart-subtitle">Saldo acumulado ao longo do tempo</span>
+                <article class="chart-card">
+                    <header class="chart-card-header">
+                        <div class="chart-card-titles">
+                            <h3>Evolução do saldo</h3>
+                            <p>Saldo acumulado ao longo do tempo.</p>
                         </div>
-                    </div>
+                    </header>
                     <div class="chart-wrap">
                         <canvas id="chart-balance-evolution"></canvas>
                     </div>
                     <div class="chart-empty" id="chart-balance-empty">Dados insuficientes para evolução.</div>
-                </div>
+                </article>
             </div>
             <!-- Row 4: Comparativo Mensal (full) -->
             <div class="chart-full">
-                <div class="chart-card">
-                    <div class="chart-card-header">
-                        <div>
-                            <h3>Comparativo Mensal</h3>
-                            <span class="chart-subtitle">Receitas x Despesas nos últimos meses</span>
+                <article class="chart-card">
+                    <header class="chart-card-header">
+                        <div class="chart-card-titles">
+                            <h3>Comparativo mensal</h3>
+                            <p>Receitas e despesas dos últimos meses.</p>
                         </div>
-                    </div>
+                    </header>
                     <div class="chart-wrap">
                         <canvas id="chart-monthly-comparison"></canvas>
                     </div>
                     <div class="chart-empty" id="chart-monthly-empty">Sem dados para comparar.</div>
-                </div>
+                </article>
             </div>
         </section>
 
         <!-- ========== BOTTOM ROW ========== -->
         <section class="bottom-row">
             <!-- Novo Lançamento -->
-            <div class="bottom-card">
-                <h3 class="bottom-card-title">Novo Lançamento</h3>
+            <article class="panel">
+                <header class="panel-header">
+                    <div>
+                        <h3 class="panel-title">Novo lançamento</h3>
+                        <p class="panel-subtitle">Registre uma receita ou despesa.</p>
+                    </div>
+                </header>
                 <form action="/index.php?action=store" method="POST" class="form-grid" id="addTransactionForm" novalidate>
                     <div class="form-group" id="grp-type">
                         <label for="type">Tipo</label>
-                        <select name="type" id="type" required>
-                            <option value="despesa" selected>Despesa</option>
-                            <option value="receita">Receita</option>
-                        </select>
+                        <div class="select-wrap">
+                            <select name="type" id="type" required>
+                                <option value="despesa" selected>Despesa</option>
+                                <option value="receita">Receita</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="form-group" id="grp-description">
+                    <div class="form-group form-group-wide" id="grp-description">
                         <label for="description">Descrição</label>
                         <input type="text" name="description" id="description" placeholder="Ex: Supermercado" required>
                         <span class="form-error">Informe a descrição.</span>
                     </div>
                     <div class="form-group" id="grp-amount">
-                        <label for="amount">Valor (R$)</label>
-                        <input type="number" name="amount" id="amount" step="0.01" min="0.01" placeholder="0,00" required>
+                        <label for="amount">Valor</label>
+                        <div class="input-prefix">
+                            <span class="prefix">R$</span>
+                            <input type="number" name="amount" id="amount" step="0.01" min="0.01" placeholder="0,00" required>
+                        </div>
                         <span class="form-error">Informe um valor válido.</span>
                     </div>
                     <div class="form-group" id="grp-date">
@@ -343,41 +437,46 @@ $activeMenu = 'dashboard';
                     </div>
                     <div class="form-group form-group-full" id="grp-category">
                         <label for="category_id">Categoria</label>
-                        <select name="category_id" id="category_id">
-                            <option value="">Sem categoria</option>
-                            <?php foreach ($expenseCategories as $cat): ?>
-                                <option value="<?= (int)$cat['id'] ?>" data-type="despesa"><?= htmlspecialchars($cat['name']) ?></option>
-                            <?php endforeach; ?>
-                            <?php foreach ($incomeCategories as $cat): ?>
-                                <option value="<?= (int)$cat['id'] ?>" data-type="receita"><?= htmlspecialchars($cat['name']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
+                        <div class="select-wrap">
+                            <select name="category_id" id="category_id">
+                                <option value="">Sem categoria</option>
+                                <?php foreach ($expenseCategories as $cat): ?>
+                                    <option value="<?= (int)$cat['id'] ?>" data-type="despesa"><?= htmlspecialchars($cat['name']) ?></option>
+                                <?php endforeach; ?>
+                                <?php foreach ($incomeCategories as $cat): ?>
+                                    <option value="<?= (int)$cat['id'] ?>" data-type="receita"><?= htmlspecialchars($cat['name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
                     </div>
-                    <div class="form-group-full">
+                    <div class="form-group form-group-full form-group-actions">
                         <button type="submit" class="btn btn-primary btn-block" id="btnSubmit">
-                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                            Adicionar Lançamento
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Adicionar lançamento
                         </button>
                     </div>
                 </form>
-            </div>
+            </article>
 
             <!-- Últimos Lançamentos -->
-            <div class="bottom-card">
-                <div class="bottom-card-header">
-                    <h3 class="bottom-card-title" style="margin-bottom:0">Últimos Lançamentos</h3>
-                    <span class="bottom-card-count"><?= count($recentTransactions) ?> registro(s)</span>
-                </div>
+            <article class="panel panel-table">
+                <header class="panel-header">
+                    <div>
+                        <h3 class="panel-title">Últimos lançamentos</h3>
+                        <p class="panel-subtitle">Movimentações mais recentes.</p>
+                    </div>
+                    <span class="panel-meta"><?= count($recentTransactions) ?> registro(s)</span>
+                </header>
                 <div class="table-wrapper">
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>Tipo</th>
-                                <th>Descrição</th>
-                                <th>Categoria</th>
-                                <th>Data</th>
-                                <th>Valor</th>
-                                <th>Ações</th>
+                                <th scope="col">Tipo</th>
+                                <th scope="col">Descrição</th>
+                                <th scope="col">Categoria</th>
+                                <th scope="col">Data</th>
+                                <th scope="col" class="th-numeric">Valor</th>
+                                <th scope="col" class="th-actions">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -389,14 +488,14 @@ $activeMenu = 'dashboard';
                                         $txType = $t['type'] ?? '';
                                         $txLabel = $txType === 'despesa' ? 'Despesa' : ($txType === 'receita' ? 'Receita' : '');
                                         $txBadge = $txType === 'despesa' ? 'badge-danger' : 'badge-success';
-                                        $txClass = $txType === 'despesa' ? 'text-expense' : 'text-income';
+                                        $txClass = $txType === 'despesa' ? 'is-negative' : 'is-positive';
                                     ?>
                                     <tr>
                                         <td><span class="badge <?= $txBadge ?>"><span class="badge-dot"></span><?= $txLabel ?></span></td>
-                                        <td><?= htmlspecialchars($t['description'] ?? '') ?></td>
+                                        <td class="td-strong"><?= htmlspecialchars($t['description'] ?? '') ?></td>
                                         <td><?= htmlspecialchars($t['category_name'] ?? '—') ?></td>
-                                        <td><?= isset($t['date']) ? date('d/m/Y', strtotime($t['date'])) : '—' ?></td>
-                                        <td class="<?= $txClass ?>"><strong>R$ <?= fmtBRL($t['amount'] ?? 0) ?></strong></td>
+                                        <td class="td-muted"><?= isset($t['date']) ? date('d/m/Y', strtotime($t['date'])) : '—' ?></td>
+                                        <td class="td-numeric <?= $txClass ?>"><strong>R$ <?= fmtBRL($t['amount'] ?? 0) ?></strong></td>
                                         <td class="actions-cell">
                                             <a href="/index.php?action=edit&id=<?= (int)($t['id'] ?? 0) ?>&type=<?= htmlspecialchars($txType) ?>" class="btn btn-ghost btn-xs">Editar</a>
                                             <form action="/index.php?action=delete" method="POST" class="delete-form">
@@ -411,75 +510,93 @@ $activeMenu = 'dashboard';
                         </tbody>
                     </table>
                 </div>
-            </div>
+            </article>
         </section>
 
         <!-- ========== SUMMARY ========== -->
         <section class="summary-section">
             <!-- Resumo por Categoria -->
-            <div class="bottom-card">
-                <h3 class="bottom-card-title">Despesas por Categoria</h3>
+            <article class="panel panel-table">
+                <header class="panel-header">
+                    <div>
+                        <h3 class="panel-title">Despesas por categoria</h3>
+                        <p class="panel-subtitle">Resumo consolidado no período.</p>
+                    </div>
+                </header>
                 <?php if (empty($categoriesTable)): ?>
                     <div class="empty-msg">Nenhuma despesa registrada no período.</div>
                 <?php else: ?>
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Categoria</th>
-                                <th>Qtd</th>
-                                <th>Total</th>
-                                <th>%</th>
-                                <th>Distribuição</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php
-                            $catColors = ['#4f46e5','#16a34a','#dc2626','#f59e0b','#0ea5e9','#a855f7','#ec4899','#14b8a6'];
-                            foreach ($categoriesTable as $i => $cat):
-                                $pct = (float)($cat['percentage'] ?? 0);
-                                $color = $catColors[$i % count($catColors)];
-                            ?>
+                    <div class="table-wrapper">
+                        <table class="data-table data-table-distribution">
+                            <thead>
                                 <tr>
-                                    <td>
-                                        <span class="cat-color-dot" style="background:<?= $color ?>"></span>
-                                        <?= htmlspecialchars($cat['name']) ?>
-                                    </td>
-                                    <td><?= (int)($cat['count'] ?? 0) ?></td>
-                                    <td class="text-expense">R$ <?= fmtBRL($cat['total'] ?? 0) ?></td>
-                                    <td><?= $pct ?>%</td>
-                                    <td class="bar-cell">
-                                        <div class="progress-bar" title="<?= $pct ?>%">
-                                            <div class="progress-fill" style="width:<?= $pct ?>%; background: linear-gradient(90deg, <?= $color ?>, <?= $color ?>88)"></div>
-                                        </div>
-                                    </td>
+                                    <th scope="col">Categoria</th>
+                                    <th scope="col" class="th-numeric">Qtd</th>
+                                    <th scope="col" class="th-numeric">Total</th>
+                                    <th scope="col" class="th-numeric">%</th>
+                                    <th scope="col">Distribuição</th>
                                 </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                <?php
+                                $catColors = ['#4f46e5','#10b981','#ef4444','#f59e0b','#0ea5e9','#a855f7','#ec4899','#14b8a6'];
+                                foreach ($categoriesTable as $i => $cat):
+                                    $pct = (float)($cat['percentage'] ?? 0);
+                                    $color = $catColors[$i % count($catColors)];
+                                ?>
+                                    <tr>
+                                        <td>
+                                            <div class="cat-cell">
+                                                <span class="cat-color-dot" style="background:<?= $color ?>"></span>
+                                                <span><?= htmlspecialchars($cat['name']) ?></span>
+                                            </div>
+                                        </td>
+                                        <td class="td-numeric"><?= (int)($cat['count'] ?? 0) ?></td>
+                                        <td class="td-numeric is-negative">R$ <?= fmtBRL($cat['total'] ?? 0) ?></td>
+                                        <td class="td-numeric"><?= $pct ?>%</td>
+                                        <td class="bar-cell">
+                                            <div class="progress-bar" title="<?= $pct ?>%">
+                                                <div class="progress-fill" style="width:<?= $pct ?>%; background:<?= $color ?>"></div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
                 <?php endif; ?>
-            </div>
+            </article>
 
             <!-- Nova Categoria -->
-            <div class="bottom-card">
-                <h3 class="bottom-card-title">Nova Categoria</h3>
+            <article class="panel">
+                <header class="panel-header">
+                    <div>
+                        <h3 class="panel-title">Nova categoria</h3>
+                        <p class="panel-subtitle">Adicione uma categoria de despesa ou receita.</p>
+                    </div>
+                </header>
                 <form action="/index.php?action=store_category" method="POST" class="form-stack" id="addCategoryForm" novalidate>
                     <div class="form-group">
-                        <label>Nome</label>
-                        <input type="text" name="name" placeholder="Ex: Educação, Transporte" required>
+                        <label for="cat-name">Nome</label>
+                        <input type="text" name="name" id="cat-name" placeholder="Ex: Educação, Transporte" required>
                     </div>
                     <div class="form-group">
-                        <label>Tipo</label>
-                        <select name="type">
-                            <option value="despesa">Despesa</option>
-                            <option value="receita">Receita</option>
-                        </select>
+                        <label for="cat-type">Tipo</label>
+                        <div class="select-wrap">
+                            <select name="type" id="cat-type">
+                                <option value="despesa">Despesa</option>
+                                <option value="receita">Receita</option>
+                            </select>
+                        </div>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-block">
-                        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                        Adicionar Categoria
-                    </button>
+                    <div class="form-group form-group-actions">
+                        <button type="submit" class="btn btn-primary btn-block">
+                            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Adicionar categoria
+                        </button>
+                    </div>
                 </form>
-            </div>
+            </article>
         </section>
 
     </main>
