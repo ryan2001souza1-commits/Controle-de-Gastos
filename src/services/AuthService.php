@@ -65,7 +65,7 @@ class AuthService
             if (!$this->userModel->create($name, $email, $password)) {
                 return ['success' => false, 'message' => 'E-mail já cadastrado.'];
             }
-        } catch (PDOException $e) {
+        } catch (\PDOException $e) {
             // UNIQUE violation (23505) — corrida de dois cadastros simultâneos com mesmo e-mail
             if (($e->getCode() === '23505' || str_contains($e->getMessage(), 'duplicate'))) {
                 return ['success' => false, 'message' => 'E-mail já cadastrado.'];

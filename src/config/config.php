@@ -25,7 +25,7 @@ function getDbConfig(): array
     if ($url !== false && $url !== '') {
         $parsed = parse_url($url);
         if ($parsed === false) {
-            throw new RuntimeException('DATABASE_URL inválida: ' . $url);
+            throw new \RuntimeException('DATABASE_URL inválida');
         }
 
         $host     = $parsed['host']     ?? '';
@@ -104,7 +104,7 @@ function getDBConnection(): PDO
 
             require_once __DIR__ . '/../migrations.php';
             runMigrations($pdo);
-        } catch (PDOException $e) {
+        } catch (\PDOException $e) {
             error_log('[DB] ' . $e->getMessage());
             throw new PDOException(
                 'Erro de conexão com o banco. Tente novamente em instantes.',
