@@ -916,6 +916,8 @@ input::placeholder { color: var(--text-muted); }
         grid-template-columns: 1fr;
     }
     .fin-card { padding: 1rem; }
+}
+
 /* ====================================================
    AUTH PAGES — Login / Cadastro
    Split-screen layout: visual escuro à esquerda, formulário à direita
@@ -935,6 +937,7 @@ input::placeholder { color: var(--text-muted); }
 .auth-body {
     min-height: 100vh;
     margin: 0;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
     background: #f5f6fa;
     overflow-x: hidden;
 }
