@@ -30,21 +30,42 @@ class Mailer
 
     public function __construct()
     {
-        $rawFrom = trim((string)getenv('MAIL_FROM'));
+        $rawFrom = trim((string)$this->env('MAIL_FROM'));
         [$name, $addr] = $this->parseFrom($rawFrom);
-        $smtpUser = trim((string)getenv('SMTP_USER'));
+        $smtpUser = trim((string)$this->env('SMTP_USER'));
 
         // Se MAIL_FROM vazio mas SMTP_USER é um e-mail (caso Gmail), usa SMTP_USER como remetente
         if ($addr === '' && filter_var($smtpUser, FILTER_VALIDATE_EMAIL)) {
             $addr = $smtpUser;
         }
-        // Se nenhuma variável de remetente foi configurada, deixa VAZIO.
-        // Isso impede cair no fallback 'onboarding@resend.dev' silenciosamente,
-        // que a Resend só permite enviar para o dono da conta (403).
-        // O envio real só ocorre quando MAIL_FROM ou SMTP_USER estão configurados.
-        $envName = trim((string)getenv('MAIL_FROM_NAME'));
+        // Fallback: remetente default da Resend (sandbox).
+        // ATENÇÃO: com este remetente a Resend só envia para o e-mail dono da conta.
+        // Para enviar a qualquer destinatário, verifique um domínio em resend.com/domains
+        // e defina MAIL_FROM com esse domínio.
+        if ($addr === '') {
+            $addr = 'onboarding@resend.dev';
+        }
+        $envName = trim((string)$this->env('MAIL_FROM_NAME'));
         $this->from     = $addr;
         $this->fromName = $envName ?: ($name ?: 'Controle de Gastos');
+    }
+
+    /**
+     * Lê variável de ambiente em qualquer lugar que o runtime a exponha.
+     *
+     * Por que isto é necessário: no Vercel Serverless (vercel-php@0.9.0), as
+     * variáveis configuradas em Settings → Environment Variables são
+     * injetadas em $_ENV e $_SERVER, mas getenv() nem sempre as enxerga.
+     * Este helper cobre os 3 lugares para garantir leitura em qualquer
+     * runtime (Vercel, CLI, Apache, Nginx, etc.).
+     */
+    private function env(string $key): string|false
+    {
+        $v = getenv($key);
+        if ($v !== false && $v !== '') return $v;
+        if (isset($_ENV[$key]) && $_ENV[$key] !== '') return (string)$_ENV[$key];
+        if (isset($_SERVER[$key]) && $_SERVER[$key] !== '') return (string)$_SERVER[$key];
+        return false;
     }
 
     public function send(string $to, string $subject, string $htmlBody, string $altBody = ''): bool
@@ -53,22 +74,24 @@ class Mailer
         $subject = trim($subject);
         if ($to === '' || $subject === '') return false;
 
-        $resendKey = trim((string)getenv('RESEND_API_KEY'));
-        $smtpHost  = trim((string)getenv('SMTP_HOST'));
+        $resendKey = trim((string)$this->env('RESEND_API_KEY'));
+        $smtpHost  = trim((string)$this->env('SMTP_HOST'));
 
         // Diagnóstico: nenhuma credencial configurada
         if ($resendKey === '' && $smtpHost === '') {
-            error_log('[Mailer] NENHUMA credencial de e-mail configurada. Defina RESEND_API_KEY ou SMTP_HOST/SMTP_USER/SMTP_PASS na Vercel → Settings → Environment Variables');
+            error_log('[Mailer] NENHUMA credencial de e-mail configurada. Defina RESEND_API_KEY na Vercel → Settings → Environment Variables');
+        } else {
+            error_log('[Mailer] Credenciais detectadas: RESEND_API_KEY=' . ($resendKey !== '' ? 'sim' : 'não') . ' SMTP_HOST=' . ($smtpHost !== '' ? $smtpHost : 'não'));
         }
 
         // 1) Resend HTTPS — mais confiável na Vercel (porta 587 pode ser bloqueada)
-        if ($resendKey !== '') {
-            if ($this->from === '') {
-                error_log('[Mailer] RESEND_API_KEY configurada, mas MAIL_FROM não foi definido. Defina MAIL_FROM na Vercel (ex: Controle de Gastos <onboarding@resend.dev> ou um domínio verificado). Sem isso a Resend retorna 403.');
-            } else {
-                if ($this->sendViaResend($to, $subject, $htmlBody, $resendKey)) return true;
-                error_log('[Mailer] Resend falhou, tentando fallback SMTP/mail');
+        if ($resendKey !== '' && $this->from !== '') {
+            error_log('[Mailer] Tentando envio via Resend para ' . $to);
+            if ($this->sendViaResend($to, $subject, $htmlBody, $resendKey)) {
+                error_log('[Mailer] Resend: envio OK para ' . $to);
+                return true;
             }
+            error_log('[Mailer] Resend falhou, tentando fallback SMTP/mail');
         }
 
         // 2) SMTP direto (Gmail / SendGrid / Brevo)
@@ -102,56 +125,62 @@ class Mailer
             'html'    => $html,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-        if (ini_get('allow_url_fopen')) {
-            $ctx = stream_context_create([
-                'http' => [
-                    'method'        => 'POST',
-                    'timeout'       => 12,
-                    'ignore_errors' => true,
-                    'header'        => implode("\r\n", [
+        try {
+            if (function_exists('curl_init')) {
+                $ch = curl_init('https://api.resend.com/emails');
+                curl_setopt_array($ch, [
+                    CURLOPT_POST           => true,
+                    CURLOPT_POSTFIELDS     => $payload,
+                    CURLOPT_HTTPHEADER     => [
                         'Authorization: Bearer ' . $apiKey,
                         'Content-Type: application/json',
-                        'Accept: application/json',
-                    ]),
-                    'content' => $payload,
-                ],
-                'ssl' => ['verify_peer' => true, 'verify_peer_name' => true],
-            ]);
-            $resp = @file_get_contents('https://api.resend.com/emails', false, $ctx);
-            $status = $this->parseStatus($http_response_header ?? []);
-            if ($resp !== false && $status >= 200 && $status < 300) return true;
-            if ($resp !== false) error_log("[Mailer:Resend] HTTP $status: $resp");
-            else error_log('[Mailer:Resend] file_get_contents falhou — sem openssl ou host bloqueado');
-        }
+                    ],
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT        => 15,
+                    CURLOPT_CONNECTTIMEOUT => 10,
+                ]);
+                $resp = curl_exec($ch);
+                $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $err = curl_error($ch);
+                curl_close($ch);
+                if ($resp !== false && $status >= 200 && $status < 300) return true;
+                error_log("[Mailer:Resend cURL] HTTP $status err=" . ($err ?: 'nenhum') . " resp=" . substr((string)$resp, 0, 300));
+                return false;
+            }
 
-        if (function_exists('curl_init')) {
-            $ch = curl_init('https://api.resend.com/emails');
-            curl_setopt_array($ch, [
-                CURLOPT_POST           => true,
-                CURLOPT_POSTFIELDS     => $payload,
-                CURLOPT_HTTPHEADER     => [
-                    'Authorization: Bearer ' . $apiKey,
-                    'Content-Type: application/json',
-                ],
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT        => 12,
-            ]);
-            $resp = curl_exec($ch);
-            $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $err = curl_error($ch);
-            curl_close($ch);
-            if ($resp !== false && $status >= 200 && $status < 300) return true;
-            error_log("[Mailer:Resend cURL] HTTP $status err=$err resp=$resp");
+            if (ini_get('allow_url_fopen')) {
+                $ctx = stream_context_create([
+                    'http' => [
+                        'method'        => 'POST',
+                        'timeout'       => 15,
+                        'ignore_errors' => true,
+                        'header'        => implode("\r\n", [
+                            'Authorization: Bearer ' . $apiKey,
+                            'Content-Type: application/json',
+                            'Accept: application/json',
+                        ]),
+                        'content' => $payload,
+                    ],
+                    'ssl' => ['verify_peer' => true, 'verify_peer_name' => true],
+                ]);
+                $resp = @file_get_contents('https://api.resend.com/emails', false, $ctx);
+                $status = $this->parseStatus($http_response_header ?? []);
+                if ($resp !== false && $status >= 200 && $status < 300) return true;
+                if ($resp !== false) error_log("[Mailer:Resend fopen] HTTP $status: " . substr((string)$resp, 0, 300));
+                else error_log('[Mailer:Resend fopen] file_get_contents falhou — sem openssl ou host bloqueado');
+            }
+        } catch (Throwable $e) {
+            error_log('[Mailer:Resend] Exceção: ' . $e->getMessage());
         }
         return false;
     }
 
     private function sendSmtp(string $to, string $subject, string $htmlBody): bool
     {
-        $host = trim((string)getenv('SMTP_HOST'));
-        $port = (int)(getenv('SMTP_PORT') ?: '587');
-        $user = trim((string)getenv('SMTP_USER'));
-        $pass = trim((string)getenv('SMTP_PASS'));
+        $host = trim((string)$this->env('SMTP_HOST'));
+        $port = (int)($this->env('SMTP_PORT') ?: '587');
+        $user = trim((string)$this->env('SMTP_USER'));
+        $pass = trim((string)$this->env('SMTP_PASS'));
         // Gmail exige que o remetente seja o próprio usuário autenticado
         $from = $this->from;
         if (str_contains(strtolower($host), 'gmail') && filter_var($user, FILTER_VALIDATE_EMAIL)) {

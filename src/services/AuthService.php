@@ -129,8 +129,7 @@ class AuthService
 
         if (!$mailSent) {
             error_log("[AuthService] Falha ao enviar e-mail de recuperação para {$user->email} — verifique RESEND_API_KEY e MAIL_FROM na Vercel");
-            // Em dev local, loga link para teste manual sem expor na UI
-            if (getenv('APP_ENV') === 'development' || getenv('APP_DEBUG') === 'true') {
+            if ($this->envAny('APP_DEBUG') === 'true' || $this->envAny('APP_ENV') === 'development') {
                 error_log("[AuthService:DEV] Link de recuperação (válido 1 min): {$resetUrl}");
             }
         }
@@ -203,19 +202,19 @@ class AuthService
 
     private function getBaseUrl(): string
     {
-        $env = getenv('APP_URL');
+        $env = $this->envAny('APP_URL');
         if ($env) {
             return rtrim($env, '/');
         }
         // Vercel fornece VERCEL_URL (ex: controle-de-gastos-xxx.vercel.app) — confiável
-        $vercelUrl = getenv('VERCEL_URL');
+        $vercelUrl = $this->envAny('VERCEL_URL');
         if ($vercelUrl) {
             return 'https://' . ltrim($vercelUrl, '/');
         }
         $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
             || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
             || (($_SERVER['HTTP_X_VERCEL_FORWARDED_PROTO'] ?? '') === 'https')
-            || (getenv('VERCEL_ENV') !== false);
+            || ($this->envAny('VERCEL_ENV') !== false);
         $scheme = $https ? 'https' : 'http';
         $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
         // Sanitiza host para evitar Host Header Injection
@@ -225,6 +224,15 @@ class AuthService
             $host = 'localhost';
         }
         return $scheme . '://' . $host;
+    }
+
+    private function envAny(string $key): string|false
+    {
+        $v = getenv($key);
+        if ($v !== false && $v !== '') return $v;
+        if (isset($_ENV[$key]) && $_ENV[$key] !== '') return (string)$_ENV[$key];
+        if (isset($_SERVER[$key]) && $_SERVER[$key] !== '') return (string)$_SERVER[$key];
+        return false;
     }
 
     private function buildResetEmail(string $name, string $url): string
