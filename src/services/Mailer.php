@@ -38,9 +38,10 @@ class Mailer
         if ($addr === '' && filter_var($smtpUser, FILTER_VALIDATE_EMAIL)) {
             $addr = $smtpUser;
         }
-        // fallback Resend para desenvolvimento
-        if ($addr === '') $addr = 'onboarding@resend.dev';
-        // se MAIL_FROM veio como "Nome <email>", $name já foi extraído
+        // Se nenhuma variável de remetente foi configurada, deixa VAZIO.
+        // Isso impede cair no fallback 'onboarding@resend.dev' silenciosamente,
+        // que a Resend só permite enviar para o dono da conta (403).
+        // O envio real só ocorre quando MAIL_FROM ou SMTP_USER estão configurados.
         $envName = trim((string)getenv('MAIL_FROM_NAME'));
         $this->from     = $addr;
         $this->fromName = $envName ?: ($name ?: 'Controle de Gastos');
@@ -61,9 +62,13 @@ class Mailer
         }
 
         // 1) Resend HTTPS — mais confiável na Vercel (porta 587 pode ser bloqueada)
-        if ($resendKey !== '' && $this->from !== '') {
-            if ($this->sendViaResend($to, $subject, $htmlBody, $resendKey)) return true;
-            error_log('[Mailer] Resend falhou, tentando fallback SMTP/mail');
+        if ($resendKey !== '') {
+            if ($this->from === '') {
+                error_log('[Mailer] RESEND_API_KEY configurada, mas MAIL_FROM não foi definido. Defina MAIL_FROM na Vercel (ex: Controle de Gastos <onboarding@resend.dev> ou um domínio verificado). Sem isso a Resend retorna 403.');
+            } else {
+                if ($this->sendViaResend($to, $subject, $htmlBody, $resendKey)) return true;
+                error_log('[Mailer] Resend falhou, tentando fallback SMTP/mail');
+            }
         }
 
         // 2) SMTP direto (Gmail / SendGrid / Brevo)
