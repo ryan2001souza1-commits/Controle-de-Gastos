@@ -119,8 +119,10 @@ class AuthController
     public function googleLogin(): void
     {
         if (!$this->googleAuth->isConfigured()) {
-            error_log('[Google] GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET não configurados na Vercel');
-            header('Location: /index.php?action=login&google_error=1');
+            $cid = $this->googleAuth->getClientId();
+            $cs  = getenv('GOOGLE_CLIENT_SECRET') ?: ($_ENV['GOOGLE_CLIENT_SECRET'] ?? ($_SERVER['GOOGLE_CLIENT_SECRET'] ?? ''));
+            error_log('[Google] não configurado: GOOGLE_CLIENT_ID=' . ($cid !== '' ? 'OK' : 'VAZIO') . ' GOOGLE_CLIENT_SECRET=' . ($cs !== '' ? 'OK' : 'VAZIO'));
+            header('Location: /index.php?action=login&google_error=not_configured');
             exit;
         }
 

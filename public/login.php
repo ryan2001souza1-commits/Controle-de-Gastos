@@ -145,15 +145,16 @@
                 <?php if (isset($_GET['google_error'])):
                     $gErr = (string)$_GET['google_error'];
                     $gMsg = match ($gErr) {
-                        'cancelled'     => 'Login com Google cancelado.',
-                        'state'         => 'Falha de segurança no login com Google. Tente novamente.',
-                        'code'          => 'Código de autorização inválido.',
-                        'exchange'      => 'Não foi possível validar o login com Google.',
-                        'invalid_token' => 'Token do Google inválido ou expirado.',
-                        'claims'        => 'Não foi possível obter seus dados do Google.',
-                        'email_exists'  => 'Já existe uma conta com esse e-mail. Faça login com senha e vincule o Google nas configurações.',
-                        'create_failed' => 'Não foi possível criar a conta com Google.',
-                        default         => 'Falha no login com Google. Tente novamente.',
+                        'cancelled'      => 'Login com Google cancelado.',
+                        'state'          => 'Falha de segurança no login com Google. Tente novamente.',
+                        'code'           => 'Código de autorização inválido.',
+                        'exchange'       => 'Não foi possível validar o login com Google.',
+                        'invalid_token'  => 'Token do Google inválido ou expirado.',
+                        'claims'         => 'Não foi possível obter seus dados do Google.',
+                        'email_exists'   => 'Já existe uma conta com esse e-mail. Faça login com senha e vincule o Google nas configurações.',
+                        'create_failed'  => 'Não foi possível criar a conta com Google.',
+                        'not_configured' => 'Login com Google indisponível no momento.',
+                        default          => 'Falha no login com Google. Tente novamente.',
                     };
                 ?>
                     <div class="auth-alert auth-alert-error"><?= htmlspecialchars($gMsg) ?></div>
