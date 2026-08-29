@@ -41,6 +41,10 @@ if ($action === 'register') {
     $authController->login();
 } elseif ($action === 'logout') {
     $authController->logout();
+} elseif ($action === 'forgot') {
+    $authController->forgot();
+} elseif ($action === 'reset') {
+    $authController->reset();
 } elseif ($action === 'store') {
     $expenseController->store();
 } elseif ($action === 'store_category') {

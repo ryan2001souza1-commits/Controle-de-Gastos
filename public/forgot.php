@@ -86,7 +86,17 @@
                     <div class="auth-alert auth-alert-error"><?= htmlspecialchars($error) ?></div>
                 <?php endif; ?>
 
-                <form action="/forgot.php" method="POST" class="auth-form" novalidate>
+                <?php if (!empty($resetToken)): ?>
+                    <div class="auth-alert auth-alert-info forgot-token-box">
+                        <strong>Ambiente sem envio de e-mail configurado.</strong>
+                        <span>Use o link abaixo para definir uma nova senha (válido por 1 hora):</span>
+                        <a href="/index.php?action=reset&amp;token=<?= htmlspecialchars($resetToken) ?>" class="forgot-token-link">
+                            /index.php?action=reset&amp;token=<?= htmlspecialchars($resetToken) ?>
+                        </a>
+                    </div>
+                <?php endif; ?>
+
+                <form action="/index.php?action=forgot" method="POST" class="auth-form" novalidate>
                     <div class="auth-field">
                         <label for="email">E-mail</label>
                         <div class="auth-input-wrap">

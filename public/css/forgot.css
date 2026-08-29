@@ -135,6 +135,44 @@
     line-height: 1.45;
 }
 
+/* Token box (mostra link de reset em ambiente sem SMTP) */
+.auth-alert-info {
+    background: #eef2ff;
+    color: #3730a3;
+    border-color: #c7d2fe;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    word-break: break-all;
+}
+
+.auth-alert-info strong {
+    color: #312e81;
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+
+.forgot-token-link {
+    display: block;
+    padding: 0.5rem 0.625rem;
+    background: #ffffff;
+    border: 1px dashed #c7d2fe;
+    border-radius: 6px;
+    color: #4f46e5;
+    text-decoration: none;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+    transition: background 0.18s ease;
+}
+
+.forgot-token-link:hover {
+    background: #f5f3ff;
+    text-decoration: underline;
+}
+
 /* ============================================
    RESPONSIVO
    ============================================ */

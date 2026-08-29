@@ -55,4 +55,46 @@ class AuthController
     {
         $this->authService->logout();
     }
+
+    public function forgot(): void
+    {
+        $error   = null;
+        $success = null;
+        $resetToken = null;
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $email = trim($_POST['email'] ?? '');
+            $result = $this->authService->requestPasswordReset($email);
+
+            if (!$result['success']) {
+                $error = $result['message'];
+            } else {
+                $success = $result['message'];
+                $resetToken = $result['token'] ?? null;
+            }
+        }
+
+        require basePath('forgot.php');
+    }
+
+    public function reset(): void
+    {
+        $token = $_GET['token'] ?? ($_POST['token'] ?? '');
+        $error = null;
+        $success = null;
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $newPassword = $_POST['password'] ?? '';
+            $confirm     = $_POST['password_confirm'] ?? '';
+            $result = $this->authService->resetPasswordWithToken($token, $newPassword, $confirm);
+
+            if (!$result['success']) {
+                $error = $result['message'];
+            } else {
+                $success = $result['message'];
+            }
+        }
+
+        require basePath('reset.php');
+    }
 }
