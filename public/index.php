@@ -50,8 +50,10 @@ require_once __DIR__ . '/../src/controllers/GoalController.php';
 require_once __DIR__ . '/../src/controllers/ProfileController.php';
 require_once __DIR__ . '/../src/models/BugReport.php';
 require_once __DIR__ . '/../src/models/Plan.php';
+require_once __DIR__ . '/../src/models/Feedback.php';
 require_once __DIR__ . '/../src/controllers/AdminController.php';
 require_once __DIR__ . '/../src/controllers/BugReportController.php';
+require_once __DIR__ . '/../src/controllers/FeedbackController.php';
 
 $db = getDBConnection();
 require_once __DIR__ . '/../src/db_bootstrap.php';
@@ -76,8 +78,10 @@ $goalController = new GoalController($goalModel, $goalService);
 $profileController = new ProfileController($userModel, $db);
 $bugModel = new BugReport($db);
 $planModel = new Plan($db);
-$adminController = new AdminController($userModel, $bugModel, $planModel, $db);
+$feedbackModel = new Feedback($db);
+$adminController = new AdminController($userModel, $bugModel, $planModel, $feedbackModel, $db);
 $bugReportController = new BugReportController($bugModel, $db);
+$feedbackController = new FeedbackController($feedbackModel, $db);
 
 $action = $_GET['action'] ?? null;
 
@@ -147,6 +151,16 @@ if ($action === 'register') {
     $adminController->updateBug();
 } elseif ($action === 'admin_planos') {
     $adminController->planos();
+} elseif ($action === 'admin_feedback') {
+    $adminController->feedback();
+} elseif ($action === 'admin_feedback_update') {
+    $feedbackController->adminUpdate();
+} elseif ($action === 'feedback') {
+    $feedbackController->form();
+} elseif ($action === 'feedback_create') {
+    $feedbackController->create();
+} elseif ($action === 'meu_feedback') {
+    $feedbackController->myFeedback();
 } elseif ($action === 'reportar') {
     $bugReportController->form();
 } elseif ($action === 'reportar_create') {

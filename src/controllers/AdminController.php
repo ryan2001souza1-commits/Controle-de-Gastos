@@ -4,13 +4,15 @@ class AdminController
     private User $userModel;
     private BugReport $bugModel;
     private Plan $planModel;
+    private Feedback $feedbackModel;
     private PDO $db;
 
-    public function __construct(User $userModel, BugReport $bugModel, Plan $planModel, PDO $db)
+    public function __construct(User $userModel, BugReport $bugModel, Plan $planModel, Feedback $feedbackModel, PDO $db)
     {
         $this->userModel = $userModel;
         $this->bugModel = $bugModel;
         $this->planModel = $planModel;
+        $this->feedbackModel = $feedbackModel;
         $this->db = $db;
     }
 
@@ -33,8 +35,27 @@ class AdminController
         $recentUsers = $this->db->query("SELECT id,nome,email,created_at,plano,is_admin FROM usuarios ORDER BY created_at DESC LIMIT 5")->fetchAll(PDO::FETCH_ASSOC);
         $activeUsers = (int)$this->db->query("SELECT COUNT(*) FROM usuarios WHERE created_at > NOW() - INTERVAL '30 days'")->fetchColumn();
         $newWeek = (int)$this->db->query("SELECT COUNT(*) FROM usuarios WHERE created_at > NOW() - INTERVAL '7 days'")->fetchColumn();
+        $adminCount = (int)$this->db->query("SELECT COUNT(*) FROM usuarios WHERE is_admin = 1")->fetchColumn();
+        $freeUsers = (int)$this->db->query("SELECT COUNT(*) FROM usuarios WHERE is_admin = 0 AND plano = 'gratuito'")->fetchColumn();
+        $paidUsers = (int)$this->db->query("SELECT COUNT(*) FROM usuarios WHERE is_admin = 0 AND plano_status = 'ativo' AND plano <> 'gratuito'")->fetchColumn();
+        $activeSubscriptions = (int)$this->db->query("SELECT COUNT(*) FROM usuarios WHERE plano_status = 'ativo' AND plano <> 'gratuito'")->fetchColumn();
         $bugStats = $this->bugModel->stats();
+        $feedbackStats = $this->feedbackModel->stats();
         $planos = $this->planModel->findAll();
+
+        $userGrowth = $this->db->query(
+            "SELECT
+                DATE_TRUNC('week', created_at) AS week,
+                COUNT(*) AS total
+             FROM usuarios
+             WHERE created_at > NOW() - INTERVAL '12 weeks'
+             GROUP BY 1 ORDER BY 1"
+        )->fetchAll(PDO::FETCH_ASSOC);
+
+        $planDistribution = $this->db->query(
+            "SELECT plano, COUNT(*) AS total FROM usuarios WHERE is_admin = 0 GROUP BY plano"
+        )->fetchAll(PDO::FETCH_ASSOC);
+
         $pageTitle = 'Admin — Dashboard';
         $activeMenu = 'admin';
         $showPeriodPicker = false;
@@ -112,9 +133,32 @@ class AdminController
     {
         $this->requireAdmin();
         $planos = $this->planModel->findAll();
+        $stats = [];
+        foreach ($planos as $p) {
+            $stmt = $this->db->prepare("SELECT COUNT(*) FROM usuarios WHERE plano = ?");
+            $stmt->execute([$p['slug']]);
+            $stats[$p['slug']] = (int)$stmt->fetchColumn();
+        }
         $pageTitle = 'Admin — Planos';
         $activeMenu = 'admin_planos';
         $showPeriodPicker = false;
         require basePath('admin/planos.php');
+    }
+
+    public function feedback(): void
+    {
+        $this->requireAdmin();
+        $status = $_GET['status'] ?? '';
+        $q = trim($_GET['q'] ?? '');
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $perPage = 20;
+        $offset = ($page - 1) * $perPage;
+        $feedbacks = $this->feedbackModel->findAll($status ?: null, $q ?: null, $perPage, $offset);
+        $total = $this->feedbackModel->countAll($status ?: null, $q ?: null);
+        $stats = $this->feedbackModel->stats();
+        $pageTitle = 'Admin — Feedback';
+        $activeMenu = 'admin_feedback';
+        $showPeriodPicker = false;
+        require basePath('admin/feedback.php');
     }
 }

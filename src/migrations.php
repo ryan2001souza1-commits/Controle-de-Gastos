@@ -127,10 +127,31 @@ function runMigrations(PDO $db): void
         "CREATE INDEX IF NOT EXISTS idx_metas_usuario_id ON metas(usuario_id)",
         "CREATE INDEX IF NOT EXISTS idx_orcamentos_usuario_id ON orcamentos(usuario_id)",
         "CREATE INDEX IF NOT EXISTS idx_orcamentos_usuario_periodo ON orcamentos(usuario_id, ano, mes)",
+
+        "CREATE TABLE IF NOT EXISTS feedback (
+            id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+            tipo VARCHAR(20) NOT NULL DEFAULT 'sugestao' CHECK (tipo IN ('sugestao','melhoria','critica','elogio','outro')),
+            titulo VARCHAR(150) NOT NULL,
+            descricao TEXT NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'novo' CHECK (status IN ('novo','em_analise','implementado','recusado')),
+            resposta_admin TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )",
     ];
 
     foreach ($statements as $sql) {
         $db->exec($sql);
+    }
+
+    $extraIndexes = [
+        "CREATE INDEX IF NOT EXISTS idx_feedback_usuario ON feedback(usuario_id)",
+        "CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)",
+        "CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at DESC)",
+    ];
+    foreach ($extraIndexes as $sql) {
+        try { $db->exec($sql); } catch (Throwable $e) {}
     }
 
     $addColumnIfMissing = [

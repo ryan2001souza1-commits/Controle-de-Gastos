@@ -1,39 +1,253 @@
 <?php
-// expects $totalUsers, $activeUsers, $newWeek, $recentUsers, $bugStats, $planos
+$totalUsers = (int)($totalUsers ?? 0);
+$activeUsers = (int)($activeUsers ?? 0);
+$newWeek = (int)($newWeek ?? 0);
+$adminCount = (int)($adminCount ?? 0);
+$freeUsers = (int)($freeUsers ?? 0);
+$paidUsers = (int)($paidUsers ?? 0);
+$activeSubscriptions = (int)($activeSubscriptions ?? 0);
+$bugStats = $bugStats ?? [];
+$feedbackStats = $feedbackStats ?? [];
+$planos = $planos ?? [];
+$recentUsers = $recentUsers ?? [];
+$userGrowth = $userGrowth ?? [];
+$planDistribution = $planDistribution ?? [];
+
+$maxGrowth = 0;
+foreach ($userGrowth as $g) $maxGrowth = max($maxGrowth, (int)$g['total']);
+if ($maxGrowth === 0) $maxGrowth = 1;
+
+$growthLabels = [];
+$growthData = [];
+foreach ($userGrowth as $g) {
+    $ts = strtotime($g['week']);
+    $growthLabels[] = date('d/m', $ts);
+    $growthData[] = (int)$g['total'];
+}
+
+$planLabels = [];
+$planData = [];
+$planColorMap = [
+    'gratuito' => '#10b981',
+    'pro' => '#f59e0b',
+    'premium' => '#3b82f6',
+];
+foreach ($planDistribution as $p) {
+    $planLabels[] = ucfirst($p['plano']);
+    $planData[] = (int)$p['total'];
+}
+
+$bugChartLabels = ['Novo', 'Recebido', 'Em análise', 'Em dev', 'Resolvido', 'Fechado'];
+$bugChartData = [
+    (int)($bugStats['novos'] ?? 0),
+    (int)($bugStats['recebidos'] ?? 0),
+    (int)($bugStats['em_analise'] ?? 0),
+    (int)($bugStats['em_desenvolvimento'] ?? 0),
+    (int)($bugStats['resolvidos'] ?? 0),
+    (int)($bugStats['fechados'] ?? 0),
+];
+$bugChartColors = ['#3b82f6', '#06b6d4', '#f59e0b', '#8b5cf6', '#10b981', '#94a3b8'];
 ?>
-<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Admin — Dashboard</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="/css/style.css?v=<?= @filemtime(__DIR__.'/../css/style.css') ?>"></head><body><div class="app-wrapper">
-<?php include __DIR__.'/../partials/admin_layout_start.php'; ?>
-<section class="metric-strip">
-    <article class="metric-card"><div class="metric-card-icon" style="background:#eff6ff;color:#2563eb"><?= render_icon('users',18) ?></div><div class="metric-card-body"><div class="metric-card-label">Total de usuários</div><div class="metric-card-value"><?= (int)($totalUsers??0) ?></div><div class="text-xs" style="color:#64748b"><?= (int)($newWeek??0) ?> novos (7 dias)</div></div></article>
-    <article class="metric-card"><div class="metric-card-icon" style="background:#ecfdf5;color:#059669"><?= render_icon('target',18) ?></div><div class="metric-card-body"><div class="metric-card-label">Usuários ativos</div><div class="metric-card-value"><?= (int)($activeUsers??0) ?></div><div class="text-xs" style="color:#64748b">Últimos 30 dias</div></div></article>
-    <article class="metric-card"><div class="metric-card-icon" style="background:#fffbeb;color:#d97706"><?= render_icon('alert',18) ?></div><div class="metric-card-body"><div class="metric-card-label">Bugs pendentes</div><div class="metric-card-value" style="color:#d97706"><?= (int)($bugStats['pendentes']??0) ?></div><div class="text-xs" style="color:#64748b">Novos + Recebidos</div></div></article>
-    <article class="metric-card"><div class="metric-card-icon" style="background:#f5f3ff;color:#7c3aed"><?= render_icon('check',18) ?></div><div class="metric-card-body"><div class="metric-card-label">Bugs resolvidos</div><div class="metric-card-value" style="color:#059669"><?= (int)($bugStats['resolvidos']??0) ?></div><div class="text-xs" style="color:#64748b">de <?= (int)($bugStats['total']??0) ?> total</div></div></article>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin — Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/admin-system.css?v=<?= @filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/admin-system.css') ?: time() ?>">
+</head>
+<body>
+<div class="admin-app-wrapper">
+<?php include __DIR__ . '/../partials/admin_layout_start.php'; ?>
+
+<?php if (!empty($_GET['success'])): ?>
+    <div class="admin-alert admin-alert-success" data-auto-dismiss="4000"><?= htmlspecialchars(['updated' => 'Atualizado com sucesso.','created' => 'Cadastrado com sucesso.'][$_GET['success']] ?? 'Operação realizada.') ?></div>
+<?php endif; ?>
+
+<section class="admin-stats-grid">
+    <a href="/index.php?action=admin_usuarios" class="admin-stat-card-link">
+        <div class="admin-stat-card">
+            <div class="admin-stat-icon admin-stat-icon-green"><?= render_icon('users', 18) ?></div>
+            <div class="admin-stat-body">
+                <div class="admin-stat-label">Total de usuários</div>
+                <div class="admin-stat-value"><?= $totalUsers ?></div>
+                <div class="admin-stat-meta">+<?= $newWeek ?> novos (7 dias)</div>
+            </div>
+        </div>
+    </a>
+    <a href="/index.php?action=admin_usuarios" class="admin-stat-card-link">
+        <div class="admin-stat-card">
+            <div class="admin-stat-icon admin-stat-icon-blue"><?= render_icon('trending-up', 18) ?></div>
+            <div class="admin-stat-body">
+                <div class="admin-stat-label">Usuários ativos</div>
+                <div class="admin-stat-value"><?= $activeUsers ?></div>
+                <div class="admin-stat-meta">Cadastrados nos últimos 30 dias</div>
+            </div>
+        </div>
+    </a>
+    <a href="/index.php?action=admin_usuarios" class="admin-stat-card-link">
+        <div class="admin-stat-card">
+            <div class="admin-stat-icon admin-stat-icon-purple"><?= render_icon('shield', 18) ?></div>
+            <div class="admin-stat-body">
+                <div class="admin-stat-label">Administradores</div>
+                <div class="admin-stat-value"><?= $adminCount ?></div>
+                <div class="admin-stat-meta">Acesso ao painel admin</div>
+            </div>
+        </div>
+    </a>
+    <a href="/index.php?action=admin_bugs" class="admin-stat-card-link">
+        <div class="admin-stat-card">
+            <div class="admin-stat-icon admin-stat-icon-amber"><?= render_icon('alert', 18) ?></div>
+            <div class="admin-stat-body">
+                <div class="admin-stat-label">Bugs pendentes</div>
+                <div class="admin-stat-value" style="color:#d97706"><?= (int)($bugStats['pendentes'] ?? 0) ?></div>
+                <div class="admin-stat-meta"><?= (int)($bugStats['total'] ?? 0) ?> relatos no total</div>
+            </div>
+        </div>
+    </a>
+    <div class="admin-stat-card">
+        <div class="admin-stat-icon admin-stat-icon-green"><?= render_icon('check', 18) ?></div>
+        <div class="admin-stat-body">
+            <div class="admin-stat-label">Gratuito</div>
+            <div class="admin-stat-value"><?= $freeUsers ?></div>
+            <div class="admin-stat-meta">usuários no plano free</div>
+        </div>
+    </div>
+    <div class="admin-stat-card">
+        <div class="admin-stat-icon admin-stat-icon-blue"><?= render_icon('wallet', 18) ?></div>
+        <div class="admin-stat-body">
+            <div class="admin-stat-label">Pagos ativos</div>
+            <div class="admin-stat-value"><?= $paidUsers ?></div>
+            <div class="admin-stat-meta"><?= $activeSubscriptions ?> assinaturas</div>
+        </div>
+    </div>
+    <div class="admin-stat-card">
+        <div class="admin-stat-icon admin-stat-icon-purple"><?= render_icon('cash', 18) ?></div>
+        <div class="admin-stat-body">
+            <div class="admin-stat-label">Receita mensal</div>
+            <div class="admin-stat-value">R$ <?= number_format(array_sum(array_map(function ($p) use ($planDistribution) {
+                foreach ($planDistribution as $pd) {
+                    if ($pd['plano'] === $p['slug']) return ((float)$p['preco']) * ((int)$pd['total']);
+                }
+                return 0;
+            }, $planos)), 2, ',', '.') ?></div>
+            <div class="admin-stat-meta">Gateway ainda não conectado</div>
+        </div>
+    </div>
+    <a href="/index.php?action=admin_feedback" class="admin-stat-card-link">
+        <div class="admin-stat-card">
+            <div class="admin-stat-icon admin-stat-icon-amber"><?= render_icon('star', 18) ?></div>
+            <div class="admin-stat-body">
+                <div class="admin-stat-label">Feedback pendente</div>
+                <div class="admin-stat-value"><?= (int)($feedbackStats['novos'] ?? 0) ?></div>
+                <div class="admin-stat-meta"><?= (int)($feedbackStats['total'] ?? 0) ?> no total</div>
+            </div>
+        </div>
+    </a>
 </section>
 
-<div style="display:grid;grid-template-columns:1.2fr .8fr;gap:16px">
-    <section class="panel"><header class="panel-header"><div class="panel-title">Usuários recentes</div><a href="/index.php?action=admin_usuarios" class="btn btn-ghost btn-xs">Ver todos</a></header><div class="table-wrap"><table class="data-table"><thead><tr><th>Nome</th><th>E-mail</th><th>Plano</th><th>Data</th></tr></thead><tbody>
-    <?php foreach(($recentUsers??[]) as $u): ?>
-        <tr><td style="font-weight:600"><?= htmlspecialchars($u['nome']) ?> <?= $u['is_admin']?' <span class="badge badge-warning" style="font-size:10px">Admin</span>':'' ?></td><td style="font-size:12px;color:#475569"><?= htmlspecialchars($u['email']) ?></td><td><span class="badge badge-info" style="font-size:11px"><?= htmlspecialchars($u['plano']??'gratuito') ?></span></td><td style="font-size:12px;color:#64748b"><?= date('d/m/Y',strtotime($u['created_at'])) ?></td></tr>
-    <?php endforeach; ?>
-    <?php if(empty($recentUsers)): ?><tr><td colspan="4" class="empty-cell">Nenhum usuário</td></tr><?php endif; ?>
-    </tbody></table></div></section>
+<section class="admin-grid-2">
+    <div class="admin-card">
+        <div class="admin-card-header">
+            <div>
+                <div class="admin-card-title">Crescimento de usuários</div>
+                <div style="font-size:12px;color:var(--admin-text-soft);margin-top:2px">Novos cadastros por semana</div>
+            </div>
+            <span class="admin-badge admin-badge-neutral">12 semanas</span>
+        </div>
+        <div class="admin-card-body">
+            <div class="admin-chart-wrap">
+                <canvas id="chartGrowth" data-labels='<?= json_encode($growthLabels) ?>' data-values='<?= json_encode($growthData) ?>'></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="admin-card">
+        <div class="admin-card-header">
+            <div>
+                <div class="admin-card-title">Distribuição de planos</div>
+                <div style="font-size:12px;color:var(--admin-text-soft);margin-top:2px">Proporção de usuários por plano</div>
+            </div>
+        </div>
+        <div class="admin-card-body">
+            <div class="admin-chart-wrap">
+                <canvas id="chartPlan" data-labels='<?= json_encode($planLabels) ?>' data-values='<?= json_encode($planData) ?>'></canvas>
+            </div>
+        </div>
+    </div>
+</section>
 
-    <section class="panel"><header class="panel-header"><div class="panel-title">Planos</div><a href="/index.php?action=admin_planos" class="btn btn-ghost btn-xs">Ver planos</a></header><div class="panel-body" style="display:flex;flex-direction:column;gap:10px">
-        <?php foreach(($planos??[]) as $p): ?>
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border:1px solid #e2e8f0;border-radius:8px"><div><div style="font-weight:600"><?= htmlspecialchars($p['nome']) ?></div><div style="font-size:11px;color:#64748b"><?= htmlspecialchars($p['slug']) ?></div></div><div style="font-weight:700;color:#059669">R$ <?= number_format((float)$p['preco'],2,',','.') ?></div></div>
+<section class="admin-grid-2">
+    <div class="admin-card">
+        <div class="admin-card-header">
+            <div class="admin-card-title">Usuários recentes</div>
+            <a href="/index.php?action=admin_usuarios" class="admin-btn admin-btn-sm admin-btn-secondary">Ver todos</a>
+        </div>
+        <div class="admin-table-wrap">
+            <table class="admin-table">
+                <thead>
+                    <tr><th>Nome</th><th>Plano</th><th>Cadastro</th></tr>
+                </thead>
+                <tbody>
+                <?php foreach ($recentUsers as $u): ?>
+                    <tr>
+                        <td>
+                            <div class="admin-user-meta">
+                                <span class="admin-user-name">
+                                    <?= htmlspecialchars($u['nome']) ?>
+                                    <?php if (!empty($u['is_admin'])): ?>
+                                        <span class="admin-badge admin-badge-amber" style="font-size:9px;padding:1px 6px;margin-left:4px">Admin</span>
+                                    <?php endif; ?>
+                                </span>
+                                <span class="admin-user-email"><?= htmlspecialchars($u['email']) ?></span>
+                            </div>
+                        </td>
+                        <td><span class="admin-badge admin-badge-blue"><?= htmlspecialchars(ucfirst($u['plano'] ?? 'gratuito')) ?></span></td>
+                        <td style="font-size:12px;color:var(--admin-text-soft);white-space:nowrap"><?= date('d/m/Y', strtotime($u['created_at'])) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                <?php if (empty($recentUsers)): ?>
+                    <tr><td colspan="3"><div class="admin-table-empty"><div class="admin-table-empty-text">Nenhum usuário cadastrado ainda.</div></div></td></tr>
+                <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="admin-card">
+        <div class="admin-card-header">
+            <div class="admin-card-title">Bugs por status</div>
+            <a href="/index.php?action=admin_bugs" class="admin-btn admin-btn-sm admin-btn-secondary">Ver relatos</a>
+        </div>
+        <div class="admin-card-body">
+            <div class="admin-chart-wrap">
+                <canvas id="chartBugs" data-labels='<?= json_encode($bugChartLabels) ?>' data-values='<?= json_encode($bugChartData) ?>' data-colors='<?= json_encode($bugChartColors) ?>'></canvas>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="admin-card">
+    <div class="admin-card-header">
+        <div>
+            <div class="admin-card-title">Planos da plataforma</div>
+            <div style="font-size:12px;color:var(--admin-text-soft);margin-top:2px">Estrutura pronta para gateway futuro — sem cobrança ativa</div>
+        </div>
+        <a href="/index.php?action=admin_planos" class="admin-btn admin-btn-sm admin-btn-secondary">Gerenciar planos</a>
+    </div>
+    <div class="admin-card-body" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px">
+        <?php foreach ($planos as $p): ?>
+            <div class="admin-plan-card">
+                <div class="admin-plan-header">
+                    <span class="admin-plan-name"><?= htmlspecialchars($p['nome']) ?></span>
+                    <span class="admin-badge admin-badge-neutral"><?= htmlspecialchars($p['slug']) ?></span>
+                </div>
+                <div class="admin-plan-price">R$ <?= number_format((float)$p['preco'], 2, ',', '.') ?> <span class="admin-plan-period">/mês</span></div>
+                <div class="admin-plan-desc"><?= htmlspecialchars($p['descricao'] ?? '') ?></div>
+                <div class="admin-plan-count">— usuários</div>
+            </div>
         <?php endforeach; ?>
-        <div style="font-size:11px;color:#64748b;background:#f8fafc;padding:8px;border-radius:6px">Estrutura pronta para gateway futuro — sem cobrança ativa.</div>
-    </div></section>
-</div>
+    </div>
+</section>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
-    <section class="panel"><header class="panel-header"><div class="panel-title">Bugs por status</div></header><div class="panel-body" style="display:flex;gap:12px;flex-wrap:wrap">
-        <span class="badge badge-warning">Pendentes: <?= (int)($bugStats['pendentes']??0) ?></span>
-        <span class="badge badge-info">Em análise: <?= (int)($bugStats['em_analise']??0) ?></span>
-        <span class="badge badge-success">Resolvidos: <?= (int)($bugStats['resolvidos']??0) ?></span>
-        <span class="badge badge-neutral">Total: <?= (int)($bugStats['total']??0) ?></span>
-    </div></section>
-    <section class="panel"><div class="panel-body" style="font-size:12px;color:#475569">Dica: bugs são criados pelos clientes em <b>Reportar problema</b> e aparecem em <b>Relatos de bugs</b>. Alteração de status notifica o cliente em <b>Meus relatos</b>.</div></section>
-</div>
-
-<?php include __DIR__.'/../partials/layout_end.php'; ?>
+<script src="/js/chart.min.js"></script>
+<?php include __DIR__ . '/../partials/admin_layout_end.php'; ?>
