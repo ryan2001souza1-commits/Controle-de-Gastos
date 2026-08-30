@@ -43,8 +43,8 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!data) return;
 
     var catColors = [
-        '#0f766e', '#16a34a', '#dc2626', '#d97706', '#0369a1',
-        '#7c3aed', '#db2777', '#0891b2', '#ca8a04', '#64748b',
+        '#7c3aed', '#10b981', '#ef4444', '#f59e0b', '#3b82f6',
+        '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#64748b',
         '#06b6d4', '#84cc16', '#f97316', '#8b5cf6', '#db2777'
     ];
 
