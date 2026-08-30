@@ -95,6 +95,9 @@ if ($action === 'register') {
     $authController->forgot();
 } elseif ($action === 'reset') {
     $authController->reset();
+} elseif ($action === 'site') {
+    if (!isLoggedIn()) { header('Location: /index.php?action=login'); exit; }
+    $expenseController->dashboard();
 } elseif ($action === 'google-login') {
     $authController->googleLogin();
 } elseif ($action === 'google-callback') {

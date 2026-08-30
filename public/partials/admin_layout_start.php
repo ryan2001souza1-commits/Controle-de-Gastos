@@ -58,7 +58,7 @@ $adminIcons = [
     </nav>
 
     <div class="admin-sidebar-footer">
-        <a href="/index.php" class="admin-sidebar-link admin-sidebar-link-soft">
+        <a href="/index.php?action=site" class="admin-sidebar-link admin-sidebar-link-soft">
             <span class="admin-sidebar-icon"><?= $adminIcons['back'] ?></span>
             <span class="admin-sidebar-label">Voltar ao site</span>
         </a>
