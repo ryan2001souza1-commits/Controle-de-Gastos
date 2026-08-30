@@ -111,9 +111,18 @@ if ($pathInfo !== '/index.php' && $pathInfo !== '/' && !str_starts_with($pathInf
     $real = realpath($viewFile);
     $publicReal = realpath($ROOT . '/public');
     if ($real && $publicReal && str_starts_with($real, $publicReal) && is_file($real) && is_readable($real)) {
-        // Apenas arquivos de view permitidos (evita incluir .env, config, etc.)
-        $allowed = ['/login.php','/register.php','/forgot.php','/reset.php','/dashboard.php','/lancamentos.php','/categorias.php','/metas.php','/orcamentos.php','/relatorios.php','/edit.php','/diag.php'];
+        // Apenas views standalone (sem dependência de $data do controller) podem ser servidas diretamente.
+        // Views com dados (dashboard, lancamentos etc.) DEVEM passar pelo router public/index.php
+        // para que o controller prepare $data, senão renderizam vazias ou quebram.
+        $allowed = ['/login.php','/register.php','/forgot.php','/reset.php'];
         if (in_array($pathInfo, $allowed, true)) {
+            // Carrega o ambiente mínimo antes de incluir a view diretamente.
+            // Garante que render_icon() e isLoggedIn() existam mesmo quando a view
+            // é acessada sem passar pelo router public/index.php.
+            require_once $ROOT . '/public/partials/icons.php';
+            if (file_exists($ROOT . '/src/config/config.php') && !function_exists('isLoggedIn')) {
+                require_once $ROOT . '/src/config/config.php';
+            }
             include $real;
             return;
         }

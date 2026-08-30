@@ -40,6 +40,30 @@ class ExpenseController
             $startDate,
             $endDate
         );
+
+        // Enriquecer com orçamento do mês e metas (evita cards vazios)
+        try {
+            $y = (int)date('Y', strtotime($startDate));
+            $m = (int)date('n', strtotime($startDate));
+            $budgetInfo = $this->budgetService->getBudgetsForPeriod($userId, $y, $m);
+            $data['budget_total'] = $budgetInfo['totals']['limit'] ?? 0;
+            $data['budget_spent'] = $budgetInfo['totals']['spent'] ?? 0;
+            $data['budget'] = $budgetInfo['totals'] ?? ['limit' => 0, 'spent' => 0, 'remaining' => 0, 'percentage' => 0];
+            $data['budgetData'] = $budgetInfo;
+        } catch (Throwable $e) {
+            error_log('[dashboard budget] ' . $e->getMessage());
+        }
+        try {
+            $db = getDBConnection();
+            $goalModel = new Goal($db);
+            $goalService = new GoalService($goalModel);
+            $goalData = $goalService->getGoalsData($userId);
+            $data['goals'] = $goalData['goals'] ?? [];
+        } catch (Throwable $e) {
+            error_log('[dashboard goals] ' . $e->getMessage());
+            $data['goals'] = $data['goals'] ?? [];
+        }
+
         $expenseCategories = $this->categoryModel->findAll($userId, 'despesa');
         $incomeCategories  = $this->categoryModel->findAll($userId, 'receita');
 

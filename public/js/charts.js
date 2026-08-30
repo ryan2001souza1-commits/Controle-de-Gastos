@@ -101,7 +101,8 @@ document.addEventListener('DOMContentLoaded', function () {
     var flowCanvas = document.getElementById('chart-financial-flow');
     var flowEmpty  = document.getElementById('chart-flow-empty');
     if (flowCanvas) {
-        var ff = (data && data.financial_flow) ? data.financial_flow : { labels: [], incomes: [], expenses: [], balance: [] };
+        var _cd0 = (data && data.chart_data) ? data.chart_data : data;
+        var ff = (_cd0 && _cd0.financial_flow) ? _cd0.financial_flow : (data && data.financial_flow) ? data.financial_flow : { labels: [], incomes: [], expenses: [], balance: [] };
         if (!ff.labels || ff.labels.length === 0) {
             emptyState(flowCanvas, flowEmpty);
         } else {
@@ -200,11 +201,13 @@ document.addEventListener('DOMContentLoaded', function () {
     var catCanvas = document.getElementById('chart-expenses-by-category');
     var catEmpty  = document.getElementById('chart-category-empty');
     if (catCanvas) {
+        var _cd1 = (data && data.chart_data) ? data.chart_data : data;
+        var _ebc = (_cd1 && _cd1.expenses_by_category) ? _cd1.expenses_by_category : (data && data.expenses_by_category) ? data.expenses_by_category : null;
         var chartCats = (data && Array.isArray(data.categories_chart) && data.categories_chart.length)
             ? data.categories_chart
-            : (data && data.expenses_by_category && Array.isArray(data.expenses_by_category.labels) && data.expenses_by_category.labels.length
-                ? data.expenses_by_category.labels.map(function (l, i) {
-                    var v = (data.expenses_by_category.values || [])[i] || 0;
+            : (_ebc && Array.isArray(_ebc.labels) && _ebc.labels.length
+                ? _ebc.labels.map(function (l, i) {
+                    var v = (_ebc.values || _ebc.data || [])[i] || 0;
                     return { label: l, value: v, color: null };
                 })
                 : []);
@@ -267,8 +270,9 @@ document.addEventListener('DOMContentLoaded', function () {
     var periodCanvas = document.getElementById('chart-income-vs-expense');
     var periodEmpty  = document.getElementById('chart-period-empty');
     if (periodCanvas) {
-        var iRows = data.income_by_period || [];
-        var eRows = data.expense_by_period || [];
+        var _cd2 = (data && data.chart_data) ? data.chart_data : data;
+        var iRows = (_cd2 && _cd2.income_by_period) ? _cd2.income_by_period : (data.income_by_period || []);
+        var eRows = (_cd2 && _cd2.expense_by_period) ? _cd2.expense_by_period : (data.expense_by_period || []);
         if (iRows.length === 0 && eRows.length === 0) {
             emptyState(periodCanvas, periodEmpty);
         } else {
@@ -366,7 +370,8 @@ document.addEventListener('DOMContentLoaded', function () {
     var balCanvas = document.getElementById('chart-balance-evolution');
     var balEmpty  = document.getElementById('chart-balance-empty');
     if (balCanvas) {
-        var bal = data.balance_evolution || { labels: [], balance: [] };
+        var _cd3 = (data && data.chart_data) ? data.chart_data : data;
+        var bal = (_cd3 && _cd3.balance_evolution) ? _cd3.balance_evolution : (data.balance_evolution || { labels: [], balance: [] });
         if (!bal.labels || bal.labels.length === 0) {
             emptyState(balCanvas, balEmpty);
         } else {
