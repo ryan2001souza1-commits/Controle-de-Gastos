@@ -21,20 +21,17 @@ $economyPct    = $totalIncomes > 0 ? round((($totalIncomes - $totalExpenses) / $
 $startDate = $_GET['start_date'] ?? date('Y-m-01');
 $endDate   = $_GET['end_date']   ?? date('Y-m-t');
 
-$categoriesTable = $data['expenses_by_category_table'] ?? [];
+$categoriesTable   = $data['expenses_by_category_table'] ?? [];
 $recentTransactions = $data['recent_transactions'] ?? [];
-$topCategory = !empty($categoriesTable) ? $categoriesTable[0] : null;
 
 $goals = $data['goals'] ?? [];
 $goalsTop = array_slice($goals, 0, 2);
 
-// Budget data
 $budgetTotal  = (float)($data['budget_total']  ?? ($data['budget']['limit'] ?? 0));
 $budgetSpent  = (float)($data['budget_spent']  ?? ($data['budget']['spent'] ?? 0));
 $budgetRemain = $budgetTotal - $budgetSpent;
 $budgetPct    = $budgetTotal > 0 ? min(100, round(($budgetSpent / $budgetTotal) * 100)) : 0;
 
-// Period comparison deltas
 $prevIncomes  = (float)($data['prev_total_incomes']  ?? 0);
 $prevExpenses = (float)($data['prev_total_expenses'] ?? 0);
 $prevBalance  = (float)($data['prev_balance']        ?? 0);
@@ -51,12 +48,34 @@ $activeMenu = 'dashboard';
 $pagePeriodFrom = date('d/m/Y', strtotime($startDate));
 $pagePeriodTo   = date('d/m/Y', strtotime($endDate));
 
-// category colors (assigned by index)
+// Cores das categorias (paleta consistente com a referência)
 $catPalette = [
-    '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899',
-    '#06b6d4', '#ef4444', '#22c55e', '#0ea5e9', '#a855f7',
-    '#f97316', '#14b8a6', '#6366f1', '#84cc16', '#64748b',
+    '#10b981', '#3b82f6', '#f59e0b', '#a855f7', '#06b6d4',
+    '#94a3b8', '#ec4899', '#22c55e', '#0ea5e9', '#f97316',
+    '#14b8a6', '#6366f1', '#ef4444', '#84cc16', '#64748b',
 ];
+
+// limita e normaliza tabela de categorias p/ donut + lista
+$categoriesDisplay = array_slice($categoriesTable, 0, 6);
+$otherTotal = 0;
+foreach (array_slice($categoriesTable, 6) as $extra) {
+    $otherTotal += (float)($extra['tx_total'] ?? 0);
+}
+$chartCategories = [];
+foreach ($categoriesDisplay as $c) {
+    $chartCategories[] = [
+        'label' => $c['name'],
+        'value' => (float)($c['tx_total'] ?? 0),
+        'color' => $c['color'] ?? null,
+    ];
+}
+if ($otherTotal > 0) {
+    $chartCategories[] = [
+        'label' => 'Outros',
+        'value' => $otherTotal,
+        'color' => null,
+    ];
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -85,15 +104,15 @@ $catPalette = [
     <?php endif; ?>
 
     <!-- ===== 4 METRIC CARDS ===== -->
-    <section class="metric-strip">
+    <section class="metric-strip dash-metrics">
         <article class="metric-card">
             <div class="metric-card-icon is-success"><?= render_icon('trending-up', 18) ?></div>
             <div class="metric-card-body">
                 <div class="metric-card-label">Receitas</div>
-                <div class="metric-card-value is-positive">R$ <?= fmtBRL($totalIncomes) ?></div>
+                <div class="metric-card-value is-positive" data-counter="<?= fmtBRL($totalIncomes) ?>">R$ 0,00</div>
                 <div class="metric-card-trend <?= $deltaIncome >= 0 ? 'is-up' : 'is-down' ?>">
                     <?= $deltaIncome >= 0 ? '↑' : '↓' ?> <?= abs($deltaIncome) ?>%
-                    <span class="text-muted" style="font-weight:400">em relação ao mês anterior</span>
+                    <span class="trend-caption">em relação ao mês anterior</span>
                 </div>
             </div>
         </article>
@@ -102,10 +121,10 @@ $catPalette = [
             <div class="metric-card-icon is-danger"><?= render_icon('trending-down', 18) ?></div>
             <div class="metric-card-body">
                 <div class="metric-card-label">Despesas</div>
-                <div class="metric-card-value is-negative">R$ <?= fmtBRL($totalExpenses) ?></div>
+                <div class="metric-card-value is-negative" data-counter="<?= fmtBRL($totalExpenses) ?>">R$ 0,00</div>
                 <div class="metric-card-trend <?= $deltaExpense >= 0 ? 'is-up' : 'is-down' ?>">
                     <?= $deltaExpense >= 0 ? '↑' : '↓' ?> <?= abs($deltaExpense) ?>%
-                    <span class="text-muted" style="font-weight:400">em relação ao mês anterior</span>
+                    <span class="trend-caption">em relação ao mês anterior</span>
                 </div>
             </div>
         </article>
@@ -114,10 +133,10 @@ $catPalette = [
             <div class="metric-card-icon is-primary"><?= render_icon('wallet', 18) ?></div>
             <div class="metric-card-body">
                 <div class="metric-card-label">Saldo</div>
-                <div class="metric-card-value">R$ <?= fmtBRL($balance) ?></div>
+                <div class="metric-card-value" data-counter="<?= fmtBRL($balance) ?>">R$ 0,00</div>
                 <div class="metric-card-trend <?= $deltaBalance >= 0 ? 'is-up' : 'is-down' ?>">
                     <?= $deltaBalance >= 0 ? '↑' : '↓' ?> <?= abs($deltaBalance) ?>%
-                    <span class="text-muted" style="font-weight:400">em relação ao mês anterior</span>
+                    <span class="trend-caption">em relação ao mês anterior</span>
                 </div>
             </div>
         </article>
@@ -129,8 +148,8 @@ $catPalette = [
             </div>
             <div class="metric-card-value is-primary"><?= $budgetPct ?>%</div>
             <div class="text-muted text-xs" style="margin-top:2px">Do orçamento utilizado</div>
-            <div class="progress-bar" style="margin-top:10px">
-                <div class="progress-fill" style="width:<?= $budgetPct ?>%"></div>
+            <div class="progress-bar is-large" style="margin-top:12px">
+                <div class="progress-fill" data-width="<?= $budgetPct ?>" style="width:0%"></div>
             </div>
         </article>
     </section>
@@ -146,12 +165,14 @@ $catPalette = [
                     <span class="legend-item"><span class="legend-swatch" style="background:#10b981"></span>Receitas</span>
                     <span class="legend-item"><span class="legend-swatch" style="background:#ef4444"></span>Despesas</span>
                 </div>
-                <select class="select-wrap" style="width:auto;padding:4px 24px 4px 10px;font-size:11.5px;border-radius:8px;border:1px solid var(--color-border);background:var(--color-surface)">
-                    <option>6 meses</option>
-                    <option>12 meses</option>
-                </select>
+                <div class="select-wrap dash-range-select">
+                    <select aria-label="Período">
+                        <option>6 meses</option>
+                        <option>12 meses</option>
+                    </select>
+                </div>
             </header>
-            <div class="chart-wrap" style="min-height:260px">
+            <div class="chart-wrap" style="min-height:300px">
                 <canvas id="chart-financial-flow"></canvas>
             </div>
             <div class="chart-empty" id="chart-flow-empty">Sem lançamentos no período.</div>
@@ -163,14 +184,33 @@ $catPalette = [
                     <div class="chart-card-title">Despesas por categoria</div>
                 </div>
             </header>
-            <div class="chart-wrap" style="min-height:260px;position:relative">
-                <canvas id="chart-expenses-by-category"></canvas>
-                <div class="donut-center">
-                    <div class="donut-center-label">Total</div>
-                    <div class="donut-center-value">R$ <?= fmtBRL($totalExpenses) ?></div>
+            <div class="dash-donut-wrap">
+                <div class="dash-donut">
+                    <canvas id="chart-expenses-by-category"></canvas>
+                    <?php if ($totalExpenses > 0): ?>
+                    <div class="dash-donut-center" aria-hidden="true"></div>
+                    <?php endif; ?>
                 </div>
+                <ul class="dash-category-list">
+                    <?php if (empty($chartCategories)): ?>
+                        <li class="dash-category-empty">Nenhuma despesa registrada.</li>
+                    <?php else: foreach ($chartCategories as $idx => $c):
+                        $pct = $totalExpenses > 0 ? round(($c['value'] / $totalExpenses) * 100, 1) : 0;
+                        $dot = $c['color'] ?: $catPalette[$idx % count($catPalette)];
+                    ?>
+                        <li class="dash-category-item">
+                            <span class="dash-cat-dot" style="background:<?= htmlspecialchars($dot) ?>"></span>
+                            <span class="dash-cat-name"><?= htmlspecialchars($c['label']) ?></span>
+                            <span class="dash-cat-value">R$ <?= fmtBRL($c['value']) ?></span>
+                            <span class="dash-cat-pct"><?= number_format($pct, 1, ',', '.') ?>%</span>
+                        </li>
+                    <?php endforeach; endif; ?>
+                </ul>
             </div>
-            <div class="chart-empty" id="chart-category-empty">Nenhuma despesa registrada.</div>
+            <div class="dash-donut-footer">
+                <span class="dash-donut-footer-label">Total</span>
+                <span class="dash-donut-footer-value">R$ <?= fmtBRL($totalExpenses) ?></span>
+            </div>
         </article>
     </section>
 
@@ -181,26 +221,26 @@ $catPalette = [
                 <div class="chart-card-title">Orçamento do mês</div>
             </header>
             <div class="panel-body">
-                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-4);margin-bottom:14px">
+                <div class="dash-budget-grid">
                     <div>
                         <div class="metric-card-label">Orçamento total</div>
-                        <div class="metric-card-value" style="margin-top:6px">R$ <?= fmtBRL($budgetTotal) ?></div>
+                        <div class="dash-budget-value" data-counter="<?= fmtBRL($budgetTotal) ?>">R$ 0,00</div>
                     </div>
                     <div>
                         <div class="metric-card-label">Utilizado</div>
-                        <div class="metric-card-value" style="margin-top:6px;color:var(--color-danger)">R$ <?= fmtBRL($budgetSpent) ?></div>
+                        <div class="dash-budget-value is-negative" data-counter="<?= fmtBRL($budgetSpent) ?>">R$ 0,00</div>
                     </div>
                     <div>
                         <div class="metric-card-label">Disponível</div>
-                        <div class="metric-card-value" style="margin-top:6px;color:var(--color-success)">R$ <?= fmtBRL(max(0, $budgetRemain)) ?></div>
+                        <div class="dash-budget-value is-positive" data-counter="<?= fmtBRL(max(0, $budgetRemain)) ?>">R$ 0,00</div>
                     </div>
                 </div>
-                <div class="progress-with-label">
-                    <div class="progress-bar is-large"><div class="progress-fill" style="width:<?= $budgetPct ?>%"></div></div>
+                <div class="progress-with-label" style="margin-top:6px">
+                    <div class="progress-bar is-large"><div class="progress-fill" data-width="<?= $budgetPct ?>" style="width:0%"></div></div>
                     <span class="progress-label"><?= $budgetPct ?>%</span>
                 </div>
                 <?php if ($budgetRemain > 0): ?>
-                <div class="inline-info" style="margin-top:14px;margin-bottom:0">
+                <div class="inline-info" style="margin-top:18px;margin-bottom:0">
                     <?= render_icon('check', 13) ?>
                     <span>Você ainda pode gastar <strong>R$ <?= fmtBRL($budgetRemain) ?></strong> este mês.</span>
                 </div>
@@ -213,74 +253,36 @@ $catPalette = [
                 <div class="chart-card-title">Metas</div>
                 <a href="/index.php?action=metas" class="btn btn-link btn-xs">Ver todas</a>
             </header>
-            <div class="panel-body" style="display:flex;flex-direction:column;gap:14px">
+            <div class="panel-body" style="display:flex;flex-direction:column;gap:18px">
                 <?php if (empty($goalsTop)): ?>
                     <div class="text-muted text-sm" style="padding:8px 0">Nenhuma meta cadastrada ainda.</div>
-                <?php else: foreach ($goalsTop as $g):
+                <?php else: foreach ($goalsTop as $i => $g):
                     $pct = min(100, (int)($g['percentage'] ?? 0));
                     $barColor = ($g['status'] ?? '') === 'completed' ? '#10b981' : (($g['status'] ?? '') === 'overdue' ? '#ef4444' : '#10b981');
                     $iconName = !empty($g['icon']) ? $g['icon'] : 'target';
+                    // amarelo p/ 1ª meta, azul p/ 2ª (como na referência)
+                    $iconBg = $i === 0 ? '#fef3c7' : '#dbeafe';
+                    $iconFg = $i === 0 ? '#d97706' : '#2563eb';
                 ?>
-                    <div style="display:flex;gap:12px;align-items:flex-start">
-                        <div class="goal-card-icon" style="background:var(--color-primary-soft);color:var(--color-primary)">
-                            <?= category_icon_svg($iconName, 18) ?>
+                    <div class="dash-goal">
+                        <div class="dash-goal-icon" style="background:<?= $iconBg ?>;color:<?= $iconFg ?>">
+                            <?= render_icon($iconName, 20) ?>
                         </div>
-                        <div style="flex:1;min-width:0">
-                            <div style="display:flex;justify-content:space-between;align-items:baseline">
-                                <div class="td-strong"><?= htmlspecialchars($g['name']) ?></div>
-                                <span class="metric-card-value" style="font-size:13px;color:var(--color-success)"><?= $pct ?>%</span>
+                        <div class="dash-goal-body">
+                            <div class="dash-goal-head">
+                                <div class="dash-goal-name"><?= htmlspecialchars($g['name']) ?></div>
+                                <div class="dash-goal-pct"><?= $pct ?>%</div>
                             </div>
-                            <div class="text-muted text-xs" style="margin-top:2px;margin-bottom:6px">
-                                R$ <?= fmtBRL($g['saved'] ?? 0) ?> de R$ <?= fmtBRL($g['target'] ?? 0) ?>
+                            <div class="dash-goal-values">R$ <?= fmtBRL($g['saved'] ?? 0) ?> de R$ <?= fmtBRL($g['target'] ?? 0) ?></div>
+                            <div class="progress-bar" style="margin-top:6px">
+                                <div class="progress-fill" data-width="<?= $pct ?>" style="width:0%;background:<?= $barColor ?>"></div>
                             </div>
-                            <div class="progress-bar"><div class="progress-fill" style="width:<?= $pct ?>%;background:<?= $barColor ?>"></div></div>
                         </div>
                     </div>
                 <?php endforeach; endif; ?>
             </div>
         </article>
     </section>
-
-    <!-- ===== ÚLTIMOS LANÇAMENTOS ===== -->
-    <?php if (!empty($recentTransactions)): ?>
-    <section class="panel" style="margin-bottom:var(--space-5)">
-        <header class="panel-header">
-            <div>
-                <div class="panel-title">Últimos lançamentos</div>
-                <div class="panel-subtitle">Movimentações mais recentes do período</div>
-            </div>
-            <a href="/index.php?action=lancamentos" class="btn btn-ghost btn-xs">Ver todos</a>
-        </header>
-        <div class="table-wrap">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Descrição</th>
-                        <th>Categoria</th>
-                        <th>Data</th>
-                        <th class="th-numeric">Valor</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach (array_slice($recentTransactions, 0, 6) as $t):
-                        $txType = $t['type'] ?? '';
-                        $txClass = $txType === 'despesa' ? 'td-negative' : 'td-positive';
-                    ?>
-                    <tr>
-                        <td>
-                            <div class="td-strong"><?= htmlspecialchars($t['description'] ?? '') ?></div>
-                            <div class="td-muted text-xs"><?= $txType === 'despesa' ? 'Despesa' : 'Receita' ?></div>
-                        </td>
-                        <td class="td-muted"><?= htmlspecialchars($t['category_name'] ?? '—') ?></td>
-                        <td class="td-mono td-muted"><?= isset($t['date']) ? date('d/m', strtotime($t['date'])) : '—' ?></td>
-                        <td class="td-numeric <?= $txClass ?>"><?= $txType === 'despesa' ? '- ' : '+ ' ?>R$ <?= fmtBRL($t['amount'] ?? 0) ?></td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-    </section>
-    <?php endif; ?>
 
     <!-- ===== INFO BANNER ===== -->
     <div class="info-banner">
@@ -290,9 +292,14 @@ $catPalette = [
     </div>
 
 <?php
-$extraScripts = '<script src="/assets/chart.min.js"></script>' . "\n";
-$extraScripts .= '<script>window.DASHBOARD_CHART_DATA = ' . json_encode($chartData, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP|JSON_UNESCAPED_UNICODE) . ';</script>' . "\n";
-$extraScripts .= '<script>window.DASHBOARD_MONTHLY_COMPARISON = ' . json_encode($data['monthly_comparison'] ?? [], JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP|JSON_UNESCAPED_UNICODE) . ';</script>' . "\n";
+$dashData = [
+    'chart_data'         => $chartData,
+    'categories_chart'   => $chartCategories,
+    'total_expenses'     => $totalExpenses,
+];
+$extraScripts  = '<script src="/assets/chart.min.js"></script>' . "\n";
+$extraScripts .= '<script>window.DASHBOARD_CHART_DATA = ' . json_encode($dashData, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP|JSON_UNESCAPED_UNICODE) . ';</script>' . "\n";
 $extraScripts .= '<script src="/js/charts.js"></script>' . "\n";
+$extraScripts .= '<script src="/js/dashboard.js"></script>' . "\n";
 include __DIR__ . '/partials/layout_end.php';
 ?>

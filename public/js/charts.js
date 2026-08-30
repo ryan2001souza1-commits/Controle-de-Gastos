@@ -186,8 +186,18 @@ document.addEventListener('DOMContentLoaded', function () {
     var catCanvas = document.getElementById('chart-expenses-by-category');
     var catEmpty  = document.getElementById('chart-category-empty');
     if (catCanvas) {
-        var cLabels = data.expenses_by_category.labels || [];
-        var cValues = data.expenses_by_category.values || [];
+        var chartCats = (data.categories_chart && data.categories_chart.length)
+            ? data.categories_chart
+            : (data.expenses_by_category && data.expenses_by_category.labels
+                ? data.expenses_by_category.labels.map(function (l, i) {
+                    return { label: l, value: (data.expenses_by_category.values || [])[i] || 0, color: null };
+                })
+                : []);
+        var cLabels = chartCats.map(function (c) { return c.label; });
+        var cValues = chartCats.map(function (c) { return c.value; });
+        var cColors = chartCats.map(function (c, i) {
+            return c.color || catColors[i % catColors.length];
+        });
         if (cLabels.length === 0) {
             emptyState(catCanvas, catEmpty);
         } else {
@@ -200,10 +210,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     labels: cLabels,
                     datasets: [{
                         data: cValues,
-                        backgroundColor: cLabels.map(function (_, i) { return catColors[i % catColors.length]; }),
+                        backgroundColor: cColors,
                         borderColor: '#fff',
                         borderWidth: 2.5,
-                        hoverOffset: 12,
+                        hoverOffset: 10,
                         hoverBorderWidth: 3,
                         spacing: 2
                     }]
@@ -211,7 +221,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    cutout: '64%',
+                    cutout: '60%',
                     animation: {
                         animateRotate: true,
                         animateScale: false,
@@ -223,16 +233,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         numbers: { duration: 600, easing: 'easeOutQuart' }
                     },
                     plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: {
-                                padding: 14,
-                                usePointStyle: true,
-                                pointStyle: 'circle',
-                                boxWidth: 8,
-                                font: { size: 11.5 }
-                            }
-                        },
+                        legend: { display: false },
                         tooltip: Object.assign({}, tooltipBase, {
                             callbacks: {
                                 label: function (ctx) {
