@@ -1,16 +1,15 @@
 <?php
-$pageTitle = $pageTitle ?? 'Categorias - Controle de Gastos';
+$pageTitle = 'Categorias';
+$pageSubtitle = 'Gerencie suas categorias de receitas e despesas.';
 $userName  = $userName  ?? ($_SESSION['user_name'] ?? 'Usuário');
 $userInitials = strtoupper(substr($userName, 0, 1));
 
 $activeMenu = 'categorias';
 $pageEyebrow = 'Configurações';
-$pageTitle = 'Categorias';
-$pagePeriodFrom = isset($startDate) ? date('d/m/Y', strtotime($startDate)) : null;
-$pagePeriodTo   = isset($endDate)   ? date('d/m/Y', strtotime($endDate))   : null;
 
 $msgs = [
     '1' => 'Categoria adicionada!',
+    'created' => 'Categoria criada com sucesso!',
     'updated' => 'Categoria atualizada!',
     'deleted' => 'Categoria excluída!',
 ];
@@ -20,13 +19,33 @@ $errs = [
     'not_found'         => 'Categoria não encontrada.',
     'category_in_use'   => 'Não é possível excluir: existem lançamentos vinculados a esta categoria.',
 ];
+
+$palette = [
+    '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899',
+    '#06b6d4', '#ef4444', '#22c55e', '#0ea5e9', '#a855f7',
+];
+
+$activeTab = $_GET['tab'] ?? 'despesa';
+$categories = $activeTab === 'despesa' ? ($expenseCats ?? []) : ($incomeCats ?? []);
+$totalSpent = array_sum(array_column($categories, 'tx_total'));
+$totalCount = count($categories);
+
+$startDate = $_GET['start_date'] ?? date('Y-m-01');
+$endDate   = $_GET['end_date']   ?? date('Y-m-t');
+$pagePeriodFrom = date('d/m/Y', strtotime($startDate));
+$pagePeriodTo   = date('d/m/Y', strtotime($endDate));
+
+$searchFilter = trim($_GET['search'] ?? '');
+if ($searchFilter !== '') {
+    $categories = array_filter($categories, fn($c) => stripos($c['name'], $searchFilter) !== false);
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($pageTitle) ?> - Controle de Gastos</title>
+    <title>Categorias - Controle de Gastos</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -37,241 +56,276 @@ $errs = [
 <?php include __DIR__ . '/partials/layout_start.php'; ?>
 
     <?php if (isset($_GET['success'])): ?>
-        <div class="alert alert-success" role="status">
-            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-            <span><?= htmlspecialchars($msgs[$_GET['success']] ?? 'Operação realizada com sucesso!') ?></span>
-        </div>
+        <div class="alert alert-success" role="status"><?= render_icon('check', 13) ?><span><?= htmlspecialchars($msgs[$_GET['success']] ?? 'Operação realizada com sucesso!') ?></span></div>
     <?php endif; ?>
     <?php if (isset($_GET['error'])): ?>
-        <div class="alert alert-error" role="alert">
-            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            <span><?= htmlspecialchars($errs[$_GET['error']] ?? 'Ocorreu um erro.') ?></span>
-        </div>
+        <div class="alert alert-error" role="alert"><?= render_icon('info', 13) ?><span><?= htmlspecialchars($errs[$_GET['error']] ?? 'Ocorreu um erro.') ?></span></div>
     <?php endif; ?>
 
-    <section class="metrics-strip">
+    <!-- ===== 4 METRIC CARDS ===== -->
+    <section class="metric-strip">
         <article class="metric-card">
-            <div class="metric-card-head">
-                <span class="metric-card-label">Categ. Despesa</span>
-                <span class="metric-card-icon is-danger" aria-hidden="true">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg>
-                </span>
+            <div class="metric-card-icon is-danger"><?= render_icon('folder', 18) ?></div>
+            <div class="metric-card-body">
+                <div class="metric-card-label">Categorias de Despesa</div>
+                <div class="metric-card-value is-negative"><?= count($expenseCats ?? []) ?></div>
+                <div class="metric-card-trend">cadastradas</div>
             </div>
-            <div class="metric-card-value is-negative"><?= count($expenseCats) ?></div>
-            <div class="metric-card-sub">cadastradas</div>
         </article>
         <article class="metric-card">
-            <div class="metric-card-head">
-                <span class="metric-card-label">Categ. Receita</span>
-                <span class="metric-card-icon is-success" aria-hidden="true">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
-                </span>
+            <div class="metric-card-icon is-success"><?= render_icon('folder', 18) ?></div>
+            <div class="metric-card-body">
+                <div class="metric-card-label">Categorias de Receita</div>
+                <div class="metric-card-value is-positive"><?= count($incomeCats ?? []) ?></div>
+                <div class="metric-card-trend">cadastradas</div>
             </div>
-            <div class="metric-card-value is-positive"><?= count($incomeCats) ?></div>
-            <div class="metric-card-sub">cadastradas</div>
         </article>
         <article class="metric-card">
-            <div class="metric-card-head">
-                <span class="metric-card-label">Total</span>
-                <span class="metric-card-icon is-primary" aria-hidden="true">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/></svg>
-                </span>
+            <div class="metric-card-icon is-primary"><?= render_icon('layers', 18) ?></div>
+            <div class="metric-card-body">
+                <div class="metric-card-label">Total</div>
+                <div class="metric-card-value"><?= count($expenseCats ?? []) + count($incomeCats ?? []) ?></div>
+                <div class="metric-card-trend">categorias</div>
             </div>
-            <div class="metric-card-value"><?= count($expenseCats) + count($incomeCats) ?></div>
-            <div class="metric-card-sub">categorias</div>
         </article>
-        <article class="metric-card">
+        <article class="metric-card is-block">
             <div class="metric-card-head">
-                <span class="metric-card-label">Período</span>
-                <span class="metric-card-icon is-info" aria-hidden="true">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                </span>
+                <div class="metric-card-label">Gasto no período</div>
+                <div class="metric-card-icon is-info"><?= render_icon('pie', 18) ?></div>
             </div>
-            <div class="metric-card-value"><?= htmlspecialchars(date('m/Y', strtotime($startDate))) ?></div>
-            <div class="metric-card-sub">atual</div>
+            <div class="metric-card-value is-primary">R$ <?= number_format($totalSpent, 2, ',', '.') ?></div>
+            <div class="text-muted text-xs" style="margin-top:2px">Total de gastos</div>
         </article>
     </section>
 
-    <section class="filter-bar">
-        <form method="GET" action="/index.php?action=categorias" class="filter-form" id="filterForm">
-            <input type="hidden" name="action" value="categorias">
-            <div class="filter-group">
-                <label for="inputStartDate">De</label>
-                <input type="date" name="start_date" id="inputStartDate" value="<?= htmlspecialchars($startDate) ?>">
+    <!-- ===== TABS ===== -->
+    <div class="tabs" role="tablist">
+        <a href="?action=categorias&tab=despesa" class="tab-item <?= $activeTab === 'despesa' ? 'is-active' : '' ?>" role="tab" aria-selected="<?= $activeTab === 'despesa' ? 'true' : 'false' ?>">
+            <?= render_icon('trending-down', 14) ?>
+            Despesas
+            <span class="tab-badge"><?= count($expenseCats ?? []) ?></span>
+        </a>
+        <a href="?action=categorias&tab=receita" class="tab-item <?= $activeTab === 'receita' ? 'is-active' : '' ?>" role="tab" aria-selected="<?= $activeTab === 'receita' ? 'true' : 'false' ?>">
+            <?= render_icon('trending-up', 14) ?>
+            Receitas
+            <span class="tab-badge"><?= count($incomeCats ?? []) ?></span>
+        </a>
+    </div>
+
+    <!-- ===== TABLE PANEL ===== -->
+    <section class="panel" style="margin-bottom:var(--space-5)">
+        <header class="panel-header">
+            <div>
+                <div class="panel-title"><?= $activeTab === 'despesa' ? 'Categorias de Despesa' : 'Categorias de Receita' ?></div>
+                <div class="panel-subtitle"><?= count($categories) ?> categoria(s)</div>
             </div>
-            <div class="filter-group">
-                <label for="inputEndDate">Até</label>
-                <input type="date" name="end_date" id="inputEndDate" value="<?= htmlspecialchars($endDate) ?>">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <form method="GET" action="" class="search-input" style="width:220px;flex:none">
+                    <input type="hidden" name="action" value="categorias">
+                    <input type="hidden" name="tab" value="<?= $activeTab ?>">
+                    <?= render_icon('search', 13) ?>
+                    <input type="text" name="search" placeholder="Buscar..." value="<?= htmlspecialchars($searchFilter) ?>" autocomplete="off">
+                </form>
+                <button type="button" class="btn btn-primary btn-sm" onclick="openNewCategory()">
+                    <?= render_icon('plus', 13) ?>
+                    Nova categoria
+                </button>
             </div>
-            <div class="filter-actions">
-                <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
-                <a href="/index.php?action=categorias" class="btn btn-ghost btn-sm">Limpar</a>
-            </div>
-        </form>
+        </header>
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Categoria</th>
+                        <th>Cor</th>
+                        <th class="th-numeric">Gasto no mês</th>
+                        <th class="th-numeric">% do total</th>
+                        <th>Status</th>
+                        <th class="th-actions">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (empty($categories)): ?>
+                        <tr><td colspan="6" class="empty-cell">Nenhuma categoria encontrada.</td></tr>
+                    <?php else: foreach ($categories as $c):
+                        $cid    = (int)($c['id'] ?? 0);
+                        $cname  = $c['name'] ?? '';
+                        $ctype  = $c['type'] ?? 'despesa';
+                        $ctotal = (float)($c['tx_total'] ?? 0);
+                        $ccount = (int)($c['tx_count'] ?? 0);
+                        $cpct   = $totalSpent > 0 ? round(($ctotal / $totalSpent) * 100) : 0;
+                        $cicon  = $c['icon'] ?? 'tag';
+                        $ccolor = $c['color'] ?? $palette[array_search($cid, array_column($categories, 'id')) % count($palette)];
+                        $cactive = (bool)($c['active'] ?? true);
+                        $statusBadge = $cactive ? 'badge-success' : 'badge-muted';
+                        $statusLabel = $cactive ? 'Ativa' : 'Inativa';
+                    ?>
+                    <tr data-id="<?= $cid ?>">
+                        <td>
+                            <div class="cat-cell">
+                                <div class="cat-icon" style="background:<?= htmlspecialchars($ccolor) ?>">
+                                    <?= category_icon_svg($cicon, 14) ?>
+                                </div>
+                                <div class="cat-cell-meta">
+                                    <span class="cat-cell-name"><?= htmlspecialchars($cname) ?></span>
+                                    <span class="cat-cell-desc"><?= $ccount ?> lançamento(s)</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <div style="display:flex;align-items:center;gap:8px">
+                                <span style="width:20px;height:20px;border-radius:50%;background:<?= htmlspecialchars($ccolor) ?>;display:inline-block;border:2px solid rgba(255,255,255,0.15)"></span>
+                                <span class="text-mono text-xs" style="color:var(--color-text-3)"><?= strtoupper($ccolor) ?></span>
+                            </div>
+                        </td>
+                        <td class="td-numeric td-negative">R$ <?= number_format($ctotal, 2, ',', '.') ?></td>
+                        <td>
+                            <div class="progress-with-label">
+                                <div class="progress-bar"><div class="progress-fill" style="width:<?= $cpct ?>%"></div></div>
+                                <span class="progress-label"><?= $cpct ?>%</span>
+                            </div>
+                        </td>
+                        <td><span class="badge <?= $statusBadge ?>"><?= $statusLabel ?></span></td>
+                        <td>
+                            <div class="row-actions">
+                                <button type="button" class="row-action-btn is-edit" title="Editar" onclick='openEditCategory(<?= json_encode(['id'=>$cid,'name'=>$cname,'type'=>$ctype,'color'=>$ccolor,'icon'=>$cicon], JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP) ?>)'>
+                                    <?= render_icon('edit', 13) ?>
+                                </button>
+                                <form action="/index.php?action=delete_category" method="POST" style="display:inline" onsubmit="return confirm('Deseja realmente excluir esta categoria?')">
+                                    <input type="hidden" name="id" value="<?= $cid ?>">
+                                    <button type="submit" class="row-action-btn is-danger" title="Excluir">
+                                        <?= render_icon('trash', 13) ?>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php endforeach; endif; ?>
+                </tbody>
+            </table>
+        </div>
     </section>
 
-    <section class="charts-grid charts-grid-2">
-        <article class="panel">
-            <header class="panel-header">
-                <div>
-                    <div class="panel-title">Categorias de Despesa</div>
-                    <div class="panel-subtitle"><?= count($expenseCats) ?> cadastrada(s)</div>
-                </div>
+    <!-- ===== MODAL: Nova / Editar Categoria ===== -->
+    <div class="modal-overlay" id="categoryModal" role="dialog" aria-modal="true" aria-labelledby="modal-title" style="display:none">
+        <div class="modal">
+            <header class="modal-header">
+                <div class="modal-title" id="modal-title">Nova categoria</div>
+                <button type="button" class="modal-close" onclick="closeCategoryModal()" aria-label="Fechar"><?= render_icon('x', 16) ?></button>
             </header>
-            <?php if (empty($expenseCats)): ?>
-                <div class="panel-body">
-                    <div class="empty-state">Nenhuma categoria de despesa cadastrada.</div>
-                </div>
-            <?php else: ?>
-                <div class="table-wrap">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Nome</th>
-                                <th class="th-numeric">Lançamentos</th>
-                                <th class="th-numeric">Total</th>
-                                <th class="th-actions">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($expenseCats as $c): ?>
-                                <tr>
-                                    <td class="td-strong"><?= htmlspecialchars($c['name']) ?></td>
-                                    <td class="td-numeric"><?= (int)($c['tx_count'] ?? 0) ?></td>
-                                    <td class="td-numeric td-negative">R$ <?= number_format((float)($c['tx_total'] ?? 0), 2, ',', '.') ?></td>
-                                    <td class="actions-cell">
-                                        <button class="btn btn-ghost btn-xs" type="button" onclick="editCategory(<?= (int)$c['id'] ?>, <?= json_encode($c['name'], JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP) ?>, 'despesa')">Editar</button>
-                                        <form action="/index.php?action=delete_category" method="POST">
-                                            <input type="hidden" name="id" value="<?= (int)$c['id'] ?>">
-                                            <button type="submit" class="btn btn-danger btn-xs">Excluir</button>
-                                        </form>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            <?php endif; ?>
-        </article>
+            <div class="modal-body">
+                <form action="/index.php?action=store_category" method="POST" id="categoryForm" novalidate>
+                    <input type="hidden" name="id" id="modalCatId" value="">
+                    <input type="hidden" name="_method" id="modalMethod" value="store">
 
-        <article class="panel">
-            <header class="panel-header">
-                <div>
-                    <div class="panel-title">Categorias de Receita</div>
-                    <div class="panel-subtitle"><?= count($incomeCats) ?> cadastrada(s)</div>
-                </div>
-            </header>
-            <?php if (empty($incomeCats)): ?>
-                <div class="panel-body">
-                    <div class="empty-state">Nenhuma categoria de receita cadastrada.</div>
-                </div>
-            <?php else: ?>
-                <div class="table-wrap">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Nome</th>
-                                <th class="th-numeric">Lançamentos</th>
-                                <th class="th-numeric">Total</th>
-                                <th class="th-actions">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($incomeCats as $c): ?>
-                                <tr>
-                                    <td class="td-strong"><?= htmlspecialchars($c['name']) ?></td>
-                                    <td class="td-numeric"><?= (int)($c['tx_count'] ?? 0) ?></td>
-                                    <td class="td-numeric td-positive">R$ <?= number_format((float)($c['tx_total'] ?? 0), 2, ',', '.') ?></td>
-                                    <td class="actions-cell">
-                                        <button class="btn btn-ghost btn-xs" type="button" onclick="editCategory(<?= (int)$c['id'] ?>, <?= json_encode($c['name'], JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP) ?>, 'receita')">Editar</button>
-                                        <form action="/index.php?action=delete_category" method="POST">
-                                            <input type="hidden" name="id" value="<?= (int)$c['id'] ?>">
-                                            <button type="submit" class="btn btn-danger btn-xs">Excluir</button>
-                                        </form>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            <?php endif; ?>
-        </article>
-    </section>
-
-    <section class="charts-grid charts-grid-2">
-        <article class="panel">
-            <header class="panel-header">
-                <div>
-                    <div class="panel-title">Nova categoria</div>
-                    <div class="panel-subtitle">Adicione despesa ou receita.</div>
-                </div>
-            </header>
-            <div class="panel-body-sm">
-                <form action="/index.php?action=store_category" method="POST" id="addCategoryForm" novalidate>
                     <div class="form-stack">
                         <div class="form-group">
-                            <label for="cat-name">Nome</label>
-                            <input type="text" name="name" id="cat-name" placeholder="Ex: Educação" required>
+                            <label for="modalCatName">Nome da categoria</label>
+                            <input type="text" name="name" id="modalCatName" placeholder="Ex: Alimentação" required maxlength="80">
                         </div>
+
                         <div class="form-group">
-                            <label for="cat-type">Tipo</label>
+                            <label for="modalCatType">Tipo</label>
                             <div class="select-wrap">
-                                <select name="type" id="cat-type">
-                                    <option value="despesa">Despesa</option>
-                                    <option value="receita">Receita</option>
+                                <select name="type" id="modalCatType">
+                                    <option value="despesa" <?= $activeTab === 'despesa' ? 'selected' : '' ?>>Despesa</option>
+                                    <option value="receita" <?= $activeTab === 'receita' ? 'selected' : '' ?>>Receita</option>
                                 </select>
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-primary btn-block">Adicionar</button>
-                    </div>
-                </form>
-            </div>
-        </article>
 
-        <article class="panel" id="editCategoryCard" style="display:none">
-            <header class="panel-header">
-                <div>
-                    <div class="panel-title">Editar categoria</div>
-                    <div class="panel-subtitle">Altere os dados da categoria.</div>
-                </div>
-                <button type="button" class="btn btn-ghost btn-xs" onclick="cancelEditCategory()">Cancelar</button>
-            </header>
-            <div class="panel-body-sm">
-                <form action="/index.php?action=update_category" method="POST" id="editCategoryForm">
-                    <div class="form-stack">
-                        <input type="hidden" name="id" id="editCatId">
-                        <div class="form-group">
-                            <label for="editCatName">Nome</label>
-                            <input type="text" name="name" id="editCatName" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="editCatType">Tipo</label>
-                            <div class="select-wrap">
-                                <select name="type" id="editCatType">
-                                    <option value="despesa">Despesa</option>
-                                    <option value="receita">Receita</option>
-                                </select>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="modalCatColor">Cor</label>
+                                <div style="display:flex;gap:8px;align-items:center">
+                                    <input type="color" name="cor" id="modalCatColor" value="#10b981" style="width:44px;height:36px;border-radius:8px;border:1px solid var(--color-border);padding:2px;cursor:pointer;background:var(--color-surface)">
+                                    <span class="text-mono text-xs" id="colorHex" style="color:var(--color-text-3)">#10B981</span>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="modalCatIcon">Ícone</label>
+                                <div class="select-wrap">
+                                    <select name="icone" id="modalCatIcon">
+                                        <option value="tag">tag</option>
+                                        <option value="home">home</option>
+                                        <option value="car">car</option>
+                                        <option value="heart">heart</option>
+                                        <option value="gift">gift</option>
+                                        <option value="coffee">coffee</option>
+                                        <option value="briefcase">briefcase</option>
+                                        <option value="dollar">dollar</option>
+                                        <option value="shopping">shopping</option>
+                                        <option value="music">music</option>
+                                        <option value="book">book</option>
+                                        <option value="phone">phone</option>
+                                        <option value="wifi">wifi</option>
+                                        <option value="tool">tool</option>
+                                        <option value="health">health</option>
+                                        <option value="target">target</option>
+                                        <option value="globe">globe</option>
+                                        <option value="star">star</option>
+                                        <option value="flag">flag</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-primary btn-block">Salvar alterações</button>
                     </div>
                 </form>
             </div>
-        </article>
-    </section>
+            <footer class="modal-footer">
+                <button type="button" class="btn btn-ghost" onclick="closeCategoryModal()">Cancelar</button>
+                <button type="submit" form="categoryForm" class="btn btn-primary" id="modalSubmitBtn">Adicionar</button>
+            </footer>
+        </div>
+    </div>
 
 <?php
 $extraScripts = '<script>
-function editCategory(id, name, type) {
-    document.getElementById("editCatId").value = id;
-    document.getElementById("editCatName").value = name;
-    document.getElementById("editCatType").value = type;
-    document.getElementById("editCategoryCard").style.display = "block";
-    document.getElementById("editCategoryCard").scrollIntoView({ behavior: "smooth", block: "center" });
+function openNewCategory() {
+    document.getElementById("modal-title").textContent = "Nova categoria";
+    document.getElementById("modalMethod").value = "store";
+    document.getElementById("categoryForm").action = "/index.php?action=store_category";
+    document.getElementById("modalSubmitBtn").textContent = "Adicionar";
+    document.getElementById("modalCatId").value = "";
+    document.getElementById("modalCatName").value = "";
+    document.getElementById("modalCatColor").value = "#10b981";
+    document.getElementById("colorHex").textContent = "#10B981";
+    document.getElementById("modalCatIcon").value = "tag";
+    openCategoryModal();
 }
-function cancelEditCategory() {
-    document.getElementById("editCategoryCard").style.display = "none";
+function openEditCategory(data) {
+    document.getElementById("modal-title").textContent = "Editar categoria";
+    document.getElementById("modalMethod").value = "update";
+    document.getElementById("categoryForm").action = "/index.php?action=update_category";
+    document.getElementById("modalSubmitBtn").textContent = "Salvar alterações";
+    document.getElementById("modalCatId").value = data.id;
+    document.getElementById("modalCatName").value = data.name;
+    document.getElementById("modalCatType").value = data.type;
+    document.getElementById("modalCatColor").value = data.color || "#10b981";
+    document.getElementById("colorHex").textContent = (data.color || "#10b981").toUpperCase();
+    document.getElementById("modalCatIcon").value = data.icon || "tag";
+    openCategoryModal();
 }
+function openCategoryModal() {
+    var m = document.getElementById("categoryModal");
+    m.style.display = "flex";
+    document.getElementById("modalCatName").focus();
+    document.body.style.overflow = "hidden";
+}
+function closeCategoryModal() {
+    var m = document.getElementById("categoryModal");
+    m.style.display = "none";
+    document.body.style.overflow = "";
+}
+document.getElementById("modalCatColor").addEventListener("input", function() {
+    document.getElementById("colorHex").textContent = this.value.toUpperCase();
+});
+document.getElementById("categoryModal").addEventListener("click", function(e) {
+    if (e.target === this) closeCategoryModal();
+});
+document.addEventListener("keydown", function(e) {
+    if (e.key === "Escape") closeCategoryModal();
+});
 </script>';
 include __DIR__ . '/partials/layout_end.php';
 ?>

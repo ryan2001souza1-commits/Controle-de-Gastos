@@ -17,24 +17,29 @@ class Category
 
     public function findAll(
         int $userId,
-        string $type = 'despesa'
+        string $type = 'despesa',
+        bool $onlyActive = false
     ): array {
-        $stmt = $this->db->prepare('
+        $sql = '
             SELECT
                 id,
                 nome AS name,
                 tipo AS type,
-                usuario_id AS user_id
+                usuario_id AS user_id,
+                cor,
+                icone,
+                ativo
             FROM categorias
             WHERE usuario_id = ?
               AND tipo = ?
-            ORDER BY nome
-        ');
+        ';
+        if ($onlyActive) {
+            $sql .= ' AND ativo = 1';
+        }
+        $sql .= ' ORDER BY nome';
 
-        $stmt->execute([
-            $userId,
-            $type
-        ]);
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$userId, $type]);
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
@@ -46,7 +51,10 @@ class Category
                 id,
                 nome AS name,
                 tipo AS type,
-                usuario_id AS user_id
+                usuario_id AS user_id,
+                cor,
+                icone,
+                ativo
             FROM categorias
             WHERE id = ?
               AND usuario_id = ?
@@ -68,6 +76,9 @@ class Category
                 c.nome        AS name,
                 c.tipo        AS type,
                 c.usuario_id  AS user_id,
+                c.cor         AS color,
+                c.icone       AS icon,
+                c.ativo       AS active,
                 COUNT(t.id)   AS tx_count,
                 COALESCE(SUM(t.valor), 0) AS tx_total
             FROM categorias c
@@ -96,7 +107,7 @@ class Category
         }
 
         $sql .= ' WHERE ' . implode(' AND ', $conditions);
-        $sql .= ' GROUP BY c.id, c.nome, c.tipo, c.usuario_id';
+        $sql .= ' GROUP BY c.id, c.nome, c.tipo, c.usuario_id, c.cor, c.icone, c.ativo';
         $sql .= ' ORDER BY c.nome';
 
         $stmt = $this->db->prepare($sql);
@@ -143,19 +154,25 @@ class Category
     public function create(
         string $name,
         string $type,
-        int $userId
+        int $userId,
+        ?string $color = null,
+        ?string $icon = null,
+        bool $active = true
     ): bool {
         $stmt = $this->db->prepare('
             INSERT INTO categorias
-                (nome, tipo, usuario_id)
+                (nome, tipo, usuario_id, cor, icone, ativo)
             VALUES
-                (?, ?, ?)
+                (?, ?, ?, ?, ?, ?)
         ');
 
         return $stmt->execute([
             $name,
             $type,
-            $userId
+            $userId,
+            $color ?? '#10b981',
+            $icon ?? 'tag',
+            $active ? 1 : 0,
         ]);
     }
 
@@ -163,12 +180,25 @@ class Category
         int $id,
         string $name,
         string $type,
-        int $userId
+        int $userId,
+        ?string $color = null,
+        ?string $icon = null,
+        ?bool $active = null
     ): bool {
+        $existing = $this->findById($id, $userId);
+        if (!$existing) return false;
+
+        $newColor = $color ?? ($existing['cor'] ?? '#10b981');
+        $newIcon  = $icon  ?? ($existing['icone'] ?? 'tag');
+        $newActive = $active === null ? (int)($existing['ativo'] ?? 1) : ($active ? 1 : 0);
+
         $stmt = $this->db->prepare('
             UPDATE categorias
             SET nome = ?,
-                tipo = ?
+                tipo = ?,
+                cor  = ?,
+                icone = ?,
+                ativo = ?
             WHERE id = ?
               AND usuario_id = ?
         ');
@@ -176,8 +206,11 @@ class Category
         $stmt->execute([
             $name,
             $type,
+            $newColor,
+            $newIcon,
+            $newActive,
             $id,
-            $userId
+            $userId,
         ]);
 
         return $stmt->rowCount() > 0;
@@ -195,9 +228,20 @@ class Category
 
         $stmt->execute([
             $id,
-            $userId
+            $userId,
         ]);
 
         return $stmt->rowCount() > 0;
+    }
+
+    public function setActive(int $id, int $userId, bool $active): bool
+    {
+        $stmt = $this->db->prepare('
+            UPDATE categorias
+            SET ativo = ?
+            WHERE id = ?
+              AND usuario_id = ?
+        ');
+        return $stmt->execute([$active ? 1 : 0, $id, $userId]);
     }
 }

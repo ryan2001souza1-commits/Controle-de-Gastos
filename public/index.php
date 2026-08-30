@@ -33,6 +33,7 @@ require_once __DIR__ . '/../src/services/ReportService.php';
 require_once __DIR__ . '/../src/services/GoalService.php';
 require_once __DIR__ . '/../src/services/BudgetService.php';
 require_once __DIR__ . '/../src/controllers/AuthController.php';
+require_once __DIR__ . '/partials/icons.php';
 require_once __DIR__ . '/../src/controllers/ExpenseController.php';
 require_once __DIR__ . '/../src/controllers/GoalController.php';
 

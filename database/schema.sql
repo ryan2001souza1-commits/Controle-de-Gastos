@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS categorias (
     usuario_id INTEGER NOT NULL,
     nome VARCHAR(50) NOT NULL,
     tipo VARCHAR(10) NOT NULL CHECK (tipo IN ('receita', 'despesa')),
+    cor VARCHAR(7) DEFAULT '#10b981',
+    icone VARCHAR(40) DEFAULT 'tag',
+    ativo SMALLINT NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE

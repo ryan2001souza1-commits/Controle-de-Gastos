@@ -110,24 +110,24 @@ class ExpenseController
         requireLogin();
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $name = trim($_POST['name'] ?? '');
-            $type = $_POST['type'] ?? 'despesa';
+            $name  = trim($_POST['name']  ?? '');
+            $type  = $_POST['type']      ?? 'despesa';
+            $color = trim($_POST['cor']   ?? '#10b981');
+            $icon  = trim($_POST['icone'] ?? 'tag');
             $userId = $_SESSION['user_id'];
 
             if ($name === '' || !in_array($type, ['despesa', 'receita'], true)) {
-                header('Location: /index.php?error=invalid_category');
+                header('Location: /index.php?action=categorias&error=invalid_category');
                 exit;
             }
 
             if ($this->categoryModel->countByName($name, $type, $userId) > 0) {
-                header('Location: /index.php?error=duplicate_category');
+                header('Location: /index.php?action=categorias&error=duplicate_category');
                 exit;
             }
 
-            $this->categoryModel->create($name, $type, $userId);
-
-            $referer = $this->safeReferer();
-            header('Location: ' . $referer . (strpos($referer, '?') !== false ? '&' : '?') . 'success=1');
+            $this->categoryModel->create($name, $type, $userId, $color, $icon);
+            header('Location: /index.php?action=categorias&success=created');
             exit;
         }
     }
@@ -442,7 +442,9 @@ class ExpenseController
             exit;
         }
 
-        $this->categoryModel->update($id, $name, $type, $userId);
+        $color = trim($_POST['cor']   ?? '#10b981');
+        $icon  = trim($_POST['icone'] ?? 'tag');
+        $this->categoryModel->update($id, $name, $type, $userId, $color, $icon);
         header('Location: /index.php?action=categorias&success=updated');
         exit;
     }

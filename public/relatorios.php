@@ -1,18 +1,34 @@
 <?php
-$pageTitle = $pageTitle ?? 'Relatórios - Controle de Gastos';
+$pageTitle = 'Relatórios';
+$pageSubtitle = 'Análise detalhada das suas movimentações financeiras.';
 $userName  = $userName  ?? ($_SESSION['user_name'] ?? 'Usuário');
 $userInitials = strtoupper(substr($userName, 0, 1));
 
 $activeMenu = 'relatorios';
 $pageEyebrow = 'Análise';
-$pageTitle = 'Relatórios';
+
+$report = $report ?? [];
+$startDate  = $startDate ?? date('Y-m-01');
+$endDate    = $endDate   ?? date('Y-m-t');
+$filterType = $filterType ?? '';
+$pagePeriodFrom = date('d/m/Y', strtotime($startDate));
+$pagePeriodTo   = date('d/m/Y', strtotime($endDate));
+
+$totalIncomes  = (float)($report['total_incomes']  ?? 0);
+$totalExpenses = (float)($report['total_expenses'] ?? 0);
+$balance       = $totalIncomes - $totalExpenses;
+$txCount       = (int)($report['transactions_count'] ?? 0);
+$economyPct    = $totalIncomes > 0 ? round((($totalIncomes - $totalExpenses) / $totalIncomes) * 100) : 0;
+$transactions  = $transactions ?? [];
+
+$showPeriodPicker = false;
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($pageTitle) ?> - Controle de Gastos</title>
+    <title>Relatórios - Controle de Gastos</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -22,145 +38,141 @@ $pageTitle = 'Relatórios';
 <div class="app-wrapper">
 <?php include __DIR__ . '/partials/layout_start.php'; ?>
 
-    <?php
-    $startDate = $startDate ?? date('Y-m-01');
-    $endDate = $endDate ?? date('Y-m-t');
-    $filterType = $filterType ?? '';
-    ?>
-
-    <section class="metrics-strip">
+    <!-- ===== METRIC CARDS ===== -->
+    <section class="metric-strip">
         <article class="metric-card">
-            <div class="metric-card-head">
-                <span class="metric-card-label">Receitas</span>
-                <span class="metric-card-icon is-success" aria-hidden="true">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
-                </span>
+            <div class="metric-card-icon is-success"><?= render_icon('trending-up', 18) ?></div>
+            <div class="metric-card-body">
+                <div class="metric-card-label">Receitas</div>
+                <div class="metric-card-value is-positive">R$ <?= number_format($totalIncomes, 2, ',', '.') ?></div>
+                <div class="metric-card-trend"><?= (int)($report['income_count'] ?? 0) ?> lançamento(s)</div>
             </div>
-            <div class="metric-card-value is-positive">R$ <?= number_format($report['total_incomes'] ?? 0, 2, ',', '.') ?></div>
-            <div class="metric-card-sub"><?= ($report['income_count'] ?? 0) ?> lançamento(s)</div>
         </article>
         <article class="metric-card">
-            <div class="metric-card-head">
-                <span class="metric-card-label">Despesas</span>
-                <span class="metric-card-icon is-danger" aria-hidden="true">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg>
-                </span>
+            <div class="metric-card-icon is-danger"><?= render_icon('trending-down', 18) ?></div>
+            <div class="metric-card-body">
+                <div class="metric-card-label">Despesas</div>
+                <div class="metric-card-value is-negative">R$ <?= number_format($totalExpenses, 2, ',', '.') ?></div>
+                <div class="metric-card-trend"><?= (int)($report['expense_count'] ?? 0) ?> lançamento(s)</div>
             </div>
-            <div class="metric-card-value is-negative">R$ <?= number_format($report['total_expenses'] ?? 0, 2, ',', '.') ?></div>
-            <div class="metric-card-sub"><?= ($report['expense_count'] ?? 0) ?> lançamento(s)</div>
         </article>
         <article class="metric-card">
-            <div class="metric-card-head">
-                <span class="metric-card-label">Saldo</span>
-                <span class="metric-card-icon <?= ($report['balance'] ?? 0) < 0 ? 'is-danger' : 'is-success' ?>" aria-hidden="true">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                </span>
+            <div class="metric-card-icon <?= $balance < 0 ? 'is-danger' : 'is-success' ?>"><?= render_icon('wallet', 18) ?></div>
+            <div class="metric-card-body">
+                <div class="metric-card-label">Saldo</div>
+                <div class="metric-card-value <?= $balance < 0 ? 'is-negative' : 'is-positive' ?>">R$ <?= number_format($balance, 2, ',', '.') ?></div>
+                <div class="metric-card-trend"><?= $economyPct ?>% economia</div>
             </div>
-            <div class="metric-card-value <?= ($report['balance'] ?? 0) < 0 ? 'is-negative' : 'is-positive' ?>">R$ <?= number_format($report['balance'] ?? 0, 2, ',', '.') ?></div>
-            <div class="metric-card-sub">no período</div>
         </article>
         <article class="metric-card">
-            <div class="metric-card-head">
-                <span class="metric-card-label">Total lançamentos</span>
-                <span class="metric-card-icon is-primary" aria-hidden="true">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3" y2="6"/><line x1="3" y1="12" x2="3" y2="12"/><line x1="3" y1="18" x2="3" y2="18"/></svg>
-                </span>
+            <div class="metric-card-icon is-info"><?= render_icon('list', 18) ?></div>
+            <div class="metric-card-body">
+                <div class="metric-card-label">Transações</div>
+                <div class="metric-card-value"><?= $txCount ?></div>
+                <div class="metric-card-trend">no período</div>
             </div>
-            <div class="metric-card-value"><?= ($report['transactions_count'] ?? 0) ?></div>
-            <div class="metric-card-sub">no período</div>
         </article>
     </section>
 
-    <section class="filter-bar">
-        <form method="GET" action="/index.php?action=relatorios" class="filter-form" id="filterForm">
-            <input type="hidden" name="action" value="relatorios">
-            <div class="filter-group">
-                <label for="inputStartDate">De</label>
-                <input type="date" name="start_date" id="inputStartDate" value="<?= htmlspecialchars($startDate ?? '') ?>">
-            </div>
-            <div class="filter-group">
-                <label for="inputEndDate">Até</label>
-                <input type="date" name="end_date" id="inputEndDate" value="<?= htmlspecialchars($endDate ?? '') ?>">
-            </div>
-            <div class="filter-group">
-                <label for="filterType">Tipo</label>
-                <div class="select-wrap">
-                    <select name="type" id="filterType">
-                        <option value="">Todos</option>
-                        <option value="receita" <?= ($filterType ?? '') === 'receita' ? 'selected' : '' ?>>Receitas</option>
-                        <option value="despesa" <?= ($filterType ?? '') === 'despesa' ? 'selected' : '' ?>>Despesas</option>
-                    </select>
-                </div>
-            </div>
-            <div class="filter-group">
-                <label for="filterCategory">Categoria</label>
-                <div class="select-wrap">
-                    <select name="category_id" id="filterCategory">
-                        <option value="">Todas</option>
-                        <?php foreach (($expenseCategories ?? []) as $cat): ?>
-                            <option value="<?= (int)$cat['id'] ?>" <?= ($_GET['category_id'] ?? '') == $cat['id'] ? 'selected' : '' ?>><?= htmlspecialchars($cat['name']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-            </div>
-            <div class="filter-actions">
-                <button type="submit" class="btn btn-primary btn-sm">Gerar</button>
-                <a href="/index.php?action=relatorios" class="btn btn-ghost btn-sm">Limpar</a>
-            </div>
-        </form>
-    </section>
+    <!-- ===== FILTER BAR ===== -->
+    <form method="GET" action="/index.php" class="filter-row" id="filterForm">
+        <input type="hidden" name="action" value="relatorios">
+        <div class="select-wrap" style="width:auto;min-width:140px">
+            <select name="type" onchange="this.form.submit()">
+                <option value="">Todos os tipos</option>
+                <option value="receita" <?= $filterType === 'receita' ? 'selected' : '' ?>>Receitas</option>
+                <option value="despesa" <?= $filterType === 'despesa' ? 'selected' : '' ?>>Despesas</option>
+            </select>
+        </div>
+        <div class="select-wrap" style="width:auto;min-width:160px">
+            <select name="category_id" onchange="this.form.submit()">
+                <option value="">Todas as categorias</option>
+                <?php foreach (($expenseCategories ?? []) as $cat): ?>
+                    <option value="<?= (int)$cat['id'] ?>" <?= ((int)($_GET['category_id'] ?? 0)) === (int)$cat['id'] ? 'selected' : '' ?>><?= htmlspecialchars($cat['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="search-input grow">
+            <?= render_icon('search', 14) ?>
+            <input type="text" name="search" placeholder="Buscar lançamento..." value="<?= htmlspecialchars($_GET['search'] ?? '') ?>" autocomplete="off">
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">
+            <?= render_icon('chart', 13) ?>
+            Gerar
+        </button>
+        <a href="/index.php?action=relatorios" class="btn btn-ghost btn-sm">Limpar</a>
+    </form>
 
-    <section class="charts-grid charts-grid-2">
+    <!-- ===== CHARTS ROW ===== -->
+    <section class="charts-grid charts-grid-2" style="margin-bottom:var(--space-4)">
         <article class="chart-card">
             <header class="chart-card-head">
                 <div>
                     <div class="chart-card-title">Receitas x Despesas</div>
-                    <div class="chart-card-sub">Comparativo por mês.</div>
+                    <div class="chart-card-sub">Comparativo mensal no período.</div>
+                </div>
+                <div class="chart-legend">
+                    <span class="legend-item"><span class="legend-swatch" style="background:#10b981"></span>Receitas</span>
+                    <span class="legend-item"><span class="legend-swatch" style="background:#ef4444"></span>Despesas</span>
                 </div>
             </header>
-            <div class="chart-wrap" style="min-height:220px">
-                <canvas id="chart-income-vs-expense"></canvas>
+            <div class="chart-wrap" style="min-height:280px">
+                <canvas id="chart-income-expense"></canvas>
             </div>
-            <div class="chart-empty" id="chart-period-empty">Nenhum lançamento no período.</div>
+            <div class="chart-empty" id="chart-income-expense-empty">Nenhum lançamento no período.</div>
         </article>
+
         <article class="chart-card">
             <header class="chart-card-head">
                 <div>
                     <div class="chart-card-title">Despesas por categoria</div>
-                    <div class="chart-card-sub">Distribuição no período.</div>
+                    <div class="chart-card-sub">Distribuição percentual.</div>
                 </div>
             </header>
-            <div class="chart-wrap" style="min-height:220px">
-                <canvas id="chart-expenses-by-category"></canvas>
+            <div class="chart-wrap" style="min-height:280px;position:relative">
+                <canvas id="chart-category-report"></canvas>
+                <div class="donut-center">
+                    <div class="donut-center-label">Total</div>
+                    <div class="donut-center-value">R$ <?= number_format($totalExpenses, 2, ',', '.') ?></div>
+                </div>
             </div>
-            <div class="chart-empty" id="chart-category-empty">Nenhuma despesa registrada.</div>
+            <div class="chart-empty" id="chart-category-report-empty">Nenhuma despesa registrada.</div>
         </article>
     </section>
 
-    <section class="chart-card" style="margin-bottom: var(--space-5)">
+    <!-- ===== BALANCE EVOLUTION ===== -->
+    <section class="chart-card" style="margin-bottom:var(--space-5)">
         <header class="chart-card-head">
             <div>
                 <div class="chart-card-title">Evolução do saldo</div>
                 <div class="chart-card-sub">Saldo acumulado ao longo do tempo.</div>
             </div>
+            <div class="chart-legend">
+                <span class="legend-item"><span class="legend-swatch" style="background:#10b981"></span>Saldo</span>
+            </div>
         </header>
-        <div class="chart-wrap">
+        <div class="chart-wrap" style="min-height:200px">
             <canvas id="chart-balance-evolution"></canvas>
         </div>
         <div class="chart-empty" id="chart-balance-empty">Dados insuficientes para evolução.</div>
     </section>
 
-    <section class="panel">
+    <!-- ===== TRANSACTIONS TABLE ===== -->
+    <section class="panel" style="margin-bottom:var(--space-5)">
         <header class="panel-header">
             <div>
                 <div class="panel-title">
-                    <?php if (($filterType ?? '') === 'receita'): ?>Receitas
-                    <?php elseif (($filterType ?? '') === 'despesa'): ?>Despesas
+                    <?php if ($filterType === 'receita'): ?>Receitas
+                    <?php elseif ($filterType === 'despesa'): ?>Despesas
                     <?php else: ?>Todos os Lançamentos
-                    <?php endif; ?> no Período
+                    <?php endif; ?>
                 </div>
-                <div class="panel-subtitle"><?= count($transactions ?? []) ?> resultado(s) encontrado(s)</div>
+                <div class="panel-subtitle"><?= count($transactions) ?> resultado(s) encontrado(s)</div>
             </div>
+            <a href="#" class="btn btn-ghost btn-sm">
+                <?= render_icon('download', 13) ?>
+                Exportar
+            </a>
         </header>
         <div class="table-wrap">
             <table class="data-table">
@@ -173,29 +185,39 @@ $pageTitle = 'Relatórios';
                     </tr>
                 </thead>
                 <tbody>
-                    <?php if (empty($transactions ?? [])): ?>
+                    <?php if (empty($transactions)): ?>
                         <tr><td colspan="4" class="empty-cell">Nenhum lançamento no período.</td></tr>
-                    <?php else: ?>
-                        <?php foreach ($transactions ?? [] as $t): ?>
-                            <?php
-                            $txType = $t['type'] ?? '';
-                            $txClass = $txType === 'despesa' ? 'td-negative' : 'td-positive';
-                            ?>
-                            <tr>
-                                <td class="td-mono td-muted"><?= isset($t['date']) ? date('d/m/Y', strtotime($t['date'])) : '—' ?></td>
-                                <td class="td-strong"><?= htmlspecialchars($t['description'] ?? '') ?></td>
-                                <td class="td-muted"><?= htmlspecialchars($t['category_name'] ?? '—') ?></td>
-                                <td class="td-numeric <?= $txClass ?>">R$ <?= number_format((float)($t['amount'] ?? 0), 2, ',', '.') ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                    <?php else: foreach ($transactions as $t):
+                        $txType  = $t['type'] ?? '';
+                        $txClass = $txType === 'despesa' ? 'td-negative' : 'td-positive';
+                        $sign    = $txType === 'despesa' ? '- ' : '+ ';
+                    ?>
+                    <tr>
+                        <td class="td-mono td-muted" style="white-space:nowrap"><?= isset($t['date']) ? date('d/m/Y', strtotime($t['date'])) : '—' ?></td>
+                        <td class="td-strong"><?= htmlspecialchars($t['description'] ?? '') ?></td>
+                        <td class="td-muted"><?= htmlspecialchars($t['category_name'] ?? '—') ?></td>
+                        <td class="td-numeric <?= $txClass ?>"><?= $sign ?>R$ <?= number_format((float)($t['amount'] ?? 0), 2, ',', '.') ?></td>
+                    </tr>
+                    <?php endforeach; endif; ?>
                 </tbody>
             </table>
         </div>
+        <?php if (count($transactions) > 0): ?>
+        <div class="pagination">
+            <div class="pagination-info"><?= count($transactions) ?> lançamento(s)</div>
+            <div class="pagination-controls">
+                <button class="pagination-btn" disabled><?= render_icon('chevron-left', 12) ?></button>
+                <button class="pagination-btn is-active">1</button>
+                <button class="pagination-btn"><?= render_icon('chevron-right', 12) ?></button>
+            </div>
+            <div></div>
+        </div>
+        <?php endif; ?>
     </section>
 
 <?php
 $extraScripts = '<script src="/assets/chart.min.js"></script>' . "\n";
-$extraScripts .= '<script>window.DASHBOARD_CHART_DATA = ' . json_encode($report['chart_data'] ?? [], JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP|JSON_UNESCAPED_UNICODE) . ';</script>' . "\n";
+$extraScripts .= '<script>window.REPORT_CHART_DATA = ' . json_encode($report['chart_data'] ?? [], JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP|JSON_UNESCAPED_UNICODE) . ';</script>' . "\n";
+$extraScripts .= '<script src="/js/charts-report.js"></script>' . "\n";
 include __DIR__ . '/partials/layout_end.php';
 ?>

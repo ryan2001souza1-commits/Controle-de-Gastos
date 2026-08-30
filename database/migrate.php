@@ -22,6 +22,20 @@ foreach ($columnsToAdd as $name => $sql) {
 }
 $db->exec('CREATE INDEX IF NOT EXISTS idx_usuarios_reset_token ON usuarios(reset_token)');
 
+// Migração idempotente: cor e ícone nas categorias
+$catColumns = [
+    'cor'   => 'ALTER TABLE categorias ADD COLUMN IF NOT EXISTS cor VARCHAR(7) DEFAULT \'#10b981\'',
+    'icone' => 'ALTER TABLE categorias ADD COLUMN IF NOT EXISTS icone VARCHAR(40) DEFAULT \'tag\'',
+    'ativo' => 'ALTER TABLE categorias ADD COLUMN IF NOT EXISTS ativo SMALLINT NOT NULL DEFAULT 1',
+];
+foreach ($catColumns as $name => $sql) {
+    try {
+        $db->exec($sql);
+    } catch (PDOException $e) {
+        // coluna já existe ou ambiente sem permissão — segue
+    }
+}
+
 // Migração idempotente da tabela password_resets
 try {
     $db->exec("
