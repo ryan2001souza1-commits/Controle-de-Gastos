@@ -57,7 +57,7 @@ $db = getDBConnection();
 require_once __DIR__ . '/../src/db_bootstrap.php';
 ensureSchemaUpToDate($db);
 require_once __DIR__ . '/../src/migrations.php';
-applyMigrations($db);
+runMigrations($db);
 $userModel = new User($db);
 $categoryModel = new Category($db);
 $expenseModel = new Expense($db);
