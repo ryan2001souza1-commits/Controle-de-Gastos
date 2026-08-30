@@ -38,6 +38,8 @@ $menuItems = [
     'reportar' => ['href' => '/index.php?action=reportar', 'label' => 'Reportar problema', 'icon' => 'alert'],
     'meus_relatos' => ['href' => '/index.php?action=meus_relatos', 'label' => 'Meus relatos', 'icon' => 'info'],
 ];
+// Admin link visível apenas para quem tem permissão (verificado no backend também)
+$isAdminSession = !empty($_SESSION['is_admin']) && (int)$_SESSION['is_admin'] === 1;
 
 $sidebarIcons = [
     'dashboard' => '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
@@ -67,6 +69,12 @@ $bellIcon = '<svg width="16" height="16" fill="none" stroke="currentColor" strok
                 <?= htmlspecialchars($item['label']) ?>
             </a>
         <?php endforeach; ?>
+        <?php if ($isAdminSession): ?>
+            <div style="margin:10px 0 6px;border-top:1px solid var(--sidebar-border);padding-top:10px">
+                <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.45);padding:0 12px;margin-bottom:6px">Administração</div>
+                <a href="/index.php?action=admin" class="sidebar-link <?= $activeMenu==='admin'?'active':'' ?>"> <?= $sidebarIcons['settings'] ?? '' ?> Painel Admin</a>
+            </div>
+        <?php endif; ?>
     </nav>
     <div class="sidebar-footer">
         <a href="/index.php?action=logout" class="sidebar-link">

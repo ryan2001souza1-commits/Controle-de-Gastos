@@ -162,6 +162,33 @@ function runMigrations(PDO $db): void
         $db->exec("INSERT INTO planos (nome, slug, preco, descricao) VALUES ('Premium','premium',39.90,'Plano Premium completo') ON CONFLICT (slug) DO NOTHING");
     } catch (Throwable $e) {}
 
+    // Criação/promotion do admin via variáveis de ambiente (sem credencial no código)
+    try {
+        $adminEmail = trim((string)(getenv('ADMIN_EMAIL') ?: ''));
+        $adminPass  = (string)(getenv('ADMIN_PASSWORD') ?: '');
+        if ($adminEmail !== '' && $adminPass !== '' && filter_var($adminEmail, FILTER_VALIDATE_EMAIL) && strlen($adminPass) >= 8) {
+            $stmt = $db->prepare("SELECT id, is_admin FROM usuarios WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) LIMIT 1");
+            $stmt->execute([$adminEmail]);
+            $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($existing) {
+                // Promove a admin se ainda não for
+                if ((int)($existing['is_admin'] ?? 0) !== 1) {
+                    $up = $db->prepare("UPDATE usuarios SET is_admin = 1, updated_at = NOW() WHERE id = ?");
+                    $up->execute([$existing['id']]);
+                }
+            } else {
+                // Cria novo usuário admin (hash seguro)
+                $hash = password_hash($adminPass, PASSWORD_DEFAULT);
+                $ins = $db->prepare("INSERT INTO usuarios (nome, email, senha, is_admin, plano, plano_status) VALUES (?, ?, ?, 1, 'premium', 'ativo')");
+                $adminName = trim((string)(getenv('ADMIN_NAME') ?: 'Administrador'));
+                if ($adminName === '') $adminName = 'Administrador';
+                $ins->execute([$adminName, $adminEmail, $hash]);
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('[admin seed] ' . $e->getMessage());
+    }
+
     try {
         $db->exec("ALTER TABLE usuarios ALTER COLUMN senha DROP NOT NULL");
     } catch (PDOException $e) {

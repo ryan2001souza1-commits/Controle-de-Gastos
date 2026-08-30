@@ -31,6 +31,7 @@ class AuthService
         $_SESSION['user_id'] = $user->id;
         $_SESSION['user_name'] = $user->name;
         $_SESSION['user_email'] = $user->email;
+        $_SESSION['is_admin'] = (int)($user->is_admin ?? 0);
 
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_regenerate_id(true);
