@@ -6,16 +6,27 @@ $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
     || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
     || (($_SERVER['HTTP_X_VERCEL_FORWARDED_PROTO'] ?? '') === 'https')
     || (getenv('VERCEL_ENV') !== false);
+// 7 dias de sessão — corrige logout após segundos/minutos
+$lifetime = 604800;
 if (PHP_VERSION_ID >= 70300 && session_status() === PHP_SESSION_NONE) {
     session_set_cookie_params([
-        'lifetime' => 0,
+        'lifetime' => $lifetime,
         'path'     => '/',
         'secure'   => $isHttps,
         'httponly' => true,
         'samesite' => 'Lax',
     ]);
 }
+// Configura handler em DB (serverless) antes de iniciar
 if (session_status() === PHP_SESSION_NONE) {
+    // Tenta conexão antecipada apenas para registrar handler; fallback para arquivos se falhar
+    try {
+        $tmpDb = getDBConnection();
+        configureSession($tmpDb);
+    } catch (Throwable $e) {
+        error_log('[session init] ' . $e->getMessage());
+        ini_set('session.gc_maxlifetime', (string)$lifetime);
+    }
     session_start();
 }
 require_once __DIR__ . '/../src/models/User.php';

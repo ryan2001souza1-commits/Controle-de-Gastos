@@ -137,3 +137,29 @@ function requireLogin(): void
         exit;
     }
 }
+
+/**
+ * Configura sessão para durar 7 dias (604800s) e, em Vercel, persiste no Postgres.
+ * Deve ser chamado ANTES de session_start() e antes de qualquer output.
+ */
+function configureSession(?PDO $db = null): void
+{
+    // 7 dias — evita logout após poucos minutos, mas mantém expiração de segurança
+    $lifetime = 604800;
+    ini_set('session.gc_maxlifetime', (string)$lifetime);
+    ini_set('session.gc_probability', '1');
+    ini_set('session.gc_divisor', '100');
+    // Tenta usar handler em DB quando possível (resolve filesystem efêmero do serverless)
+    if ($db !== null && !headers_sent()) {
+        try {
+            // Garante tabela sessions existe (idempotente)
+            $db->exec("CREATE TABLE IF NOT EXISTS sessions (id VARCHAR(128) PRIMARY KEY, data TEXT NOT NULL, expires_at TIMESTAMP NOT NULL)");
+            $db->exec("CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)");
+            require_once __DIR__ . '/session_handler.php';
+            $handler = new DbSessionHandler($db, $lifetime);
+            session_set_save_handler($handler, true);
+        } catch (Throwable $e) {
+            error_log('[session handler] ' . $e->getMessage());
+        }
+    }
+}

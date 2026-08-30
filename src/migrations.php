@@ -81,6 +81,12 @@ function runMigrations(PDO $db): void
             used_at TIMESTAMP,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )",
+        "CREATE TABLE IF NOT EXISTS sessions (
+            id VARCHAR(128) PRIMARY KEY,
+            data TEXT NOT NULL,
+            expires_at TIMESTAMP NOT NULL
+        )",
+        "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)",
         "CREATE INDEX IF NOT EXISTS idx_password_resets_user_id ON password_resets(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_password_resets_token_hash ON password_resets(token_hash)",
         "CREATE INDEX IF NOT EXISTS idx_password_resets_expires_at ON password_resets(expires_at)",

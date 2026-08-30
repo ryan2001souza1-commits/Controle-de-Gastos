@@ -154,15 +154,19 @@ $isHttps = (
     (isset($_SERVER['VERCEL_ENV']))
 );
 
+$lifetime = 604800;
 if (PHP_VERSION_ID >= 70300) {
     session_set_cookie_params([
-        'lifetime' => 0,
+        'lifetime' => $lifetime,
         'path'     => '/',
         'secure'   => $isHttps,
         'httponly' => true,
         'samesite' => 'Lax',
     ]);
 }
+ini_set('session.gc_maxlifetime', (string)$lifetime);
+ini_set('session.gc_probability', '1');
+ini_set('session.gc_divisor', '100');
 
 // =============================================================================
 // 4. Carregar entry point — toda a lógica de negócio é preservada intacta
