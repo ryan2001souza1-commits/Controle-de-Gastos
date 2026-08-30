@@ -224,6 +224,7 @@ class ExpenseService
         return [
             'labels' => array_map(fn($e) => $e['name'], $entries),
             'values' => array_map(fn($e) => $e['total'], $entries),
+            'data'   => array_map(fn($e) => $e['total'], $entries),
         ];
     }
 

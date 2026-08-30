@@ -58,6 +58,20 @@ document.addEventListener('DOMContentLoaded', function () {
     var data = getData();
     if (!data) return;
 
+    function safe(obj, path, fallback) {
+        try {
+            var cur = obj;
+            var parts = path.split('.');
+            for (var i = 0; i < parts.length; i++) {
+                if (cur == null) return fallback;
+                cur = cur[parts[i]];
+            }
+            return (cur == null) ? fallback : cur;
+        } catch (e) { return fallback; }
+    }
+    function arr(x) { return Array.isArray(x) ? x : []; }
+    function num(v) { var n = Number(v); return isFinite(n) ? n : 0; }
+
     var catColors = [
         '#4f46e5', '#059669', '#dc2626', '#d97706', '#2563eb',
         '#7c3aed', '#db2777', '#0891b2', '#65a30d', '#64748b',
@@ -87,7 +101,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var flowCanvas = document.getElementById('chart-financial-flow');
     var flowEmpty  = document.getElementById('chart-flow-empty');
     if (flowCanvas) {
-        var ff = data.financial_flow || { labels: [], incomes: [], expenses: [], balance: [] };
+        var ff = (data && data.financial_flow) ? data.financial_flow : { labels: [], incomes: [], expenses: [], balance: [] };
         if (!ff.labels || ff.labels.length === 0) {
             emptyState(flowCanvas, flowEmpty);
         } else {
@@ -186,11 +200,12 @@ document.addEventListener('DOMContentLoaded', function () {
     var catCanvas = document.getElementById('chart-expenses-by-category');
     var catEmpty  = document.getElementById('chart-category-empty');
     if (catCanvas) {
-        var chartCats = (data.categories_chart && data.categories_chart.length)
+        var chartCats = (data && Array.isArray(data.categories_chart) && data.categories_chart.length)
             ? data.categories_chart
-            : (data.expenses_by_category && data.expenses_by_category.labels
+            : (data && data.expenses_by_category && Array.isArray(data.expenses_by_category.labels) && data.expenses_by_category.labels.length
                 ? data.expenses_by_category.labels.map(function (l, i) {
-                    return { label: l, value: (data.expenses_by_category.values || [])[i] || 0, color: null };
+                    var v = (data.expenses_by_category.values || [])[i] || 0;
+                    return { label: l, value: v, color: null };
                 })
                 : []);
         var cLabels = chartCats.map(function (c) { return c.label; });
