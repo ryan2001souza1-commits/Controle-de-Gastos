@@ -11,6 +11,13 @@ class User
     public ?string $created_at = null;
     public ?string $provider = null;
     public ?string $provider_sub = null;
+    public ?string $telefone = null;
+    public ?string $data_nascimento = null;
+    public ?float $renda_mensal = null;
+    public ?int $dia_recebimento = null;
+    public ?string $objetivo = null;
+    public ?string $moeda = null;
+    public ?int $notificacoes = null;
 
     private PDO $db;
 
@@ -167,7 +174,37 @@ class User
         $this->created_at = $data['created_at'] ?? null;
         $this->provider = $data['provider'] ?? null;
         $this->provider_sub = $data['provider_sub'] ?? null;
+        $this->telefone = $data['telefone'] ?? null;
+        $this->data_nascimento = $data['data_nascimento'] ?? null;
+        $this->renda_mensal = isset($data['renda_mensal']) && $data['renda_mensal'] !== null ? (float)$data['renda_mensal'] : null;
+        $this->dia_recebimento = isset($data['dia_recebimento']) && $data['dia_recebimento'] !== null ? (int)$data['dia_recebimento'] : null;
+        $this->objetivo = $data['objetivo'] ?? null;
+        $this->moeda = $data['moeda'] ?? 'BRL';
+        $this->notificacoes = isset($data['notificacoes']) ? (int)$data['notificacoes'] : 1;
 
         return $this;
+    }
+
+    public function updateProfile(int $id, array $fields): bool
+    {
+        $allowed = ['nome','email','telefone','data_nascimento','renda_mensal','dia_recebimento','objetivo','moeda','notificacoes'];
+        $sets = []; $params = [];
+        foreach ($fields as $k => $v) {
+            if (!in_array($k, $allowed, true)) continue;
+            $sets[] = "$k = ?";
+            $params[] = $v;
+        }
+        if (empty($sets)) return false;
+        $params[] = $id;
+        $sql = 'UPDATE usuarios SET ' . implode(', ', $sets) . ', updated_at = NOW() WHERE id = ?';
+        $stmt = $this->db->prepare($sql);
+        return $stmt->execute($params);
+    }
+
+    public function isEmailTaken(string $email, int $excludeId): bool
+    {
+        $stmt = $this->db->prepare('SELECT 1 FROM usuarios WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) AND id <> ? LIMIT 1');
+        $stmt->execute([$email, $excludeId]);
+        return (bool)$stmt->fetchColumn();
     }
 }

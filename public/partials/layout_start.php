@@ -34,6 +34,7 @@ $menuItems = [
     'orcamentos'  => ['href' => '/index.php?action=orcamentos',  'label' => 'Orçamentos',  'icon' => 'wallet'],
     'metas'       => ['href' => '/index.php?action=metas',       'label' => 'Metas',       'icon' => 'target'],
     'relatorios'  => ['href' => '/index.php?action=relatorios',  'label' => 'Relatórios',  'icon' => 'chart'],
+    'configuracoes' => ['href' => '/index.php?action=configuracoes', 'label' => 'Configurações', 'icon' => 'settings'],
 ];
 
 $sidebarIcons = [
@@ -43,6 +44,7 @@ $sidebarIcons = [
     'wallet'    => '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
     'target'    => '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
     'chart'     => '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
+    'settings'  => '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
 ];
 
 $logoutIcon = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>';
@@ -106,7 +108,7 @@ $bellIcon = '<svg width="16" height="16" fill="none" stroke="currentColor" strok
             <button type="button" class="notif-btn" aria-label="Notificações">
                 <?= $bellIcon ?>
             </button>
-            <a href="#" class="topbar-user" aria-label="Perfil de <?= htmlspecialchars($userName) ?>">
+            <a href="/index.php?action=configuracoes" class="topbar-user" aria-label="Perfil de <?= htmlspecialchars($userName) ?>">
                 <?= htmlspecialchars($userInitials) ?>
             </a>
         </div>

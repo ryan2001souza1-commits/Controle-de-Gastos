@@ -109,6 +109,13 @@ function runMigrations(PDO $db): void
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS reset_expires TIMESTAMP",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS provider VARCHAR(20) DEFAULT NULL",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS provider_sub VARCHAR(255) DEFAULT NULL",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telefone VARCHAR(20)",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS data_nascimento DATE",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS renda_mensal NUMERIC(12,2)",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS dia_recebimento SMALLINT",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS objetivo VARCHAR(100)",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS moeda VARCHAR(3) DEFAULT 'BRL'",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS notificacoes SMALLINT DEFAULT 1",
     ];
     foreach ($addColumnIfMissing as $sql) {
         $db->exec($sql);

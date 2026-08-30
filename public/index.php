@@ -47,6 +47,7 @@ require_once __DIR__ . '/../src/controllers/AuthController.php';
 require_once __DIR__ . '/partials/icons.php';
 require_once __DIR__ . '/../src/controllers/ExpenseController.php';
 require_once __DIR__ . '/../src/controllers/GoalController.php';
+require_once __DIR__ . '/../src/controllers/ProfileController.php';
 
 $db = getDBConnection();
 require_once __DIR__ . '/../src/db_bootstrap.php';
@@ -66,6 +67,7 @@ $budgetService = new BudgetService($budgetModel, $categoryModel);
 $authController = new AuthController($authService, new GoogleAuthService(), $userModel);
 $expenseController = new ExpenseController($expenseModel, $incomeModel, $categoryModel, $expenseService, $budgetModel, $budgetService);
 $goalController = new GoalController($goalModel, $goalService);
+$profileController = new ProfileController($userModel, $db);
 
 $action = $_GET['action'] ?? null;
 
@@ -117,6 +119,12 @@ if ($action === 'register') {
     $expenseController->storeBudget();
 } elseif ($action === 'delete_budget') {
     $expenseController->deleteBudget();
+} elseif ($action === 'configuracoes') {
+    $profileController->index();
+} elseif ($action === 'update_profile') {
+    $profileController->updateProfile();
+} elseif ($action === 'update_password') {
+    $profileController->updatePassword();
 } elseif (isLoggedIn()) {
     $expenseController->dashboard();
 } else {
