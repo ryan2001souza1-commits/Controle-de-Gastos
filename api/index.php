@@ -77,12 +77,27 @@ if ($isStatic) {
         ];
         $ext = strrchr($pathInfo, '.');
         $mime = $mimeTypes[$ext] ?? 'application/octet-stream';
-        // app.js contém lógica crítica (mostrar senha) — nunca cachear como immutable para garantir correção imediata
-        $isImmutable = in_array($ext, ['.css', '.woff2', '.woff', '.ttf', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp'], true)
-            || ($ext === '.js' && $pathInfo !== '/js/app.js');
-        $maxAge = $isImmutable
-            ? 'public, max-age=31536000, immutable'
-            : 'no-cache';
+        // Apenas fontes e imagens são imutáveis (hash no nome). CSS/JS devem revalidar
+        // para que alterações de design apareçam imediatamente (evita cache de 1 ano).
+        $isImmutable = in_array($ext, ['.woff2', '.woff', '.ttf', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp'], true);
+        if ($isImmutable) {
+            $maxAge = 'public, max-age=31536000, immutable';
+        } else {
+            // CSS/JS/HTML: revalida sempre, mas permite cache com ETag/Last-Modified
+            $maxAge = 'public, max-age=0, must-revalidate';
+            // ETag e Last-Modified para validação condicional (304 Not Modified quando não mudou)
+            $etag = sprintf('"%s-%s"', dechex(filesize($filePath)), dechex(filemtime($filePath)));
+            $lastMod = gmdate('D, d M Y H:i:s', filemtime($filePath)) . ' GMT';
+            header('ETag: ' . $etag);
+            header('Last-Modified: ' . $lastMod);
+            // Responde 304 se o navegador já tem a versão atual
+            $ifNoneMatch = $_SERVER['HTTP_IF_NONE_MATCH'] ?? '';
+            $ifModSince = $_SERVER['HTTP_IF_MODIFIED_SINCE'] ?? '';
+            if ($ifNoneMatch === $etag || $ifModSince === $lastMod) {
+                http_response_code(304);
+                return;
+            }
+        }
 
         header('Content-Type: ' . $mime);
         header('Cache-Control: ' . $maxAge);
