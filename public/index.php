@@ -48,6 +48,10 @@ require_once __DIR__ . '/partials/icons.php';
 require_once __DIR__ . '/../src/controllers/ExpenseController.php';
 require_once __DIR__ . '/../src/controllers/GoalController.php';
 require_once __DIR__ . '/../src/controllers/ProfileController.php';
+require_once __DIR__ . '/../src/models/BugReport.php';
+require_once __DIR__ . '/../src/models/Plan.php';
+require_once __DIR__ . '/../src/controllers/AdminController.php';
+require_once __DIR__ . '/../src/controllers/BugReportController.php';
 
 $db = getDBConnection();
 require_once __DIR__ . '/../src/db_bootstrap.php';
@@ -68,6 +72,10 @@ $authController = new AuthController($authService, new GoogleAuthService(), $use
 $expenseController = new ExpenseController($expenseModel, $incomeModel, $categoryModel, $expenseService, $budgetModel, $budgetService);
 $goalController = new GoalController($goalModel, $goalService);
 $profileController = new ProfileController($userModel, $db);
+$bugModel = new BugReport($db);
+$planModel = new Plan($db);
+$adminController = new AdminController($userModel, $bugModel, $planModel, $db);
+$bugReportController = new BugReportController($bugModel, $db);
 
 $action = $_GET['action'] ?? null;
 
@@ -125,6 +133,24 @@ if ($action === 'register') {
     $profileController->updateProfile();
 } elseif ($action === 'update_password') {
     $profileController->updatePassword();
+} elseif ($action === 'admin' || $action === 'admin_dashboard') {
+    $adminController->dashboard();
+} elseif ($action === 'admin_usuarios') {
+    $adminController->usuarios();
+} elseif ($action === 'admin_bugs') {
+    $adminController->bugs();
+} elseif ($action === 'admin_bug_detail') {
+    $adminController->bugDetail();
+} elseif ($action === 'admin_bug_update') {
+    $adminController->updateBug();
+} elseif ($action === 'admin_planos') {
+    $adminController->planos();
+} elseif ($action === 'reportar') {
+    $bugReportController->form();
+} elseif ($action === 'reportar_create') {
+    $bugReportController->create();
+} elseif ($action === 'meus_relatos') {
+    $bugReportController->myReports();
 } elseif (isLoggedIn()) {
     $expenseController->dashboard();
 } else {

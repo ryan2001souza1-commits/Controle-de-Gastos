@@ -87,6 +87,35 @@ function runMigrations(PDO $db): void
             expires_at TIMESTAMP NOT NULL
         )",
         "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)",
+        "CREATE TABLE IF NOT EXISTS planos (
+            id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            nome VARCHAR(50) NOT NULL,
+            slug VARCHAR(30) UNIQUE NOT NULL,
+            preco NUMERIC(10,2) NOT NULL DEFAULT 0,
+            descricao TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )",
+        "CREATE TABLE IF NOT EXISTS bug_reports (
+            id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+            titulo VARCHAR(150) NOT NULL,
+            categoria VARCHAR(30) NOT NULL,
+            descricao TEXT NOT NULL,
+            pagina VARCHAR(100),
+            url TEXT,
+            prioridade VARCHAR(20) DEFAULT 'media',
+            status VARCHAR(20) NOT NULL DEFAULT 'novo',
+            navegador VARCHAR(200),
+            sistema_operacional VARCHAR(100),
+            screenshot VARCHAR(255),
+            resposta_admin TEXT,
+            observacao_interna TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )",
+        "CREATE INDEX IF NOT EXISTS idx_bug_reports_usuario ON bug_reports(usuario_id)",
+        "CREATE INDEX IF NOT EXISTS idx_bug_reports_status ON bug_reports(status)",
+        "CREATE INDEX IF NOT EXISTS idx_bug_reports_created ON bug_reports(created_at DESC)",
         "CREATE INDEX IF NOT EXISTS idx_password_resets_user_id ON password_resets(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_password_resets_token_hash ON password_resets(token_hash)",
         "CREATE INDEX IF NOT EXISTS idx_password_resets_expires_at ON password_resets(expires_at)",
@@ -116,10 +145,22 @@ function runMigrations(PDO $db): void
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS objetivo VARCHAR(100)",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS moeda VARCHAR(3) DEFAULT 'BRL'",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS notificacoes SMALLINT DEFAULT 1",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS is_admin SMALLINT NOT NULL DEFAULT 0",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS plano VARCHAR(20) NOT NULL DEFAULT 'gratuito'",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS plano_status VARCHAR(20) NOT NULL DEFAULT 'ativo'",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS plano_inicio TIMESTAMP",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS plano_fim TIMESTAMP",
     ];
     foreach ($addColumnIfMissing as $sql) {
         $db->exec($sql);
     }
+
+    // Seed planos básicos (idempotente)
+    try {
+        $db->exec("INSERT INTO planos (nome, slug, preco, descricao) VALUES ('Gratuito','gratuito',0,'Plano gratuito com recursos essenciais') ON CONFLICT (slug) DO NOTHING");
+        $db->exec("INSERT INTO planos (nome, slug, preco, descricao) VALUES ('Pro','pro',19.90,'Plano Pro com recursos avançados') ON CONFLICT (slug) DO NOTHING");
+        $db->exec("INSERT INTO planos (nome, slug, preco, descricao) VALUES ('Premium','premium',39.90,'Plano Premium completo') ON CONFLICT (slug) DO NOTHING");
+    } catch (Throwable $e) {}
 
     try {
         $db->exec("ALTER TABLE usuarios ALTER COLUMN senha DROP NOT NULL");

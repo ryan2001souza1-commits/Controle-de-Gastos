@@ -18,6 +18,11 @@ class User
     public ?string $objetivo = null;
     public ?string $moeda = null;
     public ?int $notificacoes = null;
+    public int $is_admin = 0;
+    public string $plano = 'gratuito';
+    public string $plano_status = 'ativo';
+    public ?string $plano_inicio = null;
+    public ?string $plano_fim = null;
 
     private PDO $db;
 
@@ -181,8 +186,20 @@ class User
         $this->objetivo = $data['objetivo'] ?? null;
         $this->moeda = $data['moeda'] ?? 'BRL';
         $this->notificacoes = isset($data['notificacoes']) ? (int)$data['notificacoes'] : 1;
+        $this->is_admin = isset($data['is_admin']) ? (int)$data['is_admin'] : 0;
+        $this->plano = $data['plano'] ?? 'gratuito';
+        $this->plano_status = $data['plano_status'] ?? 'ativo';
+        $this->plano_inicio = $data['plano_inicio'] ?? null;
+        $this->plano_fim = $data['plano_fim'] ?? null;
 
         return $this;
+    }
+
+    public function isAdmin(int $userId): bool
+    {
+        $stmt = $this->db->prepare('SELECT is_admin FROM usuarios WHERE id = ?');
+        $stmt->execute([$userId]);
+        return (int)($stmt->fetchColumn() ?? 0) === 1;
     }
 
     public function updateProfile(int $id, array $fields): bool
