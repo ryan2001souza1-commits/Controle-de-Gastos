@@ -20,7 +20,11 @@ class AuthController
             $password = $_POST['password'] ?? '';
 
             if ($this->authService->login($email, $password)) {
-                header('Location: /index.php');
+                if (!empty($_SESSION['is_admin']) && (int)$_SESSION['is_admin'] === 1) {
+                    header('Location: /index.php?action=admin');
+                } else {
+                    header('Location: /index.php');
+                }
                 exit;
             }
 
@@ -235,7 +239,11 @@ class AuthController
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_regenerate_id(true);
         }
-        header('Location: /index.php');
+        if (!empty($_SESSION['is_admin']) && (int)$_SESSION['is_admin'] === 1) {
+            header('Location: /index.php?action=admin');
+        } else {
+            header('Location: /index.php');
+        }
         exit;
     }
 

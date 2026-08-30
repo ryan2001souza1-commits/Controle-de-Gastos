@@ -56,6 +56,8 @@ require_once __DIR__ . '/../src/controllers/BugReportController.php';
 $db = getDBConnection();
 require_once __DIR__ . '/../src/db_bootstrap.php';
 ensureSchemaUpToDate($db);
+require_once __DIR__ . '/../src/migrations.php';
+applyMigrations($db);
 $userModel = new User($db);
 $categoryModel = new Category($db);
 $expenseModel = new Expense($db);
@@ -151,7 +153,97 @@ if ($action === 'register') {
     $bugReportController->create();
 } elseif ($action === 'meus_relatos') {
     $bugReportController->myReports();
+} elseif ($action === 'setup_first_admin') {
+    // Endpoint one-time: cria primeiro admin em produção (só funciona se ainda não existir admin)
+    try {
+        $hasAdmin = (int)$db->query("SELECT COUNT(*) FROM usuarios WHERE is_admin = 1")->fetchColumn();
+        if ($hasAdmin > 0) {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            echo json_encode(['ok'=>false,'error'=>'Admin ja existe']);
+            exit;
+        }
+        $email = trim($_REQUEST['email'] ?? '');
+        $pass = $_REQUEST['password'] ?? '';
+        $name = trim($_REQUEST['name'] ?? 'Administrador');
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($pass) < 8) {
+            http_response_code(400);
+            echo json_encode(['ok'=>false,'error'=>'Email ou senha invalidos (senha min 8)']);
+            exit;
+        }
+        $existing = $db->prepare("SELECT id FROM usuarios WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) LIMIT 1");
+        $existing->execute([$email]);
+        $row = $existing->fetch(PDO::FETCH_ASSOC);
+        $hash = password_hash($pass, PASSWORD_DEFAULT);
+        if ($row) {
+            $db->prepare("UPDATE usuarios SET senha=?, is_admin=1, nome=COALESCE(NULLIF(?,''), nome), plano='premium', plano_status='ativo', updated_at=NOW() WHERE id=?")->execute([$hash, $name, $row['id']]);
+            $id = $row['id'];
+        } else {
+            $db->prepare("INSERT INTO usuarios (nome,email,senha,is_admin,plano,plano_status) VALUES (?,?,?,1,'premium','ativo')")->execute([$name,$email,$hash]);
+            $id = $db->lastInsertId();
+        }
+        $chk = $db->prepare("SELECT id,email,is_admin FROM usuarios WHERE id=?");
+        $chk->execute([$id]);
+        $ok = $chk->fetch(PDO::FETCH_ASSOC);
+        if ($ok && (int)$ok['is_admin']===1) {
+            echo json_encode(['ok'=>true,'id'=>$ok['id'],'email'=>$ok['email'],'is_admin'=>1]);
+        } else {
+            http_response_code(500);
+            echo json_encode(['ok'=>false,'error'=>'Falha ao criar admin']);
+        }
+        exit;
+    } catch (Throwable $e) {
+        error_log('[setup_first_admin] '.$e->getMessage());
+        http_response_code(500);
+        echo json_encode(['ok'=>false,'error'=>'Erro interno']);
+        exit;
+    }
+} elseif ($action === 'diag') {
+    // Diagnóstico: verifica conta admin no banco sem expor hash completo
+    header('Content-Type: application/json');
+    try {
+        $email = $_REQUEST['email'] ?? 'admin20264@gmail.com';
+        $stmt = $db->prepare("SELECT id, email, is_admin, plano, LEFT(senha,8) as hash_prefix, LENGTH(senha) as hash_len FROM usuarios WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) LIMIT 1");
+        $stmt->execute([$email]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            echo json_encode(['exists'=>false,'email'=>$email,'db_host'=>parse_url(getenv('DATABASE_URL')?:'',PHP_URL_HOST)]);
+            exit;
+        }
+        $verify = null;
+        if (!empty($_REQUEST['test_password'])) {
+            $full = $db->prepare("SELECT senha FROM usuarios WHERE id=?");
+            $full->execute([$row['id']]);
+            $verify = password_verify($_REQUEST['test_password'], $full->fetchColumn()) ? 'OK' : 'FAIL';
+        }
+        echo json_encode([
+            'exists'=>true,
+            'id'=>$row['id'],
+            'is_admin'=>(int)$row['is_admin'],
+            'plano'=>$row['plano'],
+            'hash_prefix'=>$row['hash_prefix'],
+            'hash_len'=>(int)$row['hash_len'],
+            'verify_test'=>$verify,
+            'db_host'=>parse_url(getenv('DATABASE_URL')?:'',PHP_URL_HOST),
+        ]);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error'=>$e->getMessage()]);
+        exit;
+    }
 } elseif (isLoggedIn()) {
+    if (!empty($_SESSION['is_admin']) && (int)$_SESSION['is_admin'] === 1) {
+        header('Location: /index.php?action=admin');
+        exit;
+    }
+    try {
+        if (!empty($_SESSION['user_id']) && (new User(getDBConnection()))->isAdmin((int)$_SESSION['user_id'])) {
+            $_SESSION['is_admin'] = 1;
+            header('Location: /index.php?action=admin');
+            exit;
+        }
+    } catch (Throwable $e) {}
     $expenseController->dashboard();
 } else {
     $authController->login();
