@@ -102,10 +102,10 @@ class Feedback
     {
         $sql = "SELECT
                 COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE status = 'novo') AS novos,
-                COUNT(*) FILTER (WHERE status = 'em_analise') AS em_analise,
-                COUNT(*) FILTER (WHERE status = 'implementado') AS implementados,
-                COUNT(*) FILTER (WHERE status = 'recusado') AS recusados
+                COUNT(CASE WHEN status = 'novo' THEN 1 END) AS novos,
+                COUNT(CASE WHEN status = 'em_analise' THEN 1 END) AS em_analise,
+                COUNT(CASE WHEN status = 'implementado' THEN 1 END) AS implementados,
+                COUNT(CASE WHEN status = 'recusado' THEN 1 END) AS recusados
             FROM feedback";
         $row = $this->db->query($sql)->fetch(PDO::FETCH_ASSOC);
         return [

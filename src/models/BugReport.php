@@ -91,9 +91,24 @@ class BugReport
     public function stats(): array
     {
         $total = (int)$this->db->query("SELECT COUNT(*) FROM bug_reports")->fetchColumn();
+        $novos = (int)$this->db->query("SELECT COUNT(*) FROM bug_reports WHERE status = 'novo'")->fetchColumn();
+        $recebidos = (int)$this->db->query("SELECT COUNT(*) FROM bug_reports WHERE status = 'recebido'")->fetchColumn();
         $pend = (int)$this->db->query("SELECT COUNT(*) FROM bug_reports WHERE status IN ('novo','recebido')")->fetchColumn();
         $analise = (int)$this->db->query("SELECT COUNT(*) FROM bug_reports WHERE status IN ('em_analise','em_desenvolvimento')")->fetchColumn();
         $resolv = (int)$this->db->query("SELECT COUNT(*) FROM bug_reports WHERE status IN ('resolvido','fechado')")->fetchColumn();
-        return ['total'=>$total,'pendentes'=>$pend,'em_analise'=>$analise,'resolvidos'=>$resolv];
+        $resolvidos = (int)$this->db->query("SELECT COUNT(*) FROM bug_reports WHERE status = 'resolvido'")->fetchColumn();
+        $fechados = (int)$this->db->query("SELECT COUNT(*) FROM bug_reports WHERE status = 'fechado'")->fetchColumn();
+        $emDev = (int)$this->db->query("SELECT COUNT(*) FROM bug_reports WHERE status = 'em_desenvolvimento'")->fetchColumn();
+        return [
+            'total' => $total,
+            'novos' => $novos,
+            'recebidos' => $recebidos,
+            'pendentes' => $pend,
+            'em_analise' => $analise,
+            'em_desenvolvimento' => $emDev,
+            'resolvidos' => $resolvidos,
+            'fechados' => $fechados,
+            'resolvido' => $resolv,
+        ];
     }
 }

@@ -79,23 +79,6 @@ class FeedbackController
         require basePath('meu_feedback.php');
     }
 
-    public function adminList(): void
-    {
-        $this->requireAdmin();
-        $status = $_GET['status'] ?? '';
-        $q = trim($_GET['q'] ?? '');
-        $page = max(1, (int)($_GET['page'] ?? 1));
-        $perPage = 20;
-        $offset = ($page - 1) * $perPage;
-        $feedbacks = $this->feedbackModel->findAll($status ?: null, $q ?: null, $perPage, $offset);
-        $total = $this->feedbackModel->countAll($status ?: null, $q ?: null);
-        $stats = $this->feedbackModel->stats();
-        $pageTitle = 'Admin — Feedback';
-        $activeMenu = 'admin_feedback';
-        $showPeriodPicker = false;
-        require basePath('admin/feedback.php');
-    }
-
     public function adminUpdate(): void
     {
         $this->requireAdmin();
