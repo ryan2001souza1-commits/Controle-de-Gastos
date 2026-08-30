@@ -56,7 +56,7 @@ $utilPct=$totals['percentage']??0;
             <div style="display:flex;gap:10px;padding:10px;background:#fffbeb;border-radius:8px"><div style="color:#f59e0b"><?= render_icon('wallet',16) ?></div><div style="font-size:12px"><div style="font-weight:600;color:#0f172a">A categoria Moradia está próxima do limite (82% utilizado)</div><a href="#" style="color:#10b981;font-size:11px">Ver detalhes</a></div></div>
         </div></section>
 
-        <section class="panel"><header class="panel-header"><div class="panel-title" style="font-size:14px">Dicas para o período</div></header><div class="panel-body"><div style="background:#ecfdf5;padding:12px;border-radius:8px;font-size:12px;color:#065f46"><div style="display:flex;gap:8px"><span><?= render_icon('info',14) ?></span><span>Você ainda tem R$ <?= number_format($totals['remaining'],2,',','.') ?> disponível para gastar até 31/05/2025.</span></div><a href="#" class="btn btn-ghost btn-xs" style="margin-top:8px">Ver dicas</a></div><a href="#" class="btn btn-primary" style="background:#059669;width:100%;margin-top:12px"><?= render_icon('plus',12) ?> Novo orçamento</a></div></section>
+        <section class="panel"><header class="panel-header"><div class="panel-title" style="font-size:14px">Dicas para o período</div></header><div class="panel-body"><div style="background:#ecfdf5;padding:12px;border-radius:8px;font-size:12px;color:#065f46"><div style="display:flex;gap:8px"><span><?= render_icon('info',14) ?></span><span>Você ainda tem R$ <?= number_format($totals['remaining'],2,',','.') ?> disponível para gastar até 31/05/2025.</span></div><a href="#" class="btn btn-ghost btn-xs" style="margin-top:8px">Ver dicas</a></div><button type="button" class="btn btn-primary" style="background:#059669;width:100%;margin-top:12px" onclick="openBudgetModal()"><?= render_icon('plus',12) ?> Novo orçamento</button></div></section>
     </div>
 </div>
 
@@ -65,5 +65,28 @@ $utilPct=$totals['percentage']??0;
     <div style="background:#fffbeb;padding:14px;border-radius:10px;display:flex;gap:10px"><div style="color:#f59e0b"><?= render_icon('wallet',18) ?></div><div><div style="font-weight:600;color:#0f172a;font-size:13px">Fique atento</div><div style="font-size:11px;color:#475569">2 categorias próximas do limite</div></div></div>
     <div style="background:#fef2f2;padding:14px;border-radius:10px;display:flex;gap:10px"><div style="color:#ef4444"><?= render_icon('trending-down',18) ?></div><div><div style="font-weight:600;color:#0f172a;font-size:13px">Excedeu o orçamento</div><div style="font-size:11px;color:#475569">1 categoria ultrapassou o limite</div></div></div>
 </div></section>
+
+    <!-- Modal Novo Orçamento -->
+    <div class="modal-overlay" id="budgetModal" style="display:none">
+        <div class="modal" style="max-width:460px">
+            <header class="modal-header"><div class="modal-title">Novo orçamento</div><button type="button" class="modal-close" onclick="closeBudgetModal()"><?= render_icon('x',16) ?></button></header>
+            <div class="modal-body">
+                <form id="budgetForm" action="/index.php?action=store_budget" method="POST">
+                    <div class="form-stack">
+                        <div class="form-group"><label>Categoria</label><div class="select-wrap"><select name="category_id" required><option value="">Selecione</option><?php foreach(($expenseCategories??[]) as $c): ?><option value="<?= (int)$c['id'] ?>"><?= htmlspecialchars($c['name']) ?></option><?php endforeach; ?></select></div></div>
+                        <div class="form-row"><div class="form-group"><label>Ano</label><input type="number" name="year" value="<?= $year ?>" min="2000" max="2100" required></div><div class="form-group"><label>Mês</label><input type="number" name="month" value="<?= $month ?>" min="1" max="12" required></div></div>
+                        <div class="form-group"><label>Valor limite (R$)</label><input type="number" name="limit_amount" step="0.01" min="0.01" required placeholder="0,00"></div>
+                    </div>
+                </form>
+            </div>
+            <footer class="modal-footer"><button type="button" class="btn btn-ghost" onclick="closeBudgetModal()">Cancelar</button><button type="submit" form="budgetForm" class="btn btn-primary" style="background:#059669">Salvar orçamento</button></footer>
+        </div>
+    </div>
+    <script>
+    function openBudgetModal(){document.getElementById('budgetModal').style.display='flex';document.body.style.overflow='hidden'}
+    function closeBudgetModal(){document.getElementById('budgetModal').style.display='none';document.body.style.overflow=''}
+    document.getElementById('budgetModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeBudgetModal()});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeBudgetModal()});
+    </script>
 
 <?php include __DIR__ . '/partials/layout_end.php'; ?>

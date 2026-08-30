@@ -103,7 +103,7 @@ foreach (($expenseCategories ?? []) as $i => $c) {
 
     <!-- Novo lançamento + filtros -->
     <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px">
-        <a href="/index.php?action=lancamentos" class="btn btn-primary" style="background:#059669;border-color:#059669"><?php echo render_icon('plus',14) ?> Novo lançamento <span style="opacity:.8;margin-left:4px">▾</span></a>
+        <button type="button" class="btn btn-primary" style="background:#059669;border-color:#059669" onclick="openTxModal()"><?php echo render_icon('plus',14) ?> Novo lançamento <span style="opacity:.8;margin-left:4px">▾</span></button>
         <form method="GET" action="/index.php" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;flex:1">
             <input type="hidden" name="action" value="lancamentos">
             <div class="select-wrap" style="min-width:140px"><select name="type" onchange="this.form.submit()"><option value="">Todos os tipos</option><option value="receita" <?= $filterType==='receita'?'selected':'' ?>>Receitas</option><option value="despesa" <?= $filterType==='despesa'?'selected':'' ?>>Despesas</option></select></div>
@@ -162,5 +162,40 @@ foreach (($expenseCategories ?? []) as $i => $c) {
             <div class="pagination-select"><select><option>10 por página</option></select></div>
         </div>
     </section>
+
+    <!-- Modal Novo Lançamento -->
+    <div class="modal-overlay" id="txModal" style="display:none">
+        <div class="modal" style="max-width:480px">
+            <header class="modal-header"><div class="modal-title">Novo lançamento</div><button type="button" class="modal-close" onclick="closeTxModal()"><?= render_icon('x',16) ?></button></header>
+            <div class="modal-body">
+                <form id="txForm" action="/index.php?action=store" method="POST">
+                    <div class="form-stack">
+                        <div class="form-group"><label>Descrição</label><input type="text" name="description" required placeholder="Ex: Salário, Aluguel"></div>
+                        <div class="form-row"><div class="form-group"><label>Valor (R$)</label><input type="number" name="amount" step="0.01" min="0.01" required placeholder="0,00"></div><div class="form-group"><label>Data</label><input type="date" name="date" value="<?= date('Y-m-d') ?>" required></div></div>
+                        <div class="form-group"><label>Tipo</label><div class="select-wrap"><select name="type" id="txType" required><option value="despesa">Despesa</option><option value="receita">Receita</option></select></div></div>
+                        <div class="form-group" id="txCatWrap"><label>Categoria</label><div class="select-wrap"><select name="category_id" id="txCategory"><option value="">Sem categoria</option><?php foreach(($expenseCategories??[]) as $c): ?><option value="<?= (int)$c['id'] ?>" data-type="despesa"><?= htmlspecialchars($c['name']) ?></option><?php endforeach; ?><?php foreach(($incomeCategories??[]) as $c): ?><option value="<?= (int)$c['id'] ?>" data-type="receita"><?= htmlspecialchars($c['name']) ?></option><?php endforeach; ?></select></div></div>
+                    </div>
+                </form>
+            </div>
+            <footer class="modal-footer"><button type="button" class="btn btn-ghost" onclick="closeTxModal()">Cancelar</button><button type="submit" form="txForm" class="btn btn-primary" style="background:#059669">Salvar lançamento</button></footer>
+        </div>
+    </div>
+    <script>
+    function openTxModal(){document.getElementById('txModal').style.display='flex';document.body.style.overflow='hidden'}
+    function closeTxModal(){document.getElementById('txModal').style.display='none';document.body.style.overflow=''}
+    document.getElementById('txModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeTxModal()});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeTxModal()});
+    (function(){
+        const typeSel=document.getElementById('txType'), catSel=document.getElementById('txCategory');
+        if(!typeSel||!catSel) return;
+        const allOpts=Array.from(catSel.options);
+        function filterCats(){
+            const t=typeSel.value; catSel.innerHTML='';
+            const empty=document.createElement('option'); empty.value=''; empty.textContent='Sem categoria'; catSel.appendChild(empty);
+            allOpts.forEach(o=>{if(o.value!==''&&o.dataset.type===t) catSel.appendChild(o.cloneNode(true))});
+        }
+        typeSel.addEventListener('change',filterCats); filterCats();
+    })();
+    </script>
 
 <?php include __DIR__ . '/partials/layout_end.php'; ?>

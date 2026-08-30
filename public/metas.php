@@ -9,6 +9,8 @@ $progressPct=$totalObj>0?min(100,round($totalSaved/$totalObj*100)):0;
 <?php if(isset($_GET['success'])&&isset($successMsgs[$_GET['success']])): ?><div class="alert alert-success" role="status"><?= render_icon('check',13) ?><span><?= htmlspecialchars($successMsgs[$_GET['success']]) ?></span></div><?php endif; ?>
 <?php if(isset($_GET['error'])&&isset($errors[$_GET['error']])): ?><div class="alert alert-error" role="alert"><?= render_icon('info',13) ?><span><?= htmlspecialchars($errors[$_GET['error']]) ?></span></div><?php endif; ?>
 
+<div style="display:flex;justify-content:flex-end;margin-bottom:12px"><button type="button" class="btn btn-primary" style="background:#059669;border-color:#059669" onclick="openGoalModal()"><?= render_icon('plus',13) ?> Nova meta</button></div>
+
 <section class="metric-strip">
     <article class="metric-card"><div class="metric-card-icon" style="background:#ecfdf5;color:#10b981"><?= render_icon('target',18) ?></div><div class="metric-card-body"><div class="metric-card-label">Total de metas</div><div class="metric-card-value">6</div><div class="text-xs" style="color:#64748b"><?= $completed ?> concluídas</div></div></article>
     <article class="metric-card"><div class="metric-card-icon" style="background:#eff6ff;color:#3b82f6"><?= render_icon('pie',18) ?></div><div class="metric-card-body"><div class="metric-card-label">Em andamento</div><div class="metric-card-value">4</div><div class="text-xs" style="color:#64748b">67% do total</div></div></article>
@@ -48,5 +50,29 @@ $progressPct=$totalObj>0?min(100,round($totalSaved/$totalObj*100)):0;
         </div></section>
     </div>
 </div>
+
+    <!-- Modal Nova Meta -->
+    <div class="modal-overlay" id="goalModal" style="display:none">
+        <div class="modal" style="max-width:480px">
+            <header class="modal-header"><div class="modal-title">Nova meta</div><button type="button" class="modal-close" onclick="closeGoalModal()"><?= render_icon('x',16) ?></button></header>
+            <div class="modal-body">
+                <form id="goalForm" action="/index.php?action=store_goal" method="POST">
+                    <div class="form-stack">
+                        <div class="form-group"><label>Nome</label><input type="text" name="name" required placeholder="Ex: Viagem, Reserva"></div>
+                        <div class="form-row"><div class="form-group"><label>Valor objetivo (R$)</label><input type="number" name="target_amount" step="0.01" min="0.01" required placeholder="0,00"></div><div class="form-group"><label>Valor já poupado (R$)</label><input type="number" name="saved_amount" step="0.01" min="0" value="0"></div></div>
+                        <div class="form-group"><label>Prazo (opcional)</label><input type="date" name="deadline"></div>
+                        <div class="form-group"><label>Descrição (opcional)</label><textarea name="description" rows="2" placeholder="Detalhes da meta"></textarea></div>
+                    </div>
+                </form>
+            </div>
+            <footer class="modal-footer"><button type="button" class="btn btn-ghost" onclick="closeGoalModal()">Cancelar</button><button type="submit" form="goalForm" class="btn btn-primary" style="background:#059669">Salvar meta</button></footer>
+        </div>
+    </div>
+    <script>
+    function openGoalModal(){document.getElementById('goalModal').style.display='flex';document.body.style.overflow='hidden'}
+    function closeGoalModal(){document.getElementById('goalModal').style.display='none';document.body.style.overflow=''}
+    document.getElementById('goalModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeGoalModal()});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeGoalModal()});
+    </script>
 
 <?php include __DIR__ . '/partials/layout_end.php'; ?>
