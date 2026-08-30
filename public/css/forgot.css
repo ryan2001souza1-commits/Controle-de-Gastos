@@ -1,206 +1,114 @@
 /* =====================================================
-   FORGOT PASSWORD — extensões do auth.css
-   Mantém a identidade visual das outras telas auth
+   FORGOT PASSWORD — extensions for auth.css
    ===================================================== */
 
-/* Painel esquerdo: ilustração centralizada verticalmente */
 .forgot-hero {
     align-items: center;
     justify-content: center;
-    padding: 3rem 3.5rem;
-}
-
-.forgot-title {
-    margin-bottom: 1.25rem;
+    padding: 48px 56px;
 }
 
 .forgot-illustration {
-    margin-top: 2.5rem;
+    margin-top: 32px;
     display: flex;
     justify-content: flex-start;
-    filter: drop-shadow(0 18px 30px rgba(0, 0, 0, 0.35));
     animation: forgotFloat 6s ease-in-out infinite;
 }
 
 @keyframes forgotFloat {
     0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-8px); }
+    50% { transform: translateY(-6px); }
 }
 
-/* Card central: largura confortável */
-.forgot-card {
-    max-width: 460px;
-    padding: 2.5rem 2.5rem;
-}
-
-.forgot-subtitle {
-    margin-bottom: 1.75rem;
-    line-height: 1.55;
-}
-
-/* Botão com ícone à esquerda */
-.forgot-submit {
-    gap: 0.65rem;
-    letter-spacing: 0.005em;
-}
-
-.forgot-submit svg {
-    margin-right: 0.1rem;
-}
-
-/* Divisor "ou" */
-.forgot-divider {
-    display: flex;
-    align-items: center;
-    text-align: center;
-    margin: 1.5rem 0 1.25rem;
-    color: #94a3b8;
-    font-size: 0.8125rem;
-}
-
-.forgot-divider::before,
-.forgot-divider::after {
-    content: "";
-    flex: 1;
-    height: 1px;
-    background: #e2e8f0;
-}
-
-.forgot-divider span {
-    padding: 0 1rem;
-    text-transform: lowercase;
-    color: #94a3b8;
-}
-
-/* Link "Voltar para o login" */
 .forgot-back {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    width: 100%;
-    padding: 0.65rem 1rem;
-    color: #4f46e5;
-    font-size: 0.9rem;
+    gap: 6px;
+    color: #0f766e;
+    font-size: 13px;
     font-weight: 600;
     text-decoration: none;
-    border-radius: 10px;
-    transition: background 0.18s ease, color 0.18s ease;
+    transition: color 180ms ease;
 }
+.forgot-back:hover { color: #0d6b63; }
+.forgot-back svg { transition: transform 180ms ease; }
+.forgot-back:hover svg { transform: translateX(-2px); }
 
-.forgot-back:hover {
-    background: #eef2ff;
-    color: #4338ca;
-}
-
-.forgot-back svg {
-    transition: transform 0.18s ease;
-}
-
-.forgot-back:hover svg {
-    transform: translateX(-2px);
-}
-
-/* Aviso de segurança abaixo do card */
 .forgot-security {
     display: flex;
     align-items: center;
-    gap: 0.65rem;
+    gap: 10px;
     background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 0.75rem 1rem;
-    max-width: 460px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 10px 12px;
+    max-width: 420px;
     width: 100%;
     margin: 0 auto;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
-
 .forgot-security-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    background: #eef2ff;
-    color: #4f46e5;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: #ecfdf5;
+    color: #0f766e;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
 }
-
 .forgot-security p {
     margin: 0;
-    font-size: 0.8125rem;
-    color: #475569;
+    font-size: 12px;
+    color: #4b5563;
     line-height: 1.45;
 }
 
-/* Token box (mostra link de reset em ambiente sem SMTP) */
 .auth-alert-info {
-    background: #eef2ff;
-    color: #3730a3;
-    border-color: #c7d2fe;
+    background: #f0fdfa;
+    color: #0f766e;
+    border: 1px solid #99f6e4;
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
-    font-size: 0.8125rem;
+    gap: 6px;
+    font-size: 12px;
     line-height: 1.5;
     word-break: break-all;
 }
-
 .auth-alert-info strong {
-    color: #312e81;
+    color: #134e4a;
     font-weight: 700;
-    font-size: 0.85rem;
+    font-size: 13px;
 }
 
 .forgot-token-link {
     display: block;
-    padding: 0.5rem 0.625rem;
+    padding: 6px 8px;
     background: #ffffff;
-    border: 1px dashed #c7d2fe;
+    border: 1px dashed #99f6e4;
     border-radius: 6px;
-    color: #4f46e5;
+    color: #0f766e;
     text-decoration: none;
     font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-    font-size: 0.75rem;
-    margin-top: 0.25rem;
-    transition: background 0.18s ease;
+    font-size: 11px;
+    margin-top: 4px;
+    transition: background 180ms ease;
 }
-
 .forgot-token-link:hover {
-    background: #f5f3ff;
+    background: #ecfdf5;
     text-decoration: underline;
 }
 
-/* ============================================
-   RESPONSIVO
-   ============================================ */
 @media (max-width: 1023px) {
-    .forgot-hero { padding: 2rem 1.5rem; }
-    .forgot-illustration {
-        margin-top: 1.5rem;
-    }
-    .forgot-card { padding: 2.25rem 2rem; }
+    .forgot-hero { padding: 32px 24px; }
+    .forgot-illustration { margin-top: 24px; }
 }
-
 @media (max-width: 767px) {
-    .forgot-hero { padding: 1.5rem 1.25rem; }
+    .forgot-hero { padding: 24px 20px; }
     .forgot-illustration { display: none; }
-    .forgot-card { padding: 2rem 1.5rem; }
-    .forgot-security { padding: 0.625rem 0.875rem; }
+    .forgot-security { padding: 10px 12px; }
 }
-
 @media (max-width: 480px) {
-    .forgot-hero { padding: 1.25rem 1rem 0.75rem; }
-    .forgot-title { font-size: 1.4rem; }
-    .forgot-illustration { display: none; }
-    .forgot-card { padding: 1.5rem 1.125rem; }
-    .forgot-subtitle { font-size: 0.85rem; }
-    .forgot-security p { font-size: 0.75rem; }
-}
-
-@media (max-width: 360px) {
-    .forgot-card { padding: 1.25rem 0.875rem; }
-    .forgot-security { padding: 0.5rem 0.75rem; }
+    .forgot-hero { padding: 20px 16px; }
+    .forgot-security p { font-size: 11px; }
 }

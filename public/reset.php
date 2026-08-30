@@ -8,24 +8,20 @@
     <title><?= $pageTitle ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/auth.css">
     <link rel="stylesheet" href="/css/forgot.css">
     <link rel="stylesheet" href="/css/reset.css">
 </head>
 <body class="auth-body">
     <div class="auth-wrapper forgot-wrapper">
-        <aside class="auth-hero forgot-hero" aria-hidden="true">
-            <div class="auth-hero-bg"></div>
+        <aside class="auth-hero forgot-hero" aria-hidden="false">
             <div class="auth-hero-content">
                 <div class="auth-brand">
                     <div class="auth-brand-logo">
-                        <svg viewBox="0 0 32 32" width="32" height="32" aria-hidden="true">
-                            <circle cx="16" cy="16" r="14" fill="#6366f1"/>
-                            <path d="M16 4 a12 12 0 0 1 10.4 6 L16 16 Z" fill="#8b5cf6"/>
-                            <path d="M26.4 10 a12 12 0 0 1 0 12 L16 16 Z" fill="#a855f7"/>
-                            <path d="M5.6 22 a12 12 0 0 0 10.4 6 L16 16 Z" fill="#22c55e"/>
+                        <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true">
+                            <rect x="4" y="4" width="24" height="24" rx="6" fill="none" stroke="#ffffff" stroke-width="2"/>
+                            <path d="M10 20 L14 14 L18 18 L22 12" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                     </div>
                     <div class="auth-brand-text">
@@ -36,52 +32,6 @@
 
                 <h1 class="auth-hero-title forgot-title">Nova senha<br>mais segura!</h1>
                 <p class="auth-hero-text">Escolha uma senha forte para proteger sua conta e continue no controle das suas finanças.</p>
-
-                <div class="forgot-illustration" aria-hidden="true">
-                    <svg viewBox="0 0 220 200" width="220" height="200">
-                        <defs>
-                            <linearGradient id="shieldGrad" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stop-color="#ede9fe"/>
-                                <stop offset="100%" stop-color="#a78bfa"/>
-                            </linearGradient>
-                        </defs>
-                        <circle cx="40" cy="50" r="3" fill="#ffffff" opacity="0.4"/>
-                        <circle cx="195" cy="40" r="2.5" fill="#ffffff" opacity="0.5"/>
-                        <circle cx="200" cy="160" r="3" fill="#ffffff" opacity="0.35"/>
-
-                        <g transform="translate(40 40)">
-                            <path d="M 0 60 Q 70 0 140 60 Q 140 130 70 160 Q 0 130 0 60 Z" fill="url(#shieldGrad)" opacity="0.9"/>
-                            <path d="M 0 60 Q 70 0 140 60 Q 140 130 70 160 Q 0 130 0 60 Z" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.5"/>
-
-                            <g transform="translate(50 55)">
-                                <rect x="0" y="18" width="40" height="32" rx="6" fill="#ffffff"/>
-                                <path d="M 6 18 V 12 a 14 14 0 0 1 28 0 V 18" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
-                                <circle cx="20" cy="32" r="4" fill="#7c3aed"/>
-                                <rect x="19" y="32" width="2" height="8" rx="1" fill="#7c3aed"/>
-                            </g>
-
-                            <g transform="translate(25 100)">
-                                <rect x="0" y="0" width="90" height="14" rx="7" fill="#ffffff"/>
-                                <circle cx="14" cy="7" r="3" fill="#7c3aed"/>
-                                <circle cx="30" cy="7" r="3" fill="#7c3aed"/>
-                                <circle cx="46" cy="7" r="3" fill="#a78bfa"/>
-                                <circle cx="62" cy="7" r="3" fill="#a78bfa"/>
-                                <circle cx="78" cy="7" r="3" fill="#c4b5fd"/>
-                            </g>
-
-                            <g stroke="#fde68a" stroke-width="2.5" stroke-linecap="round">
-                                <line x1="-12" y1="20" x2="-20" y2="14"/>
-                                <line x1="-12" y1="35" x2="-22" y2="35"/>
-                                <line x1="-12" y1="50" x2="-20" y2="56"/>
-                            </g>
-                            <g stroke="#fde68a" stroke-width="2.5" stroke-linecap="round">
-                                <line x1="152" y1="20" x2="160" y2="14"/>
-                                <line x1="152" y1="35" x2="162" y2="35"/>
-                                <line x1="152" y1="50" x2="160" y2="56"/>
-                            </g>
-                        </g>
-                    </svg>
-                </div>
             </div>
         </aside>
 
@@ -195,9 +145,29 @@
             <p class="auth-footer">&copy; <?= date('Y') ?> Controle de Gastos · Desenvolvido por Ryan Souza</p>
         </main>
     </div>
-    <script src="/js/app.js?v=20250829" defer></script>
     <script>
     (function () {
+        document.querySelectorAll('.auth-toggle-pw').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var targetId = btn.getAttribute('data-target');
+                var input = document.getElementById(targetId);
+                if (!input) return;
+                var open = btn.querySelector('.auth-eye-open');
+                var closed = btn.querySelector('.auth-eye-closed');
+                if (input.type === 'password') {
+                    input.type = 'text';
+                    if (open) open.style.display = 'none';
+                    if (closed) closed.style.display = '';
+                    btn.setAttribute('aria-pressed', 'true');
+                } else {
+                    input.type = 'password';
+                    if (open) open.style.display = '';
+                    if (closed) closed.style.display = 'none';
+                    btn.setAttribute('aria-pressed', 'false');
+                }
+            });
+        });
+
         const pwd = document.getElementById('password');
         const confirm = document.getElementById('password_confirm');
         const fill = document.getElementById('resetStrengthFill');

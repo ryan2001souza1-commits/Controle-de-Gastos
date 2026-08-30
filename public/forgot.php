@@ -7,23 +7,19 @@
     <title><?= $pageTitle ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/auth.css">
     <link rel="stylesheet" href="/css/forgot.css">
 </head>
 <body class="auth-body">
     <div class="auth-wrapper forgot-wrapper">
-        <aside class="auth-hero forgot-hero" aria-hidden="true">
-            <div class="auth-hero-bg"></div>
+        <aside class="auth-hero forgot-hero" aria-hidden="false">
             <div class="auth-hero-content">
                 <div class="auth-brand">
                     <div class="auth-brand-logo">
-                        <svg viewBox="0 0 32 32" width="32" height="32" aria-hidden="true">
-                            <circle cx="16" cy="16" r="14" fill="#6366f1"/>
-                            <path d="M16 4 a12 12 0 0 1 10.4 6 L16 16 Z" fill="#8b5cf6"/>
-                            <path d="M26.4 10 a12 12 0 0 1 0 12 L16 16 Z" fill="#a855f7"/>
-                            <path d="M5.6 22 a12 12 0 0 0 10.4 6 L16 16 Z" fill="#22c55e"/>
+                        <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true">
+                            <rect x="4" y="4" width="24" height="24" rx="6" fill="none" stroke="#ffffff" stroke-width="2"/>
+                            <path d="M10 20 L14 14 L18 18 L22 12" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                     </div>
                     <div class="auth-brand-text">
@@ -34,36 +30,6 @@
 
                 <h1 class="auth-hero-title forgot-title">Recupere o<br>acesso à sua conta</h1>
                 <p class="auth-hero-text">Estamos aqui para ajudar você a voltar a ter o controle das suas finanças.</p>
-
-                <div class="forgot-illustration" aria-hidden="true">
-                    <svg viewBox="0 0 220 180" width="220" height="180">
-                        <defs>
-                            <linearGradient id="envelopeGrad" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
-                                <stop offset="100%" stop-color="#ffffff" stop-opacity="0.75"/>
-                            </linearGradient>
-                            <linearGradient id="flapGrad" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stop-color="#c4b5fd"/>
-                                <stop offset="100%" stop-color="#8b5cf6"/>
-                            </linearGradient>
-                        </defs>
-
-                        <circle cx="190" cy="30" r="3" fill="#ffffff" opacity="0.5"/>
-                        <circle cx="40" cy="150" r="3" fill="#ffffff" opacity="0.4"/>
-                        <path d="M 165 95 q 20 -5 30 5" stroke="#ffffff" stroke-width="1.2" stroke-dasharray="3 4" fill="none" opacity="0.55"/>
-                        <path d="M 25 70 q 12 -8 22 0" stroke="#ffffff" stroke-width="1.2" stroke-dasharray="3 4" fill="none" opacity="0.4"/>
-
-                        <g transform="translate(20 30)">
-                            <rect x="0" y="55" width="180" height="105" rx="10" fill="url(#envelopeGrad)"/>
-                            <path d="M 0 60 L 90 115 L 180 60 L 180 65 L 90 120 L 0 65 Z" fill="#a78bfa" opacity="0.6"/>
-                            <path d="M 0 55 L 90 110 L 180 55 L 180 0 L 0 0 Z" fill="url(#flapGrad)"/>
-                            <rect x="60" y="30" width="60" height="45" rx="5" fill="#ffffff"/>
-                            <path d="M 70 35 L 70 60 L 80 65 L 90 60 L 100 65 L 110 60 L 110 35 Z" fill="none" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M 70 35 L 80 45 L 90 35" fill="none" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                            <rect x="80" y="48" width="20" height="3" rx="1.5" fill="#cbd5e1"/>
-                        </g>
-                    </svg>
-                </div>
             </div>
         </aside>
 
@@ -76,7 +42,7 @@
                     </svg>
                 </div>
                 <h2 class="auth-title">Esqueceu sua senha?</h2>
-                <p class="auth-subtitle forgot-subtitle">Digite seu e-mail e enviaremos as instruções<br>para recuperar sua senha.</p>
+                <p class="auth-subtitle forgot-subtitle">Digite seu e-mail e enviaremos as instruções para recuperar sua senha.</p>
 
                 <?php if (!empty($success)): ?>
                     <div class="auth-alert auth-alert-success"><?= htmlspecialchars($success) ?></div>
@@ -129,12 +95,11 @@
                         <path d="M8 11V8a4 4 0 0 1 8 0v3"/>
                     </svg>
                 </span>
-                <p>Para sua segurança, o link de recuperação<br>irá expirar em 1 minuto.</p>
+                <p>Para sua segurança, o link de recuperação irá expirar em 1 minuto.</p>
             </div>
 
             <p class="auth-footer">&copy; <?= date('Y') ?> Controle de Gastos · Desenvolvido por Ryan Souza</p>
         </main>
     </div>
-    <script src="/js/app.js" defer></script>
 </body>
 </html>

@@ -26,69 +26,87 @@ $activeMenu = 'lancamentos';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars($pageTitle) ?></title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
 <div class="app-wrapper">
 
-    <aside class="sidebar" id="sidebar">
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar" aria-label="Navegação principal">
         <div class="sidebar-header">
-            <div class="sidebar-logo">CG</div>
+            <div class="sidebar-logo" aria-hidden="true">CG</div>
             <span class="sidebar-brand">Controle de Gastos</span>
         </div>
-        <nav class="sidebar-nav">
-            <div class="sidebar-section-label">Menu</div>
+        <nav class="sidebar-nav" aria-label="Menu principal">
+            <div class="sidebar-section-label">Visão geral</div>
             <a href="/index.php" class="sidebar-link">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
                 Dashboard
             </a>
+            <div class="sidebar-section-label">Gestão</div>
             <a href="/index.php?action=lancamentos" class="sidebar-link <?= $activeMenu === 'lancamentos' ? 'active' : '' ?>">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
                 Lançamentos
             </a>
             <a href="/index.php?action=categorias" class="sidebar-link">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
                 Categorias
             </a>
-            <a href="/index.php?action=relatorios" class="sidebar-link">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                Relatórios
-            </a>
             <a href="/index.php?action=orcamentos" class="sidebar-link">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                 Orçamentos
             </a>
             <a href="/index.php?action=metas" class="sidebar-link">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
                 Metas
+            </a>
+            <div class="sidebar-section-label">Análise</div>
+            <a href="/index.php?action=relatorios" class="sidebar-link">
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                Relatórios
             </a>
         </nav>
         <div class="sidebar-footer">
             <a href="/index.php?action=logout" class="sidebar-link">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
                 Sair
             </a>
         </div>
     </aside>
 
-    <button class="sidebar-toggle" id="sidebarToggle" aria-label="Abrir menu">
-        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    <button class="sidebar-toggle" id="sidebarToggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="sidebar">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     </button>
+    <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
 
     <main class="main-content">
 
+        <!-- TOPBAR -->
         <header class="topbar">
             <div class="topbar-left">
-                <h2 class="topbar-title">Editar Lançamento</h2>
-                <a href="/index.php?action=lancamentos" class="btn btn-ghost btn-sm" style="margin-left:0.5rem">← Voltar</a>
+                <div class="topbar-eyebrow">Movimentações</div>
+                <h1 class="topbar-title">Editar lançamento</h1>
+                <div class="topbar-period">
+                    <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <?= isset($transaction['date']) ? date('d/m/Y', strtotime($transaction['date'])) : '' ?>
+                </div>
             </div>
             <div class="topbar-right">
-                <span class="topbar-greeting">Olá, <strong><?= htmlspecialchars($userName) ?></strong></span>
-                <div class="topbar-avatar"><?= $userInitials ?></div>
+                <a href="/index.php?action=lancamentos" class="btn btn-ghost btn-sm">← Voltar</a>
+                <div class="topbar-user">
+                    <div class="topbar-avatar" aria-hidden="true"><?= $userInitials ?></div>
+                    <div class="topbar-user-meta">
+                        <div class="topbar-greeting">Olá, <strong><?= htmlspecialchars($userName) ?></strong></div>
+                        <div class="topbar-role">Conta pessoal</div>
+                    </div>
+                </div>
             </div>
         </header>
 
+        <!-- ERROR -->
         <?php if (isset($error)): ?>
             <?php
             $errorMessages = [
@@ -100,83 +118,91 @@ $activeMenu = 'lancamentos';
             ];
             $msg = $errorMessages[$error] ?? 'Erro desconhecido.';
             ?>
-            <div class="alert alert-error">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                <?= htmlspecialchars($msg) ?>
+            <div class="alert alert-error" role="alert">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span><?= htmlspecialchars($msg) ?></span>
             </div>
         <?php endif; ?>
 
-        <section class="summary-section" style="grid-template-columns: 480px 1fr;">
-            <div class="bottom-card">
-                <h3 class="bottom-card-title">Editar Lançamento</h3>
-                <form action="/index.php?action=update" method="POST" id="editTxForm" novalidate
-                      data-expense-categories='<?= htmlspecialchars(json_encode($expenseCategories, JSON_UNESCAPED_UNICODE), ENT_QUOTES, "UTF-8") ?>'
-                      data-income-categories='<?= htmlspecialchars(json_encode($incomeCategories, JSON_UNESCAPED_UNICODE), ENT_QUOTES, "UTF-8") ?>'>
-                    <input type="hidden" name="id" value="<?= (int)$transaction['id'] ?>">
-                    <input type="hidden" name="type" value="<?= htmlspecialchars($txType) ?>" id="type">
+        <!-- FORM + SUMMARY -->
+        <section class="two-col two-col-form">
+            <article class="panel">
+                <header class="panel-header">
+                    <div>
+                        <div class="panel-title">Editar lançamento</div>
+                        <div class="panel-subtitle">Atualize os dados da transação.</div>
+                    </div>
+                    <span class="badge <?= $txType === 'despesa' ? 'badge-danger' : 'badge-success' ?>"><span class="badge-dot"></span><?= $txLabel ?></span>
+                </header>
+                <div class="panel-body-sm">
+                    <form action="/index.php?action=update" method="POST" id="editTxForm" novalidate
+                          data-expense-categories='<?= htmlspecialchars(json_encode($expenseCategories, JSON_UNESCAPED_UNICODE), ENT_QUOTES, "UTF-8") ?>'
+                          data-income-categories='<?= htmlspecialchars(json_encode($incomeCategories, JSON_UNESCAPED_UNICODE), ENT_QUOTES, "UTF-8") ?>'>
+                        <input type="hidden" name="id" value="<?= (int)$transaction['id'] ?>">
+                        <input type="hidden" name="type" value="<?= htmlspecialchars($txType) ?>" id="type">
+                        <div class="form-stack">
+                            <div class="form-group">
+                                <label for="description">Descrição</label>
+                                <input type="text" name="description" id="description"
+                                       value="<?= htmlspecialchars($transaction['description'] ?? '') ?>" required>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="amount">Valor (R$)</label>
+                                    <input type="number" name="amount" id="amount" step="0.01" min="0.01"
+                                           value="<?= htmlspecialchars(number_format((float)($transaction['amount'] ?? 0), 2, '.', '')) ?>" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="date">Data</label>
+                                    <input type="date" name="date" id="date"
+                                           value="<?= htmlspecialchars($transaction['date'] ?? '') ?>" required>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="category_id">Categoria</label>
+                                <div class="select-wrap">
+                                    <select name="category_id" id="category_id">
+                                        <option value="">Sem categoria</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div style="display:flex;gap:var(--space-2)">
+                                <button type="submit" class="btn btn-primary" style="flex:1">Salvar alterações</button>
+                                <a href="/index.php?action=lancamentos" class="btn btn-ghost">Cancelar</a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </article>
 
+            <article class="panel">
+                <header class="panel-header">
+                    <div>
+                        <div class="panel-title">Resumo</div>
+                        <div class="panel-subtitle">Dados atuais do lançamento.</div>
+                    </div>
+                </header>
+                <div class="panel-body">
                     <div class="form-stack">
-                        <div class="form-group">
-                            <label>Tipo</label>
-                            <input type="text" value="<?= htmlspecialchars($txLabel) ?>" disabled style="background:var(--bg-soft); color:var(--text-light)">
+                        <div class="indicator">
+                            <div class="indicator-label">ID do lançamento</div>
+                            <div class="indicator-value">#<?= (int)$transaction['id'] ?></div>
                         </div>
-                        <div class="form-group">
-                            <label for="description">Descrição</label>
-                            <input type="text" name="description" id="description"
-                                   value="<?= htmlspecialchars($transaction['description'] ?? '') ?>" required>
+                        <div class="indicator">
+                            <div class="indicator-label">Tipo</div>
+                            <div class="indicator-value <?= $txType === 'despesa' ? 'negative' : 'positive' ?>"><?= $txLabel ?></div>
                         </div>
-                        <div class="form-group">
-                            <label for="amount">Valor</label>
-                            <input type="number" name="amount" id="amount" step="0.01" min="0.01"
-                                   value="<?= htmlspecialchars(number_format((float)($transaction['amount'] ?? 0), 2, '.', '')) ?>" required>
+                        <div class="indicator">
+                            <div class="indicator-label">Data atual</div>
+                            <div class="indicator-value"><?= isset($transaction['date']) ? date('d/m/Y', strtotime($transaction['date'])) : '—' ?></div>
                         </div>
-                        <div class="form-group">
-                            <label for="date">Data</label>
-                            <input type="date" name="date" id="date"
-                                   value="<?= htmlspecialchars($transaction['date'] ?? '') ?>" required>
+                        <div class="indicator">
+                            <div class="indicator-label">Valor atual</div>
+                            <div class="indicator-value <?= $txType === 'despesa' ? 'negative' : 'positive' ?>">R$ <?= number_format((float)($transaction['amount'] ?? 0), 2, ',', '.') ?></div>
                         </div>
-                        <div class="form-group">
-                            <label for="category_id">Categoria</label>
-                            <select name="category_id" id="category_id">
-                                <option value="">Sem categoria</option>
-                            </select>
-                        </div>
-                        <div style="display:flex; gap:0.5rem">
-                            <button type="submit" class="btn btn-primary" style="flex:1">
-                                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                                Salvar
-                            </button>
-                            <a href="/index.php?action=lancamentos" class="btn btn-ghost">Cancelar</a>
-                        </div>
-                    </div>
-                </form>
-            </div>
-
-            <div class="bottom-card">
-                <h3 class="bottom-card-title">Resumo</h3>
-                <div class="form-stack">
-                    <div class="indicator" style="padding:0.875rem 1rem">
-                        <span class="indicator-label">ID do Lançamento</span>
-                        <span class="indicator-value text-primary">#<?= (int)$transaction['id'] ?></span>
-                    </div>
-                    <div class="indicator" style="padding:0.875rem 1rem">
-                        <span class="indicator-label">Tipo</span>
-                        <span class="indicator-value <?= $txType === 'despesa' ? 'text-expense' : 'text-income' ?>">
-                            <?= $txLabel ?>
-                        </span>
-                    </div>
-                    <div class="indicator" style="padding:0.875rem 1rem">
-                        <span class="indicator-label">Data Atual</span>
-                        <span class="indicator-value"><?= isset($transaction['date']) ? date('d/m/Y', strtotime($transaction['date'])) : '—' ?></span>
-                    </div>
-                    <div class="indicator" style="padding:0.875rem 1rem">
-                        <span class="indicator-label">Valor Atual</span>
-                        <span class="indicator-value <?= $txType === 'despesa' ? 'text-expense' : 'text-income' ?>">
-                            R$ <?= number_format((float)($transaction['amount'] ?? 0), 2, ',', '.') ?>
-                        </span>
                     </div>
                 </div>
-            </div>
+            </article>
         </section>
 
     </main>
@@ -223,24 +249,6 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     populateCategories(selectedType);
-
-    form.addEventListener('submit', (e) => {
-        const desc = form.querySelector('#description');
-        const amt  = form.querySelector('#amount');
-        const date = form.querySelector('#date');
-        let valid = true;
-
-        if (!desc.value.trim()) { desc.style.borderColor = 'var(--danger)'; valid = false; }
-        else { desc.style.borderColor = ''; }
-
-        if (parseFloat(amt.value) <= 0) { amt.style.borderColor = 'var(--danger)'; valid = false; }
-        else { amt.style.borderColor = ''; }
-
-        if (!date.value) { date.style.borderColor = 'var(--danger)'; valid = false; }
-        else { date.style.borderColor = ''; }
-
-        if (!valid) e.preventDefault();
-    });
 });
 </script>
 </body>

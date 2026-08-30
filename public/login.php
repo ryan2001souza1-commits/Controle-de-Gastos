@@ -8,23 +8,18 @@
     <title><?= $pageTitle ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/auth.css">
 </head>
 <body class="auth-body">
     <div class="auth-wrapper">
-        <aside class="auth-hero" aria-hidden="true">
-            <div class="auth-hero-bg"></div>
-
+        <aside class="auth-hero" aria-hidden="false">
             <div class="auth-hero-content">
                 <div class="auth-brand">
                     <div class="auth-brand-logo">
-                        <svg viewBox="0 0 32 32" width="32" height="32" aria-hidden="true">
-                            <circle cx="16" cy="16" r="14" fill="#6366f1"/>
-                            <path d="M16 2 a14 14 0 0 1 12.12 7 L16 16 Z" fill="#8b5cf6"/>
-                            <path d="M28.12 9 a14 14 0 0 1 0 14 L16 16 Z" fill="#a855f7"/>
-                            <path d="M3.88 23 a14 14 0 0 0 12.12 7 L16 16 Z" fill="#22c55e"/>
+                        <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true">
+                            <rect x="4" y="4" width="24" height="24" rx="6" fill="none" stroke="#ffffff" stroke-width="2"/>
+                            <path d="M10 20 L14 14 L18 18 L22 12" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                     </div>
                     <div class="auth-brand-text">
@@ -34,87 +29,18 @@
                 </div>
 
                 <h1 class="auth-hero-title">Organize suas finanças<br>e alcance seus objetivos</h1>
-                <p class="auth-hero-text">Acompanhe seus gastos, planeje melhor e conquiste sua liberdade financeira.</p>
+                <p class="auth-hero-text">Acompanhe seus gastos, planeje melhor e conquiste sua liberdade financeira com uma plataforma simples e segura.</p>
             </div>
 
-            <div class="auth-hero-illu" aria-hidden="true">
-                <div class="auth-card-mini auth-card-balance">
-                    <div class="auth-card-mini-head">
-                        <span>Resumo do mês</span>
-                        <span class="auth-card-mini-icon">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/></svg>
-                        </span>
-                    </div>
-                    <small>Saldo atual</small>
-                    <strong class="auth-card-mini-value">R$ 2.540,00</strong>
-                    <div class="auth-card-mini-row">
-                        <div><span>Receitas</span><strong class="ok">R$ 5.300,00</strong></div>
-                        <div><span>Despesas</span><strong class="bad">R$ 2.760,00</strong></div>
-                    </div>
-                </div>
-
-                <div class="auth-card-mini auth-card-chart">
-                    <div class="auth-card-mini-head"><span>Gastos por categoria</span></div>
-                    <div class="auth-card-chart-body">
-                        <svg viewBox="0 0 100 100" width="84" height="84" aria-hidden="true">
-                            <circle cx="50" cy="50" r="34" fill="none" stroke="#e2e8f0" stroke-width="14"/>
-                            <circle cx="50" cy="50" r="34" fill="none" stroke="#22c55e" stroke-width="14" stroke-dasharray="85 213" stroke-dashoffset="0" transform="rotate(-90 50 50)"/>
-                            <circle cx="50" cy="50" r="34" fill="none" stroke="#6366f1" stroke-width="14" stroke-dasharray="68 213" stroke-dashoffset="-85" transform="rotate(-90 50 50)"/>
-                            <circle cx="50" cy="50" r="34" fill="none" stroke="#f59e0b" stroke-width="14" stroke-dasharray="40 213" stroke-dashoffset="-153" transform="rotate(-90 50 50)"/>
-                            <circle cx="50" cy="50" r="34" fill="none" stroke="#0ea5e9" stroke-width="14" stroke-dasharray="20 213" stroke-dashoffset="-193" transform="rotate(-90 50 50)"/>
-                        </svg>
-                        <ul class="auth-card-legend">
-                            <li><span class="dot c1"></span>Moradia <em>40%</em></li>
-                            <li><span class="dot c2"></span>Alimentação <em>25%</em></li>
-                            <li><span class="dot c3"></span>Transporte <em>15%</em></li>
-                            <li><span class="dot c4"></span>Lazer <em>10%</em></li>
-                            <li><span class="dot c5"></span>Outros <em>10%</em></li>
-                        </ul>
-                    </div>
-                </div>
-
-                <div class="auth-card-mini auth-card-goal">
-                    <div class="auth-card-mini-head">
-                        <span class="auth-card-mini-goal-icon">
-                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#a855f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg>
-                        </span>
-                        <div>
-                            <strong>Meta do mês</strong>
-                            <small>Economize mais para realizar seus sonhos!</small>
-                        </div>
-                    </div>
-                    <div class="auth-progress"><span style="width:72%"></span></div>
-                    <span class="auth-progress-label">72%</span>
-                </div>
-
-                <div class="auth-illu-coin auth-illu-coin-1" aria-hidden="true">
-                    <svg viewBox="0 0 64 64" width="48" height="48"><circle cx="32" cy="32" r="28" fill="#f59e0b"/><circle cx="32" cy="32" r="22" fill="#fbbf24"/><text x="32" y="40" text-anchor="middle" font-size="22" font-weight="800" fill="#92400e" font-family="Inter,sans-serif">$</text></svg>
-                </div>
-                <div class="auth-illu-coin auth-illu-coin-2" aria-hidden="true">
-                    <svg viewBox="0 0 64 64" width="40" height="40"><circle cx="32" cy="32" r="28" fill="#f59e0b"/><circle cx="32" cy="32" r="22" fill="#fbbf24"/><text x="32" y="40" text-anchor="middle" font-size="20" font-weight="800" fill="#92400e" font-family="Inter,sans-serif">$</text></svg>
-                </div>
-                <div class="auth-illu-coin auth-illu-coin-3" aria-hidden="true">
-                    <svg viewBox="0 0 64 64" width="36" height="36"><circle cx="32" cy="32" r="28" fill="#f59e0b"/><circle cx="32" cy="32" r="22" fill="#fbbf24"/><text x="32" y="40" text-anchor="middle" font-size="18" font-weight="800" fill="#92400e" font-family="Inter,sans-serif">$</text></svg>
-                </div>
-
-                <div class="auth-illu-wallet" aria-hidden="true">
-                    <svg viewBox="0 0 120 90" width="120" height="90">
-                        <path d="M10 22 Q10 12 20 12 H95 a10 10 0 0 1 10 10 V72 a10 10 0 0 1 -10 10 H20 a10 10 0 0 1 -10 -10 Z" fill="#7c3aed"/>
-                        <rect x="55" y="35" width="60" height="34" rx="6" fill="#6d28d9"/>
-                        <rect x="60" y="44" width="22" height="16" rx="3" fill="#c4b5fd"/>
-                        <rect x="64" y="48" width="14" height="8" rx="1.5" fill="#a78bfa"/>
+            <div class="auth-hero-foot">
+                <div class="auth-shield" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                     </svg>
                 </div>
-
-                <div class="auth-illu-plant" aria-hidden="true">
-                    <svg viewBox="0 0 80 110" width="80" height="110">
-                        <ellipse cx="40" cy="100" rx="22" ry="6" fill="#0f172a" opacity="0.35"/>
-                        <path d="M28 78 Q40 60 52 78 L50 100 H30 Z" fill="#e2e8f0"/>
-                        <path d="M30 78 Q35 70 40 78" fill="none" stroke="#cbd5e1" stroke-width="1"/>
-                        <path d="M40 80 C 30 60 18 50 22 30 C 32 32 42 50 42 70 Z" fill="#22c55e"/>
-                        <path d="M40 80 C 50 60 62 50 58 30 C 48 32 38 50 38 70 Z" fill="#16a34a"/>
-                        <path d="M40 80 C 40 50 36 30 40 14 C 44 30 44 50 44 70 Z" fill="#15803d"/>
-                    </svg>
+                <div>
+                    <strong>Seus dados seguros</strong>
+                    <span>Criptografia e privacidade garantidas</span>
                 </div>
             </div>
         </aside>
@@ -209,7 +135,7 @@
 
                     <button type="submit" class="auth-submit">
                         <span>Entrar</span>
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <line x1="5" y1="12" x2="19" y2="12"/>
                             <polyline points="12 5 19 12 12 19"/>
                         </svg>
@@ -247,6 +173,30 @@
             <p class="auth-footer">&copy; <?= date('Y') ?> Controle de Gastos · Desenvolvido por Ryan Souza</p>
         </main>
     </div>
-    <script src="/js/app.js?v=20250829" defer></script>
+
+    <script>
+    (function () {
+        document.querySelectorAll('.auth-toggle-pw').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var targetId = btn.getAttribute('data-target');
+                var input = document.getElementById(targetId);
+                if (!input) return;
+                var open = btn.querySelector('.auth-eye-open');
+                var closed = btn.querySelector('.auth-eye-closed');
+                if (input.type === 'password') {
+                    input.type = 'text';
+                    if (open) open.style.display = 'none';
+                    if (closed) closed.style.display = '';
+                    btn.setAttribute('aria-pressed', 'true');
+                } else {
+                    input.type = 'password';
+                    if (open) open.style.display = '';
+                    if (closed) closed.style.display = 'none';
+                    btn.setAttribute('aria-pressed', 'false');
+                }
+            });
+        });
+    })();
+    </script>
 </body>
 </html>

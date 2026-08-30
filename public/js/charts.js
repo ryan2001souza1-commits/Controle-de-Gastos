@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', function () {
     if (typeof Chart === 'undefined') return;
 
-    Chart.defaults.font.family = '-apple-system, "Inter", "Segoe UI", Roboto, "Helvetica Neue", sans-serif';
+    Chart.defaults.font.family = '"Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif';
     Chart.defaults.font.size = 11.5;
     Chart.defaults.color = '#64748b';
 
@@ -43,8 +43,8 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!data) return;
 
     var catColors = [
-        '#4f46e5', '#10b981', '#ef4444', '#f59e0b', '#0ea5e9',
-        '#a855f7', '#ec4899', '#14b8a6', '#eab308', '#64748b',
+        '#0f766e', '#16a34a', '#dc2626', '#d97706', '#0369a1',
+        '#7c3aed', '#db2777', '#0891b2', '#ca8a04', '#64748b',
         '#06b6d4', '#84cc16', '#f97316', '#8b5cf6', '#db2777'
     ];
 
@@ -86,11 +86,11 @@ document.addEventListener('DOMContentLoaded', function () {
                         {
                             label: 'Saldo',
                             data: ff.balance,
-                            borderColor: '#4f46e5',
-                            backgroundColor: 'rgba(79, 70, 229, 0.05)',
+                            borderColor: '#0f766e',
+                            backgroundColor: 'rgba(15, 118, 110, 0.05)',
                             tension: 0.35, fill: false, borderWidth: 2.5, borderDash: [6, 4],
                             pointRadius: 3, pointHoverRadius: 6,
-                            pointBackgroundColor: '#4f46e5', pointBorderColor: '#fff', pointBorderWidth: 1.5
+                            pointBackgroundColor: '#0f766e', pointBorderColor: '#fff', pointBorderWidth: 1.5
                         }
                     ]
                 },
@@ -236,8 +236,8 @@ document.addEventListener('DOMContentLoaded', function () {
             destroy('chart-balance-evolution');
 
             var gradient = balCanvas.getContext('2d').createLinearGradient(0, 0, 0, 280);
-            gradient.addColorStop(0, 'rgba(79, 70, 229, 0.18)');
-            gradient.addColorStop(1, 'rgba(79, 70, 229, 0.00)');
+            gradient.addColorStop(0, 'rgba(15, 118, 110, 0.18)');
+            gradient.addColorStop(1, 'rgba(15, 118, 110, 0.00)');
 
             new Chart(balCanvas.getContext('2d'), {
                 type: 'line',
@@ -246,11 +246,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     datasets: [{
                         label: 'Saldo acumulado',
                         data: bal.balance,
-                        borderColor: '#4f46e5',
+                        borderColor: '#0f766e',
                         backgroundColor: gradient,
                         tension: 0.4, fill: true, borderWidth: 2.5,
                         pointRadius: 3, pointHoverRadius: 6,
-                        pointBackgroundColor: '#4f46e5', pointBorderColor: '#fff', pointBorderWidth: 1.5
+                        pointBackgroundColor: '#0f766e', pointBorderColor: '#fff', pointBorderWidth: 1.5
                     }]
                 },
                 options: {
@@ -305,11 +305,11 @@ document.addEventListener('DOMContentLoaded', function () {
                         { label: 'Despesas', data: mExpense, backgroundColor: 'rgba(239, 68, 68, 0.85)', borderColor: '#ef4444', borderWidth: 0, borderRadius: 6, borderSkipped: false, maxBarThickness: 28 },
                         {
                             type: 'line', label: 'Saldo',
-                            data: mBalance, borderColor: '#4f46e5',
-                            backgroundColor: 'rgba(79, 70, 229, 0.05)',
+                            data: mBalance, borderColor: '#0f766e',
+                            backgroundColor: 'rgba(15, 118, 110, 0.05)',
                             tension: 0.35, borderWidth: 2.5, borderDash: [6, 4],
                             pointRadius: 4, pointHoverRadius: 6,
-                            pointBackgroundColor: '#4f46e5', pointBorderColor: '#fff', pointBorderWidth: 1.5
+                            pointBackgroundColor: '#0f766e', pointBorderColor: '#fff', pointBorderWidth: 1.5
                         }
                     ]
                 },

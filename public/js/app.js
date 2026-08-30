@@ -222,49 +222,25 @@ whenReady(() => {
             const amt  = txForm.querySelector('#amount');
             const date = txForm.querySelector('#date');
 
-            clearError(txForm.querySelector('#grp-description'));
-            clearError(txForm.querySelector('#grp-amount'));
-            clearError(txForm.querySelector('#grp-date'));
+            if (!desc || !desc.value.trim()) { desc.style.borderColor = 'var(--c-negative-2)'; valid = false; }
+            else { desc.style.borderColor = ''; }
 
-            if (!desc || !desc.value.trim()) {
-                setError(txForm.querySelector('#grp-description'));
-                valid = false;
-            }
-            if (!amt || parseFloat(amt.value) <= 0) {
-                setError(txForm.querySelector('#grp-amount'));
-                valid = false;
-            }
-            if (!date || !date.value) {
-                setError(txForm.querySelector('#grp-date'));
-                valid = false;
-            }
+            if (!amt || parseFloat(amt.value) <= 0) { amt.style.borderColor = 'var(--c-negative-2)'; valid = false; }
+            else { amt.style.borderColor = ''; }
 
-            if (!valid) {
-                e.preventDefault();
-            } else {
-                const btn = document.getElementById('btnSubmit');
-                if (btn) {
-                    btn.disabled = true;
-                    btn.style.opacity = '0.7';
-                    btn.innerHTML = 'Salvando…';
-                }
-            }
+            if (!date || !date.value) { date.style.borderColor = 'var(--c-negative-2)'; valid = false; }
+            else { date.style.borderColor = ''; }
+
+            if (!valid) e.preventDefault();
         });
-    }
-
-    function setError(group) {
-        if (group) group.classList.add('has-error');
-    }
-    function clearError(group) {
-        if (group) group.classList.remove('has-error');
     }
 
     /* ============================================================
        Confirmação de exclusão
        ============================================================ */
-    document.querySelectorAll('.delete-form').forEach(form => {
+    document.querySelectorAll('form[action*="delete"]').forEach(form => {
         form.addEventListener('submit', (e) => {
-            if (!confirm('Tem certeza que deseja excluir este lançamento? Esta ação não pode ser desfeita.')) {
+            if (!confirm('Tem certeza que deseja excluir este item? Esta ação não pode ser desfeita.')) {
                 e.preventDefault();
             }
         });

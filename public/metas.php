@@ -23,216 +23,246 @@ $successMsgs = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars($pageTitle) ?></title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
 <div class="app-wrapper">
 
-    <aside class="sidebar" id="sidebar">
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar" aria-label="Navegação principal">
         <div class="sidebar-header">
-            <div class="sidebar-logo">CG</div>
+            <div class="sidebar-logo" aria-hidden="true">CG</div>
             <span class="sidebar-brand">Controle de Gastos</span>
         </div>
-        <nav class="sidebar-nav">
-            <div class="sidebar-section-label">Menu</div>
+        <nav class="sidebar-nav" aria-label="Menu principal">
+            <div class="sidebar-section-label">Visão geral</div>
             <a href="/index.php" class="sidebar-link">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
                 Dashboard
             </a>
+            <div class="sidebar-section-label">Gestão</div>
             <a href="/index.php?action=lancamentos" class="sidebar-link">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
                 Lançamentos
             </a>
             <a href="/index.php?action=categorias" class="sidebar-link">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
                 Categorias
             </a>
-            <a href="/index.php?action=relatorios" class="sidebar-link">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                Relatórios
-            </a>
             <a href="/index.php?action=orcamentos" class="sidebar-link">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                 Orçamentos
             </a>
             <a href="/index.php?action=metas" class="sidebar-link <?= $activeMenu === 'metas' ? 'active' : '' ?>">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
                 Metas
+            </a>
+            <div class="sidebar-section-label">Análise</div>
+            <a href="/index.php?action=relatorios" class="sidebar-link">
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                Relatórios
             </a>
         </nav>
         <div class="sidebar-footer">
             <a href="/index.php?action=logout" class="sidebar-link">
-                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
                 Sair
             </a>
         </div>
     </aside>
 
-    <button class="sidebar-toggle" id="sidebarToggle" aria-label="Abrir menu">
-        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    <button class="sidebar-toggle" id="sidebarToggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="sidebar">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     </button>
+    <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
 
     <main class="main-content">
 
+        <!-- TOPBAR -->
         <header class="topbar">
             <div class="topbar-left">
-                <h2 class="topbar-title">Metas Financeiras</h2>
+                <div class="topbar-eyebrow">Planejamento</div>
+                <h1 class="topbar-title">Metas</h1>
             </div>
             <div class="topbar-right">
-                <span class="topbar-greeting">Olá, <strong><?= htmlspecialchars($userName) ?></strong></span>
-                <div class="topbar-avatar"><?= $userInitials ?></div>
+                <div class="topbar-user">
+                    <div class="topbar-avatar" aria-hidden="true"><?= $userInitials ?></div>
+                    <div class="topbar-user-meta">
+                        <div class="topbar-greeting">Olá, <strong><?= htmlspecialchars($userName) ?></strong></div>
+                        <div class="topbar-role">Conta pessoal</div>
+                    </div>
+                </div>
             </div>
         </header>
 
+        <!-- ALERTS -->
         <?php if (isset($_GET['success']) && isset($successMsgs[$_GET['success']])): ?>
-            <div class="alert alert-success">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-                <?= htmlspecialchars($successMsgs[$_GET['success']]) ?>
+            <div class="alert alert-success" role="status">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                <span><?= htmlspecialchars($successMsgs[$_GET['success']]) ?></span>
             </div>
         <?php endif; ?>
         <?php if (isset($_GET['error']) && isset($errors[$_GET['error']])): ?>
-            <div class="alert alert-error">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                <?= htmlspecialchars($errors[$_GET['error']]) ?>
+            <div class="alert alert-error" role="alert">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span><?= htmlspecialchars($errors[$_GET['error']]) ?></span>
             </div>
         <?php endif; ?>
 
+        <!-- GOAL CARDS -->
         <?php if (empty($goals)): ?>
-        <section class="bottom-card" style="margin-bottom:1.5rem">
-            <div class="empty-msg" style="padding:2rem;text-align:center">
-                <p>Nenhuma meta financeira cadastrada.</p>
-                <p style="font-size:0.875rem;color:var(--text-light)">Use o formulário abaixo para criar sua primeira meta.</p>
-            </div>
-        </section>
+            <section class="panel">
+                <div class="panel-body">
+                    <div class="empty-msg">
+                        Nenhuma meta financeira cadastrada. Use o formulário abaixo para criar a primeira.
+                    </div>
+                </div>
+            </section>
+        <?php else: ?>
+            <section class="charts-row charts-row-2" style="margin-bottom:var(--space-5)">
+                <?php foreach ($goals as $g):
+                    $badgeClass = 'badge-warning';
+                    $statusLabel = 'No prazo';
+                    if ($g['status'] === 'completed') { $badgeClass = 'badge-success'; $statusLabel = 'Concluída'; }
+                    elseif ($g['status'] === 'overdue') { $badgeClass = 'badge-danger'; $statusLabel = 'Atrasada'; }
+                    elseif ($g['status'] === 'near')    { $badgeClass = 'badge-warning'; $statusLabel = 'No prazo'; }
+
+                    $barColor = '#0f766e';
+                    if ($g['status'] === 'completed') $barColor = '#15803d';
+                    elseif ($g['status'] === 'overdue') $barColor = '#b91c1c';
+                ?>
+                <article class="panel">
+                    <header class="panel-header">
+                        <div>
+                            <div class="panel-title"><?= htmlspecialchars($g['name']) ?></div>
+                            <div class="panel-subtitle"><?= $g['description'] ? htmlspecialchars($g['description']) : 'Sem descrição' ?></div>
+                        </div>
+                        <span class="badge <?= $badgeClass ?>"><span class="badge-dot"></span><?= $statusLabel ?></span>
+                    </header>
+                    <div class="panel-body">
+                        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+                            <span style="font-size:var(--text-xs);font-weight:600;color:var(--color-text-3);text-transform:uppercase;letter-spacing:0.05em">Progresso</span>
+                            <span style="font-size:var(--text-sm);font-weight:700;color:var(--color-text-1)"><?= $g['percentage'] ?>%</span>
+                        </div>
+                        <div class="progress-bar" style="height:6px;margin-bottom:var(--space-4)">
+                            <div class="progress-fill" style="width:<?= min(100, $g['percentage']) ?>%;background:<?= $barColor ?>"></div>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
+                            <div>
+                                <div style="font-size:var(--text-xs);font-weight:600;color:var(--color-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px">Acumulado</div>
+                                <div style="color:var(--color-success);font-weight:700;font-family:var(--font-mono);font-size:var(--text-md)">R$ <?= number_format($g['saved'], 2, ',', '.') ?></div>
+                            </div>
+                            <div>
+                                <div style="font-size:var(--text-xs);font-weight:600;color:var(--color-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px">Objetivo</div>
+                                <div style="color:var(--color-text-1);font-weight:700;font-family:var(--font-mono);font-size:var(--text-md)">R$ <?= number_format($g['target'], 2, ',', '.') ?></div>
+                            </div>
+                            <div>
+                                <div style="font-size:var(--text-xs);font-weight:600;color:var(--color-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px">Restante</div>
+                                <div style="color:var(--color-text-2);font-weight:600;font-family:var(--font-mono);font-size:var(--text-md)">R$ <?= number_format($g['remaining'], 2, ',', '.') ?></div>
+                            </div>
+                            <div>
+                                <div style="font-size:var(--text-xs);font-weight:600;color:var(--color-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px">Prazo</div>
+                                <div style="color:var(--color-text-1);font-weight:600;font-size:var(--text-md)"><?= $g['deadline'] ? date('d/m/Y', strtotime($g['deadline'])) : '—' ?></div>
+                            </div>
+                        </div>
+                        <div style="margin-top:var(--space-4);display:flex;gap:var(--space-2);padding-top:var(--space-3);border-top:1px solid var(--color-border)">
+                            <button class="btn btn-ghost btn-xs" type="button" onclick="editGoal(<?= (int)$g['id'] ?>, <?= json_encode($g['name'], JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP) ?>, <?= $g['target'] ?>, <?= $g['saved'] ?>, <?= json_encode($g['deadline'] ?? '', JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP) ?>, <?= json_encode($g['description'] ?? '', JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP) ?>)">Editar</button>
+                            <form action="/index.php?action=delete_goal" method="POST" style="display:inline">
+                                <input type="hidden" name="id" value="<?= (int)$g['id'] ?>">
+                                <button type="submit" class="btn btn-danger btn-xs">Excluir</button>
+                            </form>
+                        </div>
+                    </div>
+                </article>
+                <?php endforeach; ?>
+            </section>
         <?php endif; ?>
 
-        <section class="summary-section" style="grid-template-columns:1fr 1fr; margin-bottom:1.5rem">
-            <?php foreach ($goals as $g):
-                $badgeClass = 'badge-info';
-                $statusLabel = 'Em andamento';
-                if ($g['status'] === 'completed') { $badgeClass = 'badge-success'; $statusLabel = 'Concluída'; }
-                elseif ($g['status'] === 'overdue') { $badgeClass = 'badge-danger'; $statusLabel = 'Atrasada'; }
-                elseif ($g['status'] === 'near')    { $badgeClass = 'badge-warning'; $statusLabel = 'No prazo'; }
-
-                $barColor = '#4f46e5';
-                if ($g['status'] === 'completed') $barColor = '#16a34a';
-                elseif ($g['status'] === 'overdue') $barColor = '#dc2626';
-            ?>
-            <div class="bottom-card">
-                <div class="bottom-card-header">
-                    <h3 class="bottom-card-title" style="margin-bottom:0"><?= htmlspecialchars($g['name']) ?></h3>
-                    <span class="badge <?= $badgeClass ?>">
-                        <?= $statusLabel ?>
-                    </span>
-                </div>
-                <div style="padding:0.75rem 1rem">
-                    <div style="display:flex;justify-content:space-between;margin-bottom:0.25rem">
-                        <span style="color:var(--text-light);font-size:0.8rem">Progresso</span>
-                        <span style="font-size:0.8rem;font-weight:600"><?= $g['percentage'] ?>%</span>
+        <!-- FORM + SUMMARY -->
+        <section class="two-col two-col-form">
+            <article class="panel">
+                <header class="panel-header">
+                    <div>
+                        <div class="panel-title" id="formTitle">Nova meta</div>
+                        <div class="panel-subtitle">Crie ou edite uma meta financeira.</div>
                     </div>
-                    <div style="background:var(--bg-soft);border-radius:6px;height:8px;overflow:hidden;margin-bottom:0.75rem">
-                        <div style="height:100%;width:<?= $g['percentage'] ?>%;background:<?= $barColor ?>;border-radius:6px"></div>
-                    </div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;font-size:0.8rem">
-                        <div>
-                            <span style="color:var(--text-light)">Acumulado</span><br>
-                            <strong style="color:var(--color-income)">R$ <?= number_format($g['saved'], 2, ',', '.') ?></strong>
-                        </div>
-                        <div>
-                            <span style="color:var(--text-light)">Objetivo</span><br>
-                            <strong>R$ <?= number_format($g['target'], 2, ',', '.') ?></strong>
-                        </div>
-                        <div>
-                            <span style="color:var(--text-light)">Restante</span><br>
-                            <strong style="color:var(--text-muted)">R$ <?= number_format($g['remaining'], 2, ',', '.') ?></strong>
-                        </div>
-                        <div>
-                            <span style="color:var(--text-light)">Prazo</span><br>
-                            <strong><?= $g['deadline'] ? date('d/m/Y', strtotime($g['deadline'])) : 'Sem prazo' ?></strong>
-                        </div>
-                    </div>
-                    <?php if ($g['description']): ?>
-                    <p style="margin-top:0.5rem;font-size:0.8rem;color:var(--text-light)"><?= htmlspecialchars($g['description']) ?></p>
-                    <?php endif; ?>
-                    <div style="margin-top:0.75rem;display:flex;gap:0.5rem">
-                        <button class="btn btn-ghost btn-xs" type="button" onclick="editGoal(<?= (int)$g['id'] ?>, <?= json_encode($g['name'], JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP) ?>, <?= $g['target'] ?>, <?= $g['saved'] ?>, <?= json_encode($g['deadline'] ?? '', JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP) ?>, <?= json_encode($g['description'] ?? '', JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP) ?>)">Editar</button>
-                        <form action="/index.php?action=delete_goal" method="POST" class="delete-form" style="display:inline">
-                            <input type="hidden" name="id" value="<?= (int)$g['id'] ?>">
-                            <button type="submit" class="btn btn-danger btn-xs">Excluir</button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-            <?php endforeach; ?>
-        </section>
-
-        <section class="summary-section" style="margin-top:1rem; grid-template-columns:480px 1fr;">
-            <div class="bottom-card">
-                <h3 class="bottom-card-title" id="formTitle">Nova Meta</h3>
-                <form action="/index.php?action=store_goal" method="POST" id="goalForm" novalidate>
-                    <input type="hidden" name="id" id="goalId" value="">
-                    <div class="form-stack">
-                        <div class="form-group">
-                            <label for="goalName">Nome da meta</label>
-                            <input type="text" name="name" id="goalName" placeholder="Ex: Reserva de emergência" required>
-                        </div>
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
+                    <button type="button" class="btn btn-ghost btn-xs" id="cancelGoalBtn" onclick="cancelEditGoal()" style="display:none">Cancelar</button>
+                </header>
+                <div class="panel-body-sm">
+                    <form action="/index.php?action=store_goal" method="POST" id="goalForm" novalidate>
+                        <input type="hidden" name="id" id="goalId" value="">
+                        <div class="form-stack">
                             <div class="form-group">
-                                <label for="targetAmount">Valor objetivo (R$)</label>
-                                <input type="number" name="target_amount" id="targetAmount" step="0.01" min="0.01" placeholder="0,00" required>
+                                <label for="goalName">Nome da meta</label>
+                                <input type="text" name="name" id="goalName" placeholder="Ex: Reserva de emergência" required>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="targetAmount">Valor objetivo (R$)</label>
+                                    <input type="number" name="target_amount" id="targetAmount" step="0.01" min="0.01" placeholder="0,00" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="savedAmount">Valor acumulado (R$)</label>
+                                    <input type="number" name="saved_amount" id="savedAmount" step="0.01" min="0" placeholder="0,00" value="0">
+                                </div>
                             </div>
                             <div class="form-group">
-                                <label for="savedAmount">Valor acumulado (R$)</label>
-                                <input type="number" name="saved_amount" id="savedAmount" step="0.01" min="0" placeholder="0,00" value="0">
+                                <label for="goalDeadline">Data limite</label>
+                                <input type="date" name="deadline" id="goalDeadline">
                             </div>
-                        </div>
-                        <div class="form-group">
-                            <label for="goalDeadline">Data limite</label>
-                            <input type="date" name="deadline" id="goalDeadline">
-                        </div>
-                        <div class="form-group">
-                            <label for="goalDesc">Descrição (opcional)</label>
-                            <textarea name="description" id="goalDesc" rows="2" placeholder="Detalhes sobre esta meta..."></textarea>
-                        </div>
-                        <div style="display:flex;gap:0.5rem">
-                            <button type="submit" class="btn btn-primary" id="goalBtn" style="flex:1">
-                                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                <span id="goalBtnText">Criar Meta</span>
+                            <div class="form-group">
+                                <label for="goalDesc">Descrição (opcional)</label>
+                                <textarea name="description" id="goalDesc" rows="2" placeholder="Detalhes sobre esta meta..."></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-block" id="goalBtn">
+                                <span id="goalBtnText">Criar meta</span>
                             </button>
-                            <button type="button" class="btn btn-ghost" id="cancelGoalBtn" onclick="cancelEditGoal()" style="display:none">Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+            </article>
+
+            <article class="panel">
+                <header class="panel-header">
+                    <div>
+                        <div class="panel-title">Resumo</div>
+                        <div class="panel-subtitle">Visão consolidada das metas.</div>
+                    </div>
+                </header>
+                <div class="panel-body">
+                    <?php
+                    $totalObj = array_sum(array_column($goals, 'target'));
+                    $totalAcum = array_sum(array_column($goals, 'saved'));
+                    $completas = count(array_filter($goals, fn($g) => ($g['percentage'] ?? 0) >= 100));
+                    $emAndamento = count($goals) - $completas;
+                    ?>
+                    <div class="indicators" style="grid-template-columns:repeat(2,1fr);border-radius:var(--radius-md)">
+                        <div class="indicator">
+                            <div class="indicator-label">Total de metas</div>
+                            <div class="indicator-value"><?= count($goals) ?></div>
+                            <div class="indicator-sub">cadastradas</div>
+                        </div>
+                        <div class="indicator">
+                            <div class="indicator-label">Concluídas</div>
+                            <div class="indicator-value positive"><?= $completas ?></div>
+                            <div class="indicator-sub">100% atingido</div>
+                        </div>
+                        <div class="indicator">
+                            <div class="indicator-label">Em andamento</div>
+                            <div class="indicator-value"><?= $emAndamento ?></div>
+                            <div class="indicator-sub">em progresso</div>
+                        </div>
+                        <div class="indicator">
+                            <div class="indicator-label">Total acumulado</div>
+                            <div class="indicator-value positive">R$ <?= number_format($totalAcum, 2, ',', '.') ?></div>
+                            <div class="indicator-sub">economizado</div>
                         </div>
                     </div>
-                </form>
-            </div>
-
-            <div class="bottom-card">
-                <h3 class="bottom-card-title">Resumo das Metas</h3>
-                <?php
-                $totalObj = array_sum(array_column($goals, 'target'));
-                $totalAcum = array_sum(array_column($goals, 'saved'));
-                $completas = count(array_filter($goals, fn($g) => ($g['percentage'] ?? 0) >= 100));
-                $emAndamento = count($goals) - $completas;
-                ?>
-                <div class="indicators-grid" style="gap:0.75rem">
-                    <div class="indicator" style="padding:0.875rem 1rem">
-                        <span class="indicator-label">Total de Metas</span>
-                        <span class="indicator-value"><?= count($goals) ?></span>
-                    </div>
-                    <div class="indicator" style="padding:0.875rem 1rem">
-                        <span class="indicator-label">Concluídas</span>
-                        <span class="indicator-value" style="color:var(--color-income)"><?= $completas ?></span>
-                    </div>
-                    <div class="indicator" style="padding:0.875rem 1rem">
-                        <span class="indicator-label">Em Andamento</span>
-                        <span class="indicator-value"><?= $emAndamento ?></span>
-                    </div>
-                    <div class="indicator" style="padding:0.875rem 1rem">
-                        <span class="indicator-label">Total Acumulado</span>
-                        <span class="indicator-value" style="color:var(--color-income)">R$ <?= number_format($totalAcum, 2, ',', '.') ?></span>
-                    </div>
                 </div>
-            </div>
+            </article>
         </section>
 
     </main>
@@ -248,19 +278,18 @@ function editGoal(id, name, target, saved, deadline, desc) {
     document.getElementById('goalDeadline').value = deadline || '';
     document.getElementById('goalDesc').value = desc || '';
     document.getElementById('goalForm').action = '/index.php?action=update_goal';
-    document.getElementById('goalBtnText').textContent = 'Salvar';
+    document.getElementById('goalBtnText').textContent = 'Salvar alterações';
     document.getElementById('cancelGoalBtn').style.display = '';
-    document.getElementById('goalBtn').querySelector('svg').innerHTML = '<polyline points="20 6 9 17 4 12"/>';
-    document.getElementById('formTitle').textContent = 'Editar Meta';
+    document.getElementById('formTitle').textContent = 'Editar meta';
     document.getElementById('goalName').focus();
 }
 function cancelEditGoal() {
     document.getElementById('goalForm').reset();
     document.getElementById('goalId').value = '';
     document.getElementById('goalForm').action = '/index.php?action=store_goal';
-    document.getElementById('goalBtnText').textContent = 'Criar Meta';
+    document.getElementById('goalBtnText').textContent = 'Criar meta';
     document.getElementById('cancelGoalBtn').style.display = 'none';
-    document.getElementById('formTitle').textContent = 'Nova Meta';
+    document.getElementById('formTitle').textContent = 'Nova meta';
 }
 </script>
 </body>
