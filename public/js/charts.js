@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', function () {
     if (typeof Chart === 'undefined') return;
 
-    Chart.defaults.font.family = '"Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif';
+    Chart.defaults.font.family = '"Inter", "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif';
     Chart.defaults.font.size = 11.5;
     Chart.defaults.color = '#64748b';
 
@@ -43,12 +43,12 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!data) return;
 
     var catColors = [
-        '#7c3aed', '#10b981', '#ef4444', '#f59e0b', '#3b82f6',
-        '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#64748b',
-        '#06b6d4', '#84cc16', '#f97316', '#8b5cf6', '#db2777'
+        '#4f46e5', '#059669', '#dc2626', '#d97706', '#2563eb',
+        '#7c3aed', '#db2777', '#0891b2', '#65a30d', '#64748b',
+        '#0891b2', '#65a30d', '#ea580c', '#7c3aed', '#be185d'
     ];
 
-    var gridColor = 'rgba(15, 23, 42, 0.06)';
+    var gridColor = 'rgba(15, 23, 42, 0.05)';
 
     /* ============== Chart 0: Fluxo Financeiro ============== */
     var flowCanvas = document.getElementById('chart-financial-flow');
@@ -68,29 +68,29 @@ document.addEventListener('DOMContentLoaded', function () {
                         {
                             label: 'Receitas',
                             data: ff.incomes,
-                            borderColor: '#10b981',
-                            backgroundColor: 'rgba(16, 185, 129, 0.10)',
+                            borderColor: '#059669',
+                            backgroundColor: 'rgba(5, 150, 105, 0.10)',
                             tension: 0.35, fill: true, borderWidth: 2.2,
                             pointRadius: 3, pointHoverRadius: 6,
-                            pointBackgroundColor: '#10b981', pointBorderColor: '#fff', pointBorderWidth: 1.5
+                            pointBackgroundColor: '#059669', pointBorderColor: '#fff', pointBorderWidth: 1.5
                         },
                         {
                             label: 'Despesas',
                             data: ff.expenses,
-                            borderColor: '#ef4444',
-                            backgroundColor: 'rgba(239, 68, 68, 0.10)',
+                            borderColor: '#dc2626',
+                            backgroundColor: 'rgba(220, 38, 38, 0.10)',
                             tension: 0.35, fill: true, borderWidth: 2.2,
                             pointRadius: 3, pointHoverRadius: 6,
-                            pointBackgroundColor: '#ef4444', pointBorderColor: '#fff', pointBorderWidth: 1.5
+                            pointBackgroundColor: '#dc2626', pointBorderColor: '#fff', pointBorderWidth: 1.5
                         },
                         {
                             label: 'Saldo',
                             data: ff.balance,
-                            borderColor: '#0f766e',
-                            backgroundColor: 'rgba(15, 118, 110, 0.05)',
+                            borderColor: '#4338ca',
+                            backgroundColor: 'rgba(67, 56, 202, 0.05)',
                             tension: 0.35, fill: false, borderWidth: 2.5, borderDash: [6, 4],
                             pointRadius: 3, pointHoverRadius: 6,
-                            pointBackgroundColor: '#0f766e', pointBorderColor: '#fff', pointBorderWidth: 1.5
+                            pointBackgroundColor: '#4338ca', pointBorderColor: '#fff', pointBorderWidth: 1.5
                         }
                     ]
                 },
@@ -102,8 +102,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         legend: { display: false },
                         tooltip: {
                             backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                            titleColor: '#fff', bodyColor: '#e2e8f0',
-                            borderColor: 'rgba(255,255,255,0.05)', borderWidth: 1,
+                            titleColor: '#f8fafc', bodyColor: '#cbd5e1',
+                            borderColor: 'rgba(255,255,255,0.06)', borderWidth: 1,
                             padding: 12, cornerRadius: 8, displayColors: true, usePointStyle: true,
                             titleFont: { weight: '600' },
                             callbacks: { label: function (ctx) { return ' ' + ctx.dataset.label + ': ' + fmt(ctx.parsed.y); } }
@@ -151,8 +151,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         },
                         tooltip: {
                             backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                            titleColor: '#fff', bodyColor: '#e2e8f0',
-                            borderColor: 'rgba(255,255,255,0.05)', borderWidth: 1,
+                            titleColor: '#f8fafc', bodyColor: '#cbd5e1',
+                            borderColor: 'rgba(255,255,255,0.06)', borderWidth: 1,
                             padding: 12, cornerRadius: 8, displayColors: true,
                             callbacks: {
                                 label: function (ctx) {
@@ -194,8 +194,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 data: {
                     labels: pLabels,
                     datasets: [
-                        { label: 'Receitas', data: iData, backgroundColor: 'rgba(16, 185, 129, 0.85)', borderColor: '#10b981', borderWidth: 0, borderRadius: 6, borderSkipped: false, maxBarThickness: 28 },
-                        { label: 'Despesas', data: eData, backgroundColor: 'rgba(239, 68, 68, 0.85)', borderColor: '#ef4444', borderWidth: 0, borderRadius: 6, borderSkipped: false, maxBarThickness: 28 }
+                        { label: 'Receitas', data: iData, backgroundColor: 'rgba(5, 150, 105, 0.85)', borderColor: '#059669', borderWidth: 0, borderRadius: 6, borderSkipped: false, maxBarThickness: 28 },
+                        { label: 'Despesas', data: eData, backgroundColor: 'rgba(220, 38, 38, 0.85)', borderColor: '#dc2626', borderWidth: 0, borderRadius: 6, borderSkipped: false, maxBarThickness: 28 }
                     ]
                 },
                 options: {
@@ -209,7 +209,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         },
                         tooltip: {
                             backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                            titleColor: '#fff', bodyColor: '#e2e8f0',
+                            titleColor: '#f8fafc', bodyColor: '#cbd5e1',
                             borderColor: 'rgba(255,255,255,0.05)', borderWidth: 1,
                             padding: 12, cornerRadius: 8, displayColors: true, usePointStyle: true,
                             callbacks: { label: function (ctx) { return ' ' + ctx.dataset.label + ': ' + fmt(ctx.parsed.y); } }
@@ -236,8 +236,8 @@ document.addEventListener('DOMContentLoaded', function () {
             destroy('chart-balance-evolution');
 
             var gradient = balCanvas.getContext('2d').createLinearGradient(0, 0, 0, 280);
-            gradient.addColorStop(0, 'rgba(15, 118, 110, 0.18)');
-            gradient.addColorStop(1, 'rgba(15, 118, 110, 0.00)');
+            gradient.addColorStop(0, 'rgba(67, 56, 202, 0.18)');
+            gradient.addColorStop(1, 'rgba(67, 56, 202, 0.00)');
 
             new Chart(balCanvas.getContext('2d'), {
                 type: 'line',
@@ -246,11 +246,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     datasets: [{
                         label: 'Saldo acumulado',
                         data: bal.balance,
-                        borderColor: '#0f766e',
+                        borderColor: '#4338ca',
                         backgroundColor: gradient,
                         tension: 0.4, fill: true, borderWidth: 2.5,
                         pointRadius: 3, pointHoverRadius: 6,
-                        pointBackgroundColor: '#0f766e', pointBorderColor: '#fff', pointBorderWidth: 1.5
+                        pointBackgroundColor: '#4338ca', pointBorderColor: '#fff', pointBorderWidth: 1.5
                     }]
                 },
                 options: {
@@ -261,7 +261,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         legend: { display: false },
                         tooltip: {
                             backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                            titleColor: '#fff', bodyColor: '#e2e8f0',
+                            titleColor: '#f8fafc', bodyColor: '#cbd5e1',
                             borderColor: 'rgba(255,255,255,0.05)', borderWidth: 1,
                             padding: 12, cornerRadius: 8, displayColors: false,
                             titleFont: { weight: '600' },
@@ -301,15 +301,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 data: {
                     labels: mLabels,
                     datasets: [
-                        { label: 'Receitas', data: mIncomes, backgroundColor: 'rgba(16, 185, 129, 0.85)', borderColor: '#10b981', borderWidth: 0, borderRadius: 6, borderSkipped: false, maxBarThickness: 28 },
-                        { label: 'Despesas', data: mExpense, backgroundColor: 'rgba(239, 68, 68, 0.85)', borderColor: '#ef4444', borderWidth: 0, borderRadius: 6, borderSkipped: false, maxBarThickness: 28 },
+                        { label: 'Receitas', data: mIncomes, backgroundColor: 'rgba(5, 150, 105, 0.85)', borderColor: '#059669', borderWidth: 0, borderRadius: 6, borderSkipped: false, maxBarThickness: 28 },
+                        { label: 'Despesas', data: mExpense, backgroundColor: 'rgba(220, 38, 38, 0.85)', borderColor: '#dc2626', borderWidth: 0, borderRadius: 6, borderSkipped: false, maxBarThickness: 28 },
                         {
                             type: 'line', label: 'Saldo',
-                            data: mBalance, borderColor: '#0f766e',
-                            backgroundColor: 'rgba(15, 118, 110, 0.05)',
+                            data: mBalance, borderColor: '#4338ca',
+                            backgroundColor: 'rgba(67, 56, 202, 0.05)',
                             tension: 0.35, borderWidth: 2.5, borderDash: [6, 4],
                             pointRadius: 4, pointHoverRadius: 6,
-                            pointBackgroundColor: '#0f766e', pointBorderColor: '#fff', pointBorderWidth: 1.5
+                            pointBackgroundColor: '#4338ca', pointBorderColor: '#fff', pointBorderWidth: 1.5
                         }
                     ]
                 },
@@ -324,7 +324,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         },
                         tooltip: {
                             backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                            titleColor: '#fff', bodyColor: '#e2e8f0',
+                            titleColor: '#f8fafc', bodyColor: '#cbd5e1',
                             borderColor: 'rgba(255,255,255,0.05)', borderWidth: 1,
                             padding: 12, cornerRadius: 8, displayColors: true, usePointStyle: true,
                             callbacks: { label: function (ctx) { return ' ' + ctx.dataset.label + ': ' + fmt(ctx.parsed.y); } }

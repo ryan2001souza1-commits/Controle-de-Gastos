@@ -222,13 +222,13 @@ whenReady(() => {
             const amt  = txForm.querySelector('#amount');
             const date = txForm.querySelector('#date');
 
-            if (!desc || !desc.value.trim()) { desc.style.borderColor = 'var(--c-negative-2)'; valid = false; }
+            if (!desc || !desc.value.trim()) { desc.style.borderColor = 'var(--color-danger)'; valid = false; }
             else { desc.style.borderColor = ''; }
 
-            if (!amt || parseFloat(amt.value) <= 0) { amt.style.borderColor = 'var(--c-negative-2)'; valid = false; }
+            if (!amt || parseFloat(amt.value) <= 0) { amt.style.borderColor = 'var(--color-danger)'; valid = false; }
             else { amt.style.borderColor = ''; }
 
-            if (!date || !date.value) { date.style.borderColor = 'var(--c-negative-2)'; valid = false; }
+            if (!date || !date.value) { date.style.borderColor = 'var(--color-danger)'; valid = false; }
             else { date.style.borderColor = ''; }
 
             if (!valid) e.preventDefault();

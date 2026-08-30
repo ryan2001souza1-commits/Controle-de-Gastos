@@ -28,7 +28,7 @@ $successMsgs = [
     <title><?= htmlspecialchars($pageTitle) ?> - Controle de Gastos</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -58,7 +58,7 @@ $successMsgs = [
             </div>
         </section>
     <?php else: ?>
-        <section class="charts-grid charts-grid-2">
+        <section class="goals-grid">
             <?php foreach ($goals as $g):
                 $badgeClass = 'badge-warning';
                 $statusLabel = 'No prazo';
