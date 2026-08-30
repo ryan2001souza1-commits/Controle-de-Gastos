@@ -26,11 +26,27 @@ document.addEventListener('DOMContentLoaded', function () {
         if (canvas) canvas.style.display = 'none';
         if (msgEl) {
             msgEl.style.display = 'flex';
+            msgEl.style.opacity = '0';
+            msgEl.style.transform = 'translateY(4px)';
+            requestAnimationFrame(function () {
+                msgEl.style.transition = 'opacity 0.35s ease, transform 0.35s ease';
+                msgEl.style.opacity = '1';
+                msgEl.style.transform = 'translateY(0)';
+            });
         }
     }
 
     function activeState(canvas, msgEl) {
-        if (canvas) canvas.style.display = 'block';
+        if (canvas) {
+            canvas.style.opacity = '0';
+            canvas.style.transform = 'scale(0.99)';
+            canvas.style.display = 'block';
+            requestAnimationFrame(function () {
+                canvas.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+                canvas.style.opacity = '1';
+                canvas.style.transform = 'scale(1)';
+            });
+        }
         if (msgEl) msgEl.style.display = 'none';
     }
 
@@ -49,6 +65,23 @@ document.addEventListener('DOMContentLoaded', function () {
     ];
 
     var gridColor = 'rgba(15, 23, 42, 0.05)';
+
+    /* ============== Tooltip padrão melhorado ============== */
+    var tooltipBase = {
+        backgroundColor: 'rgba(15, 23, 42, 0.96)',
+        titleColor: '#f8fafc',
+        bodyColor: '#cbd5e1',
+        borderColor: 'rgba(255,255,255,0.06)',
+        borderWidth: 1,
+        padding: 12,
+        cornerRadius: 8,
+        displayColors: true,
+        usePointStyle: true,
+        titleFont: { weight: '600', size: 12 },
+        bodyFont: { size: 12 },
+        boxPadding: 4,
+        animation: { duration: 180, easing: 'easeOutQuart' }
+    };
 
     /* ============== Chart 0: Fluxo Financeiro ============== */
     var flowCanvas = document.getElementById('chart-financial-flow');
@@ -69,49 +102,80 @@ document.addEventListener('DOMContentLoaded', function () {
                             label: 'Receitas',
                             data: ff.incomes,
                             borderColor: '#059669',
-                            backgroundColor: 'rgba(5, 150, 105, 0.10)',
-                            tension: 0.35, fill: true, borderWidth: 2.2,
-                            pointRadius: 3, pointHoverRadius: 6,
-                            pointBackgroundColor: '#059669', pointBorderColor: '#fff', pointBorderWidth: 1.5
+                            backgroundColor: function(ctx) {
+                                var c = ctx.chart.ctx;
+                                var g = c.createLinearGradient(0, 0, 0, 280);
+                                g.addColorStop(0, 'rgba(5, 150, 105, 0.18)');
+                                g.addColorStop(1, 'rgba(5, 150, 105, 0.00)');
+                                return g;
+                            },
+                            tension: 0.38, fill: true, borderWidth: 2.4,
+                            pointRadius: 3, pointHoverRadius: 7,
+                            pointBackgroundColor: '#059669',
+                            pointBorderColor: '#fff', pointBorderWidth: 1.5,
+                            pointHoverBorderWidth: 2
                         },
                         {
                             label: 'Despesas',
                             data: ff.expenses,
                             borderColor: '#dc2626',
-                            backgroundColor: 'rgba(220, 38, 38, 0.10)',
-                            tension: 0.35, fill: true, borderWidth: 2.2,
-                            pointRadius: 3, pointHoverRadius: 6,
-                            pointBackgroundColor: '#dc2626', pointBorderColor: '#fff', pointBorderWidth: 1.5
+                            backgroundColor: function(ctx) {
+                                var c = ctx.chart.ctx;
+                                var g = c.createLinearGradient(0, 0, 0, 280);
+                                g.addColorStop(0, 'rgba(220, 38, 38, 0.16)');
+                                g.addColorStop(1, 'rgba(220, 38, 38, 0.00)');
+                                return g;
+                            },
+                            tension: 0.38, fill: true, borderWidth: 2.4,
+                            pointRadius: 3, pointHoverRadius: 7,
+                            pointBackgroundColor: '#dc2626',
+                            pointBorderColor: '#fff', pointBorderWidth: 1.5,
+                            pointHoverBorderWidth: 2
                         },
                         {
                             label: 'Saldo',
                             data: ff.balance,
                             borderColor: '#4338ca',
                             backgroundColor: 'rgba(67, 56, 202, 0.05)',
-                            tension: 0.35, fill: false, borderWidth: 2.5, borderDash: [6, 4],
-                            pointRadius: 3, pointHoverRadius: 6,
-                            pointBackgroundColor: '#4338ca', pointBorderColor: '#fff', pointBorderWidth: 1.5
+                            tension: 0.38, fill: false, borderWidth: 2.5, borderDash: [6, 4],
+                            pointRadius: 3, pointHoverRadius: 7,
+                            pointBackgroundColor: '#4338ca',
+                            pointBorderColor: '#fff', pointBorderWidth: 1.5,
+                            pointHoverBorderWidth: 2
                         }
                     ]
                 },
                 options: {
-                    responsive: true, maintainAspectRatio: false,
-                    animation: { duration: 600, easing: 'easeOutQuart' },
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 900,
+                        easing: 'easeOutQuart',
+                        delay: function(ctx) { return ctx.type === 'data' ? ctx.dataIndex * 30 : 0; }
+                    },
+                    animations: {
+                        y: { duration: 600, easing: 'easeOutQuart' },
+                        tension: { duration: 800, easing: 'easeOutQuart', from: 0.8, to: 0.38 }
+                    },
                     interaction: { mode: 'index', intersect: false },
+                    hover: { mode: 'index', intersect: false, animationDuration: 200 },
                     plugins: {
                         legend: { display: false },
-                        tooltip: {
-                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                            titleColor: '#f8fafc', bodyColor: '#cbd5e1',
-                            borderColor: 'rgba(255,255,255,0.06)', borderWidth: 1,
-                            padding: 12, cornerRadius: 8, displayColors: true, usePointStyle: true,
-                            titleFont: { weight: '600' },
+                        tooltip: Object.assign({}, tooltipBase, {
                             callbacks: { label: function (ctx) { return ' ' + ctx.dataset.label + ': ' + fmt(ctx.parsed.y); } }
-                        }
+                        })
                     },
                     scales: {
-                        x: { ticks: { autoSkip: true, maxRotation: 0, color: '#94a3b8', font: { size: 11 } }, grid: { display: false } },
-                        y: { beginAtZero: false, ticks: { color: '#94a3b8', callback: function (v) { return fmt(v); } }, grid: { color: gridColor, drawBorder: false } }
+                        x: {
+                            ticks: { autoSkip: true, maxRotation: 0, color: '#94a3b8', font: { size: 11 } },
+                            grid: { display: false }
+                        },
+                        y: {
+                            beginAtZero: false,
+                            ticks: { color: '#94a3b8', callback: function (v) { return fmt(v); }, padding: 8 },
+                            grid: { color: gridColor, drawBorder: false },
+                            border: { display: false }
+                        }
                     }
                 }
             });
@@ -138,29 +202,45 @@ document.addEventListener('DOMContentLoaded', function () {
                         data: cValues,
                         backgroundColor: cLabels.map(function (_, i) { return catColors[i % catColors.length]; }),
                         borderColor: '#fff',
-                        borderWidth: 2, hoverOffset: 8, spacing: 2
+                        borderWidth: 2.5,
+                        hoverOffset: 12,
+                        hoverBorderWidth: 3,
+                        spacing: 2
                     }]
                 },
                 options: {
-                    responsive: true, maintainAspectRatio: false, cutout: '62%',
-                    animation: { duration: 600, animateRotate: true, animateScale: false },
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '64%',
+                    animation: {
+                        animateRotate: true,
+                        animateScale: false,
+                        duration: 900,
+                        easing: 'easeOutQuart'
+                    },
+                    animations: {
+                        colors: { duration: 250 },
+                        numbers: { duration: 600, easing: 'easeOutQuart' }
+                    },
                     plugins: {
                         legend: {
                             position: 'bottom',
-                            labels: { padding: 12, usePointStyle: true, pointStyle: 'circle', boxWidth: 8, font: { size: 11.5 } }
+                            labels: {
+                                padding: 14,
+                                usePointStyle: true,
+                                pointStyle: 'circle',
+                                boxWidth: 8,
+                                font: { size: 11.5 }
+                            }
                         },
-                        tooltip: {
-                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                            titleColor: '#f8fafc', bodyColor: '#cbd5e1',
-                            borderColor: 'rgba(255,255,255,0.06)', borderWidth: 1,
-                            padding: 12, cornerRadius: 8, displayColors: true,
+                        tooltip: Object.assign({}, tooltipBase, {
                             callbacks: {
                                 label: function (ctx) {
                                     var pct = total > 0 ? ((ctx.parsed / total) * 100).toFixed(1) : '0.0';
                                     return ' ' + ctx.label + ': ' + fmt(ctx.parsed) + ' (' + pct + '%)';
                                 }
                             }
-                        }
+                        })
                     }
                 }
             });
@@ -194,30 +274,72 @@ document.addEventListener('DOMContentLoaded', function () {
                 data: {
                     labels: pLabels,
                     datasets: [
-                        { label: 'Receitas', data: iData, backgroundColor: 'rgba(5, 150, 105, 0.85)', borderColor: '#059669', borderWidth: 0, borderRadius: 6, borderSkipped: false, maxBarThickness: 28 },
-                        { label: 'Despesas', data: eData, backgroundColor: 'rgba(220, 38, 38, 0.85)', borderColor: '#dc2626', borderWidth: 0, borderRadius: 6, borderSkipped: false, maxBarThickness: 28 }
+                        {
+                            label: 'Receitas', data: iData,
+                            backgroundColor: function(ctx) {
+                                var c = ctx.chart.ctx;
+                                var g = c.createLinearGradient(0, 0, 0, 240);
+                                g.addColorStop(0, 'rgba(5, 150, 105, 0.95)');
+                                g.addColorStop(1, 'rgba(5, 150, 105, 0.55)');
+                                return g;
+                            },
+                            hoverBackgroundColor: '#047857',
+                            borderRadius: { topLeft: 6, topRight: 6, bottomLeft: 0, bottomRight: 0 },
+                            borderSkipped: false,
+                            maxBarThickness: 32,
+                            borderWidth: 0
+                        },
+                        {
+                            label: 'Despesas', data: eData,
+                            backgroundColor: function(ctx) {
+                                var c = ctx.chart.ctx;
+                                var g = c.createLinearGradient(0, 0, 0, 240);
+                                g.addColorStop(0, 'rgba(220, 38, 38, 0.95)');
+                                g.addColorStop(1, 'rgba(220, 38, 38, 0.55)');
+                                return g;
+                            },
+                            hoverBackgroundColor: '#b91c1c',
+                            borderRadius: { topLeft: 6, topRight: 6, bottomLeft: 0, bottomRight: 0 },
+                            borderSkipped: false,
+                            maxBarThickness: 32,
+                            borderWidth: 0
+                        }
                     ]
                 },
                 options: {
-                    responsive: true, maintainAspectRatio: false,
-                    animation: { duration: 500, easing: 'easeOutQuart' },
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 800,
+                        easing: 'easeOutQuart',
+                        delay: function(ctx) { return ctx.type === 'data' ? ctx.dataIndex * 60 : 0; }
+                    },
+                    animations: {
+                        y: { duration: 700, easing: 'easeOutQuart' }
+                    },
                     interaction: { mode: 'index', intersect: false },
+                    hover: { mode: 'index', intersect: false, animationDuration: 200 },
                     plugins: {
                         legend: {
                             position: 'top', align: 'end',
                             labels: { padding: 14, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 12, font: { size: 12, weight: '500' } }
                         },
-                        tooltip: {
-                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                            titleColor: '#f8fafc', bodyColor: '#cbd5e1',
-                            borderColor: 'rgba(255,255,255,0.05)', borderWidth: 1,
-                            padding: 12, cornerRadius: 8, displayColors: true, usePointStyle: true,
+                        tooltip: Object.assign({}, tooltipBase, {
                             callbacks: { label: function (ctx) { return ' ' + ctx.dataset.label + ': ' + fmt(ctx.parsed.y); } }
-                        }
+                        })
                     },
                     scales: {
-                        x: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { display: false } },
-                        y: { beginAtZero: true, ticks: { color: '#94a3b8', callback: function (v) { return fmt(v); } }, grid: { color: gridColor, drawBorder: false } }
+                        x: {
+                            ticks: { color: '#94a3b8', font: { size: 11 } },
+                            grid: { display: false },
+                            border: { display: false }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: '#94a3b8', callback: function (v) { return fmt(v); }, padding: 8 },
+                            grid: { color: gridColor, drawBorder: false },
+                            border: { display: false }
+                        }
                     }
                 }
             });
@@ -235,10 +357,6 @@ document.addEventListener('DOMContentLoaded', function () {
             activeState(balCanvas, balEmpty);
             destroy('chart-balance-evolution');
 
-            var gradient = balCanvas.getContext('2d').createLinearGradient(0, 0, 0, 280);
-            gradient.addColorStop(0, 'rgba(67, 56, 202, 0.18)');
-            gradient.addColorStop(1, 'rgba(67, 56, 202, 0.00)');
-
             new Chart(balCanvas.getContext('2d'), {
                 type: 'line',
                 data: {
@@ -247,40 +365,66 @@ document.addEventListener('DOMContentLoaded', function () {
                         label: 'Saldo acumulado',
                         data: bal.balance,
                         borderColor: '#4338ca',
-                        backgroundColor: gradient,
-                        tension: 0.4, fill: true, borderWidth: 2.5,
-                        pointRadius: 3, pointHoverRadius: 6,
-                        pointBackgroundColor: '#4338ca', pointBorderColor: '#fff', pointBorderWidth: 1.5
+                        backgroundColor: function(ctx) {
+                            var c = ctx.chart.ctx;
+                            var g = c.createLinearGradient(0, 0, 0, 280);
+                            g.addColorStop(0, 'rgba(67, 56, 202, 0.22)');
+                            g.addColorStop(1, 'rgba(67, 56, 202, 0.00)');
+                            return g;
+                        },
+                        tension: 0.4,
+                        fill: true,
+                        borderWidth: 2.6,
+                        pointRadius: 3,
+                        pointHoverRadius: 7,
+                        pointBackgroundColor: '#4338ca',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 1.5,
+                        pointHoverBorderWidth: 2
                     }]
                 },
                 options: {
-                    responsive: true, maintainAspectRatio: false,
-                    animation: { duration: 600, easing: 'easeOutQuart' },
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 1000,
+                        easing: 'easeOutQuart',
+                        delay: function(ctx) { return ctx.type === 'data' ? ctx.dataIndex * 35 : 0; }
+                    },
+                    animations: {
+                        y: { duration: 700, easing: 'easeOutQuart' },
+                        tension: { duration: 900, easing: 'easeOutQuart', from: 0.85, to: 0.4 }
+                    },
                     interaction: { mode: 'index', intersect: false },
+                    hover: { mode: 'index', intersect: false, animationDuration: 200 },
                     plugins: {
                         legend: { display: false },
-                        tooltip: {
-                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                            titleColor: '#f8fafc', bodyColor: '#cbd5e1',
-                            borderColor: 'rgba(255,255,255,0.05)', borderWidth: 1,
-                            padding: 12, cornerRadius: 8, displayColors: false,
-                            titleFont: { weight: '600' },
+                        tooltip: Object.assign({}, tooltipBase, {
+                            displayColors: false,
                             callbacks: {
                                 title: function (ctx) { return ctx[0].label; },
                                 label: function (ctx) { return 'Saldo: ' + fmt(ctx.parsed.y); }
                             }
-                        }
+                        })
                     },
                     scales: {
-                        x: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { display: false } },
-                        y: { ticks: { color: '#94a3b8', callback: function (v) { return fmt(v); } }, grid: { color: gridColor, drawBorder: false } }
+                        x: {
+                            ticks: { color: '#94a3b8', font: { size: 11 } },
+                            grid: { display: false },
+                            border: { display: false }
+                        },
+                        y: {
+                            ticks: { color: '#94a3b8', callback: function (v) { return fmt(v); }, padding: 8 },
+                            grid: { color: gridColor, drawBorder: false },
+                            border: { display: false }
+                        }
                     }
                 }
             });
         }
     }
 
-    /* ============== Chart 4: Comparativo Mensal (Bar) ============== */
+    /* ============== Chart 4: Comparativo Mensal (Bar + Line) ============== */
     var monCanvas = document.getElementById('chart-monthly-comparison');
     var monEmpty  = document.getElementById('chart-monthly-empty');
     if (monCanvas) {
@@ -301,41 +445,101 @@ document.addEventListener('DOMContentLoaded', function () {
                 data: {
                     labels: mLabels,
                     datasets: [
-                        { label: 'Receitas', data: mIncomes, backgroundColor: 'rgba(5, 150, 105, 0.85)', borderColor: '#059669', borderWidth: 0, borderRadius: 6, borderSkipped: false, maxBarThickness: 28 },
-                        { label: 'Despesas', data: mExpense, backgroundColor: 'rgba(220, 38, 38, 0.85)', borderColor: '#dc2626', borderWidth: 0, borderRadius: 6, borderSkipped: false, maxBarThickness: 28 },
+                        {
+                            label: 'Receitas', data: mIncomes,
+                            backgroundColor: function(ctx) {
+                                var c = ctx.chart.ctx;
+                                var g = c.createLinearGradient(0, 0, 0, 240);
+                                g.addColorStop(0, 'rgba(5, 150, 105, 0.95)');
+                                g.addColorStop(1, 'rgba(5, 150, 105, 0.55)');
+                                return g;
+                            },
+                            hoverBackgroundColor: '#047857',
+                            borderRadius: { topLeft: 6, topRight: 6, bottomLeft: 0, bottomRight: 0 },
+                            borderSkipped: false,
+                            maxBarThickness: 30,
+                            borderWidth: 0
+                        },
+                        {
+                            label: 'Despesas', data: mExpense,
+                            backgroundColor: function(ctx) {
+                                var c = ctx.chart.ctx;
+                                var g = c.createLinearGradient(0, 0, 0, 240);
+                                g.addColorStop(0, 'rgba(220, 38, 38, 0.95)');
+                                g.addColorStop(1, 'rgba(220, 38, 38, 0.55)');
+                                return g;
+                            },
+                            hoverBackgroundColor: '#b91c1c',
+                            borderRadius: { topLeft: 6, topRight: 6, bottomLeft: 0, bottomRight: 0 },
+                            borderSkipped: false,
+                            maxBarThickness: 30,
+                            borderWidth: 0
+                        },
                         {
                             type: 'line', label: 'Saldo',
-                            data: mBalance, borderColor: '#4338ca',
+                            data: mBalance,
+                            borderColor: '#4338ca',
                             backgroundColor: 'rgba(67, 56, 202, 0.05)',
-                            tension: 0.35, borderWidth: 2.5, borderDash: [6, 4],
-                            pointRadius: 4, pointHoverRadius: 6,
-                            pointBackgroundColor: '#4338ca', pointBorderColor: '#fff', pointBorderWidth: 1.5
+                            tension: 0.38,
+                            borderWidth: 2.6,
+                            borderDash: [6, 4],
+                            pointRadius: 4,
+                            pointHoverRadius: 7,
+                            pointBackgroundColor: '#4338ca',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 1.5,
+                            pointHoverBorderWidth: 2,
+                            order: -1
                         }
                     ]
                 },
                 options: {
-                    responsive: true, maintainAspectRatio: false,
-                    animation: { duration: 600, easing: 'easeOutQuart' },
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 900,
+                        easing: 'easeOutQuart',
+                        delay: function(ctx) { return ctx.type === 'data' ? ctx.dataIndex * 50 : 0; }
+                    },
+                    animations: {
+                        y: { duration: 700, easing: 'easeOutQuart' }
+                    },
                     interaction: { mode: 'index', intersect: false },
+                    hover: { mode: 'index', intersect: false, animationDuration: 200 },
                     plugins: {
                         legend: {
                             position: 'top', align: 'end',
                             labels: { padding: 14, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 12, font: { size: 12, weight: '500' } }
                         },
-                        tooltip: {
-                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                            titleColor: '#f8fafc', bodyColor: '#cbd5e1',
-                            borderColor: 'rgba(255,255,255,0.05)', borderWidth: 1,
-                            padding: 12, cornerRadius: 8, displayColors: true, usePointStyle: true,
+                        tooltip: Object.assign({}, tooltipBase, {
                             callbacks: { label: function (ctx) { return ' ' + ctx.dataset.label + ': ' + fmt(ctx.parsed.y); } }
-                        }
+                        })
                     },
                     scales: {
-                        x: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { display: false } },
-                        y: { beginAtZero: true, ticks: { color: '#94a3b8', callback: function (v) { return fmt(v); } }, grid: { color: gridColor, drawBorder: false } }
+                        x: {
+                            ticks: { color: '#94a3b8', font: { size: 11 } },
+                            grid: { display: false },
+                            border: { display: false }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: '#94a3b8', callback: function (v) { return fmt(v); }, padding: 8 },
+                            grid: { color: gridColor, drawBorder: false },
+                            border: { display: false }
+                        }
                     }
                 }
             });
         }
     }
+
+    /* ============== Charts dashboard: ativar pulse em datasets ao hover ============== */
+    document.querySelectorAll('.chart-card').forEach(function (card) {
+        card.addEventListener('mouseenter', function () {
+            var c = card.querySelector('canvas');
+            if (c && Chart.getChart(c.id)) {
+                Chart.getChart(c.id).update('none');
+            }
+        });
+    });
 });

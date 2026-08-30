@@ -331,11 +331,7 @@ img, svg { display: block; max-width: 100%; }
     border-radius: var(--radius-md); border: 1px solid;
     font-size: 13px; font-weight: 500;
     margin-bottom: var(--space-5); line-height: 1.5;
-    animation: alertIn 0.25s var(--ease-out);
-}
-@keyframes alertIn {
-    from { opacity: 0; transform: translateY(-4px); }
-    to   { opacity: 1; transform: translateY(0); }
+    animation: alertIn 0.3s var(--ease-out);
 }
 .alert-success { background: var(--color-success-soft); color: var(--color-success-text); border-color: var(--color-success-border); }
 .alert-error   { background: var(--color-danger-soft);  color: var(--color-danger-text);  border-color: var(--color-danger-border); }
@@ -1102,5 +1098,343 @@ select {
     .chart-card-title { font-size: 14px; }
 }
 @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { transition: none !important; animation: none !important; }
+    .animate-in,
+    .metric-card,
+    .panel,
+    .chart-card,
+    .hero-card,
+    .quick-actions,
+    .indicators,
+    .goals-grid > *,
+    .topbar,
+    .filter-bar,
+    .data-table tbody tr,
+    .alert {
+        animation: none !important;
+    }
+    .btn:active,
+    .filter-shortcut:hover,
+    .sidebar-link:hover { transform: none !important; }
+    .metric-card-icon, .hero-card-icon { transition: none !important; }
+    .progress-fill::after { display: none; }
+    .badge-dot::before { display: none; }
+}
+
+/* ============================================================
+   REVEAL ON SCROLL
+   ============================================================ */
+.reveal-on-scroll {
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.5s var(--ease-out), transform 0.5s var(--ease-out);
+}
+.reveal-on-scroll.is-revealed {
+    opacity: 1;
+    transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+    .reveal-on-scroll { opacity: 1; transform: none; transition: none; }
+}
+
+/* ============================================================
+   STATUS DOT PULSE
+   ============================================================ */
+.badge .badge-dot {
+    position: relative;
+    overflow: visible;
+}
+.badge-success .badge-dot { background: var(--color-success); }
+.badge-danger  .badge-dot { background: var(--color-danger); }
+.badge-warning .badge-dot { background: var(--color-warning); }
+.badge-info    .badge-dot { background: var(--color-info); }
+.badge-primary .badge-dot { background: var(--color-primary); }
+.badge-neutral .badge-dot { background: var(--color-text-3); }
+
+.badge-success .badge-dot::before,
+.badge-danger  .badge-dot::before,
+.badge-warning .badge-dot::before,
+.badge-info    .badge-dot::before,
+.badge-primary .badge-dot::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    animation: dotPulse 2s ease-out infinite;
+}
+
+@keyframes dotPulse {
+    0%   { transform: scale(1); opacity: 0.6; }
+    100% { transform: scale(2.4); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .badge .badge-dot::before { animation: none; }
+}
+
+/* ============================================================
+   INDICATOR HOVER
+   ============================================================ */
+.indicator {
+    transition: background var(--duration-fast) var(--ease-out),
+                transform var(--duration-fast) var(--ease-out);
+}
+.indicator:hover {
+    background: var(--color-surface-2);
+    transform: translateY(-1px);
+}
+
+/* ============================================================
+   PROGRESS SHIMMER (ativa no hover)
+   ============================================================ */
+.progress-fill {
+    transition: width 0.7s var(--ease-out);
+}
+.progress-fill::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.22) 50%,
+        transparent 100%
+    );
+    background-size: 200% 100%;
+    opacity: 0;
+    transition: opacity var(--duration-base) var(--ease-out);
+}
+.progress-bar:hover .progress-fill::after {
+    opacity: 1;
+    animation: progressShine 2s linear infinite;
+}
+@keyframes progressShine {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* ============================================================
+   DATA TABLE ANIMATION
+   ============================================================ */
+.data-table tbody tr {
+    animation: rowIn 0.35s var(--ease-out) backwards;
+}
+.data-table tbody tr:nth-child(1)  { animation-delay: 0.00s; }
+.data-table tbody tr:nth-child(2)  { animation-delay: 0.03s; }
+.data-table tbody tr:nth-child(3)  { animation-delay: 0.06s; }
+.data-table tbody tr:nth-child(4)  { animation-delay: 0.09s; }
+.data-table tbody tr:nth-child(5)  { animation-delay: 0.12s; }
+.data-table tbody tr:nth-child(6)  { animation-delay: 0.15s; }
+.data-table tbody tr:nth-child(7)  { animation-delay: 0.18s; }
+.data-table tbody tr:nth-child(8)  { animation-delay: 0.21s; }
+.data-table tbody tr:nth-child(9)  { animation-delay: 0.24s; }
+.data-table tbody tr:nth-child(10) { animation-delay: 0.27s; }
+.data-table tbody tr:nth-child(n+11) { animation-delay: 0.30s; }
+
+@keyframes rowIn {
+    from { opacity: 0; transform: translateX(-6px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ============================================================
+   BUTTON CLICK FEEDBACK
+   ============================================================ */
+.btn:active {
+    transform: translateY(0.5px) scale(0.985);
+}
+
+/* ============================================================
+   FILTER BAR ANIMATION
+   ============================================================ */
+.filter-bar {
+    animation: fadeInUp 0.4s 0.05s var(--ease-out) backwards;
+}
+
+/* ============================================================
+   PANEL ENTRANCE
+   ============================================================ */
+.panel {
+    animation: fadeInUp 0.45s var(--ease-out) backwards;
+}
+.charts-grid > *:nth-child(1) { animation: fadeInUp 0.45s 0.10s var(--ease-out) backwards; }
+.charts-grid > *:nth-child(2) { animation: fadeInUp 0.45s 0.18s var(--ease-out) backwards; }
+.charts-grid > *:nth-child(3) { animation: fadeInUp 0.45s 0.26s var(--ease-out) backwards; }
+
+.two-col > *:nth-child(1) { animation: fadeInUp 0.4s 0.05s var(--ease-out) backwards; }
+.two-col > *:nth-child(2) { animation: fadeInUp 0.4s 0.13s var(--ease-out) backwards; }
+
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   METRICS STRIP STAGGER
+   ============================================================ */
+.metrics-strip {
+    animation: fadeInUp 0.4s 0.00s var(--ease-out) backwards;
+}
+.metrics-strip > *:nth-child(1) { animation: fadeInUp 0.4s 0.00s var(--ease-out) backwards; }
+.metrics-strip > *:nth-child(2) { animation: fadeInUp 0.4s 0.05s var(--ease-out) backwards; }
+.metrics-strip > *:nth-child(3) { animation: fadeInUp 0.4s 0.10s var(--ease-out) backwards; }
+.metrics-strip > *:nth-child(4) { animation: fadeInUp 0.4s 0.15s var(--ease-out) backwards; }
+
+/* ============================================================
+   HERO ROW STAGGER
+   ============================================================ */
+.hero-row > *:nth-child(1) { animation: fadeInUp 0.4s 0.00s var(--ease-out) backwards; }
+.hero-row > *:nth-child(2) { animation: fadeInUp 0.4s 0.08s var(--ease-out) backwards; }
+
+/* ============================================================
+   GOALS GRID STAGGER
+   ============================================================ */
+.goals-grid > *:nth-child(1) { animation: fadeInUp 0.4s 0.00s var(--ease-out) backwards; }
+.goals-grid > *:nth-child(2) { animation: fadeInUp 0.4s 0.08s var(--ease-out) backwards; }
+.goals-grid > *:nth-child(3) { animation: fadeInUp 0.4s 0.16s var(--ease-out) backwards; }
+.goals-grid > *:nth-child(4) { animation: fadeInUp 0.4s 0.24s var(--ease-out) backwards; }
+
+/* ============================================================
+   INDICATORS STRIP
+   ============================================================ */
+.indicators { animation: fadeInUp 0.4s 0.20s var(--ease-out) backwards; }
+
+/* ============================================================
+   TOPBAR
+   ============================================================ */
+.topbar { animation: fadeInUp 0.4s 0.00s var(--ease-out) backwards; }
+
+/* ============================================================
+   ALERT ANIMATION
+   ============================================================ */
+@keyframes alertIn {
+    from { opacity: 0; transform: translateX(-8px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+.alert { animation: alertIn 0.3s var(--ease-out) backwards; }
+
+/* ============================================================
+   LOADING BUTTON STATE
+   ============================================================ */
+.btn.is-loading {
+    pointer-events: none;
+    opacity: 0.75;
+}
+.btn.is-loading::before {
+    content: "";
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 1.5px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: btnSpin 0.65s linear infinite;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+@keyframes btnSpin { to { transform: rotate(360deg); } }
+
+/* ============================================================
+   SKELETON
+   ============================================================ */
+.skeleton {
+    background: linear-gradient(
+        90deg,
+        var(--color-surface-3) 25%,
+        var(--color-surface-2) 50%,
+        var(--color-surface-3) 75%
+    );
+    background-size: 400% 100%;
+    animation: skeletonShimmer 1.4s ease infinite;
+    border-radius: var(--radius-sm);
+    color: transparent !important;
+    pointer-events: none;
+}
+@keyframes skeletonShimmer {
+    0%   { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* ============================================================
+   TOOLTIP
+   ============================================================ */
+[data-tooltip] {
+    position: relative;
+    cursor: default;
+}
+[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%) translateY(3px);
+    background: var(--color-text-1);
+    color: #ffffff;
+    padding: 4px 9px;
+    border-radius: var(--radius-xs);
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 999;
+    opacity: 0;
+    animation: tooltipShow 0.18s var(--ease-out) forwards;
+}
+@keyframes tooltipShow {
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ============================================================
+   SIDEBAR LINK HOVER ANIMATION
+   ============================================================ */
+.sidebar-link svg {
+    transition: transform var(--duration-base) var(--ease-out);
+}
+.sidebar-link:hover svg {
+    transform: translateX(3px);
+}
+
+/* ============================================================
+   CARD ICON MICROINTERACTION
+   ============================================================ */
+.metric-card-icon,
+.hero-card-icon {
+    transition: transform var(--duration-base) var(--ease-out),
+                background var(--duration-base) var(--ease-out),
+                color var(--duration-base) var(--ease-out);
+}
+.metric-card:hover .metric-card-icon { transform: scale(1.08) rotate(-4deg); }
+.hero-card:hover .hero-card-icon   { transform: scale(1.08) rotate(-4deg); }
+
+/* ============================================================
+   TOPBAR USER CARD
+   ============================================================ */
+.topbar-user {
+    transition: border-color var(--duration-fast) var(--ease-out),
+                box-shadow var(--duration-fast) var(--ease-out),
+                transform var(--duration-fast) var(--ease-out);
+}
+.topbar-user:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+
+/* ============================================================
+   FILTER SHORTCUT MICROINTERACTION
+   ============================================================ */
+.filter-shortcut {
+    transition: background var(--duration-fast) var(--ease-out),
+                color var(--duration-fast) var(--ease-out),
+                transform var(--duration-fast) var(--ease-out);
+}
+.filter-shortcut:hover { transform: translateY(-1px); }
+.filter-shortcut:active { transform: translateY(0); }
+
+/* ============================================================
+   PAGE TRANSITION
+   ============================================================ */
+.main-content {
+    animation: pageIn 0.35s var(--ease-out);
+}
+@keyframes pageIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
