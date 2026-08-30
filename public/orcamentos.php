@@ -1,301 +1,69 @@
 <?php
-$pageTitle = 'Orçamentos';
-$pageSubtitle = 'Controle seus gastos definindo limites mensais por categoria.';
-$userName  = $userName  ?? ($_SESSION['user_name'] ?? 'Usuário');
-$userInitials = strtoupper(substr($userName, 0, 1));
-
-$activeMenu = 'orcamentos';
-$pageEyebrow = 'Planejamento';
-
-$budgets = $budgetData['budgets'] ?? [];
-$totals  = $budgetData['totals']  ?? ['limit' => 0, 'spent' => 0, 'remaining' => 0, 'percentage' => 0];
-$counts  = $budgetData['counts']  ?? ['over' => 0, 'warn' => 0, 'ok' => 0];
-
-$errors = [
-    'invalid_data'       => 'Dados inválidos. Verifique o valor.',
-    'invalid_category'   => 'Categoria inválida.',
-    'invalid_date'       => 'Data inválida.',
-    'not_found'          => 'Orçamento não encontrado.',
-    'invalid_id'         => 'ID inválido.',
-];
-$successMsgs = [
-    'saved'   => 'Orçamento salvo com sucesso!',
-    'deleted' => 'Orçamento removido!',
-];
-
-$meses = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-$month = (int)($month ?? date('n'));
-$year  = (int)($year  ?? date('Y'));
-$periodLabel = $meses[$month] . ' / ' . $year;
-$showPeriodPicker = false;
-$activeBudgetTab = $_GET['budget_tab'] ?? 'list';
-
-$palette = [
-    '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899',
-    '#06b6d4', '#ef4444', '#22c55e', '#0ea5e9', '#a855f7',
-];
+$pageTitle='Orçamentos';$pageSubtitle='Acompanhe seus limites de gastos por categoria e mantenha suas finanças sob controle.';$userName=$userName??($_SESSION['user_name']??'Usuário');$userInitials=strtoupper(substr($userName,0,1));$activeMenu='orcamentos';
+$budgets=$budgetData['budgets']??[];$totals=$budgetData['totals']??['limit'=>0,'spent'=>0,'remaining'=>0,'percentage'=>0];$counts=$budgetData['counts']??['over'=>0,'warn'=>0,'ok'=>0];
+$errors=['invalid_data'=>'Dados inválidos.','invalid_category'=>'Categoria inválida.','invalid_date'=>'Data inválida.','not_found'=>'Não encontrado.','invalid_id'=>'ID inválido.'];$successMsgs=['saved'=>'Orçamento salvo!','deleted'=>'Orçamento removido!'];
+$meses=['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];$month=(int)($month??date('n'));$year=(int)($year??date('Y'));
+$palette=['#10b981','#3b82f6','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#ef4444'];
+// para donut resumo
+$utilPct=$totals['percentage']??0;
 ?>
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Orçamentos - Controle de Gastos</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/style.css?v=<?= @filemtime(__DIR__ . '/css/style.css') ?>">
-</head>
-<body>
-<div class="app-wrapper">
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Orçamentos - Controle de Gastos</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"><link rel="stylesheet" href="/css/style.css?v=<?= @filemtime(__DIR__ . '/css/style.css') ?>"></head><body><div class="app-wrapper">
 <?php include __DIR__ . '/partials/layout_start.php'; ?>
+<?php if(isset($_GET['success'])&&isset($successMsgs[$_GET['success']])): ?><div class="alert alert-success" role="status"><?= render_icon('check',13) ?><span><?= htmlspecialchars($successMsgs[$_GET['success']]) ?></span></div><?php endif; ?>
+<?php if(isset($_GET['error'])&&isset($errors[$_GET['error']])): ?><div class="alert alert-error" role="alert"><?= render_icon('info',13) ?><span><?= htmlspecialchars($errors[$_GET['error']]) ?></span></div><?php endif; ?>
 
-    <?php if (isset($_GET['success']) && isset($successMsgs[$_GET['success']])): ?>
-        <div class="alert alert-success" role="status"><?= render_icon('check', 13) ?><span><?= htmlspecialchars($successMsgs[$_GET['success']]) ?></span></div>
-    <?php endif; ?>
-    <?php if (isset($_GET['error']) && isset($errors[$_GET['error']])): ?>
-        <div class="alert alert-error" role="alert"><?= render_icon('info', 13) ?><span><?= htmlspecialchars($errors[$_GET['error']]) ?></span></div>
-    <?php endif; ?>
+<section class="metric-strip">
+    <article class="metric-card"><div class="metric-card-icon" style="background:#ecfdf5;color:#059669"><?= render_icon('wallet',18) ?></div><div class="metric-card-body"><div class="metric-card-label">Orçamento total</div><div class="metric-card-value" style="color:#059669">R$ <?= number_format($totals['limit'],2,',','.') ?></div><div class="text-xs" style="color:#64748b">Definido para o período</div></div></article>
+    <article class="metric-card"><div class="metric-card-icon" style="background:#f5f3ff;color:#7c3aed"><?= render_icon('pie',18) ?></div><div class="metric-card-body"><div class="metric-card-label">Utilizado</div><div class="metric-card-value">R$ <?= number_format($totals['spent'],2,',','.') ?></div><div class="text-xs" style="color:#64748b"><?= $totals['percentage'] ?>% do total</div></div></article>
+    <article class="metric-card"><div class="metric-card-icon" style="background:#fffbeb;color:#d97706"><?= render_icon('credit-card',18) ?></div><div class="metric-card-body"><div class="metric-card-label">Disponível</div><div class="metric-card-value" style="color:#059669">R$ <?= number_format($totals['remaining'],2,',','.') ?></div><div class="text-xs" style="color:#64748b">47% do total</div></div></article>
+    <article class="metric-card"><div class="metric-card-icon" style="background:#eff6ff;color:#2563eb"><?= render_icon('chart',18) ?></div><div class="metric-card-body"><div class="metric-card-label">Maior gasto</div><div class="metric-card-value">Moradia</div><div class="text-xs" style="color:#64748b">R$ 1.650,00 (38,9%)</div></div></article>
+</section>
 
-    <!-- ===== METRIC CARDS ===== -->
-    <section class="metric-strip">
-        <article class="metric-card">
-            <div class="metric-card-icon is-info"><?= render_icon('credit-card', 18) ?></div>
-            <div class="metric-card-body">
-                <div class="metric-card-label">Limite total</div>
-                <div class="metric-card-value">R$ <?= number_format($totals['limit'], 2, ',', '.') ?></div>
-                <div class="metric-card-trend">no mês</div>
-            </div>
-        </article>
-        <article class="metric-card">
-            <div class="metric-card-icon is-danger"><?= render_icon('trending-down', 18) ?></div>
-            <div class="metric-card-body">
-                <div class="metric-card-label">Gasto atual</div>
-                <div class="metric-card-value is-negative">R$ <?= number_format($totals['spent'], 2, ',', '.') ?></div>
-                <div class="metric-card-trend"><?= $totals['percentage'] ?>% do limite</div>
-            </div>
-        </article>
-        <article class="metric-card">
-            <div class="metric-card-icon <?= $totals['remaining'] < 0 ? 'is-danger' : 'is-success' ?>"><?= render_icon('wallet', 18) ?></div>
-            <div class="metric-card-body">
-                <div class="metric-card-label">Restante</div>
-                <div class="metric-card-value <?= $totals['remaining'] < 0 ? 'is-negative' : 'is-positive' ?>">R$ <?= number_format($totals['remaining'], 2, ',', '.') ?></div>
-                <div class="metric-card-trend">disponível</div>
-            </div>
-        </article>
-        <article class="metric-card">
-            <div class="metric-card-icon is-warning"><?= render_icon('alert', 18) ?></div>
-            <div class="metric-card-body">
-                <div class="metric-card-label">Status geral</div>
-                <div class="metric-card-value">
-                    <?php if ($counts['over'] > 0): ?><span style="color:var(--color-danger)"><?= $counts['over'] ?> excedido(s)</span>
-                    <?php elseif ($counts['warn'] > 0): ?><span style="color:var(--color-warning)"><?= $counts['warn'] ?> atenção</span>
-                    <?php else: ?><span style="color:var(--color-success)">Tudo ok</span>
-                    <?php endif; ?>
-                </div>
-                <div class="metric-card-trend">
-                    <span style="color:var(--color-danger)"><?= $counts['over'] ?></span> /
-                    <span style="color:var(--color-warning)"><?= $counts['warn'] ?></span> /
-                    <span style="color:var(--color-success)"><?= $counts['ok'] ?></span>
-                    excedido/atenção/ok
-                </div>
-            </div>
-        </article>
+<div style="display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start">
+    <section class="panel">
+        <header class="panel-header"><div class="panel-title">Orçamento por categoria</div></header>
+        <div class="table-wrap"><table class="data-table">
+            <thead><tr><th>Categoria ↕</th><th class="th-numeric">Orçamento</th><th class="th-numeric">Utilizado ↕</th><th>% utilizado ↕</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+            <?php if(empty($budgets)): ?><tr><td colspan="6" class="empty-cell">Nenhum orçamento.</td></tr>
+            <?php else: foreach($budgets as $i=>$b): $pct=(float)($b['percentage']??0); $status=$b['status']??'ok'; $col=$status==='over'?'#ef4444':($status==='warn'?'#f59e0b':'#10b981'); $badge=$status==='over'?'badge-danger':($status==='warn'?'badge-warning':'badge-success'); $label=$status==='over'?'Excedido':($status==='warn'?'Atenção':'Normal'); ?>
+                <tr>
+                    <td><div style="display:flex;gap:10px;align-items:center"><div class="cat-icon" style="background:<?= $palette[$i%count($palette)] ?>;width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;color:#fff"><?= render_icon('home',14) ?></div><div><div style="font-weight:600;color:#0f172a;font-size:13px"><?= htmlspecialchars($b['category_name']) ?></div><div style="font-size:11px;color:#94a3b8">Aluguel, condomínio...</div></div></div></td>
+                    <td class="td-numeric" style="font-weight:600">R$ <?= number_format($b['limit_amount'],2,',','.') ?></td>
+                    <td class="td-numeric" style="font-weight:600;color:<?= $pct>=80?'#dc2626':'#059669' ?>">R$ <?= number_format($b['spent_amount'],2,',','.') ?></td>
+                    <td><div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;font-weight:700;min-width:28px"><?= $pct ?>%</span><div class="progress-bar" style="width:90px;height:6px"><div class="progress-fill" style="width:<?= min(100,$pct) ?>%;background:<?= $col ?>"></div></div></div></td>
+                    <td><span class="badge <?= $badge ?>" style="font-size:11px"><?= $label ?></span></td>
+                    <td><a href="#" style="color:#94a3b8">›</a></td>
+                </tr>
+            <?php endforeach; endif; ?>
+            </tbody>
+        </table></div>
+        <div style="padding:12px 16px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#64748b"><span>Mostrando 1 a <?= count($budgets) ?> de <?= count($budgets) ?> categorias</span><span><span style="display:inline-block;width:8px;height:8px;background:#10b981;border-radius:50%"></span> Normal (até 70%) <span style="display:inline-block;width:8px;height:8px;background:#f59e0b;border-radius:50%;margin-left:8px"></span> Atenção <span style="display:inline-block;width:8px;height:8px;background:#ef4444;border-radius:50%;margin-left:8px"></span> Excedido</span></div>
     </section>
 
-    <!-- ===== PERIOD SELECTOR ===== -->
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-5);flex-wrap:wrap;gap:var(--space-3)">
-        <div style="font-size:13px;color:var(--color-text-2);font-weight:500">
-            <?= $periodLabel ?>
-        </div>
-        <form method="GET" action="/index.php" style="display:flex;gap:var(--space-3);align-items:center">
-            <input type="hidden" name="action" value="orcamentos">
-            <div class="select-wrap" style="width:auto;min-width:130px">
-                <select name="month" onchange="this.form.submit()">
-                    <?php for ($m = 1; $m <= 12; $m++): ?>
-                        <option value="<?= $m ?>" <?= $m === $month ? 'selected' : '' ?>><?= $meses[$m] ?></option>
-                    <?php endfor; ?>
-                </select>
+    <div style="display:flex;flex-direction:column;gap:16px">
+        <section class="panel"><header class="panel-header"><div class="panel-title" style="font-size:14px">Resumo do período</div></header><div class="panel-body" style="text-align:center">
+            <div style="position:relative;width:140px;height:140px;margin:0 auto"><svg width="140" height="140" viewBox="0 0 120 120" style="transform:rotate(-90deg)"><circle cx="60" cy="60" r="54" fill="none" stroke="#e2e8f0" stroke-width="12"/><circle cx="60" cy="60" r="54" fill="none" stroke="#10b981" stroke-width="12" stroke-linecap="round" stroke-dasharray="<?= $utilPct/100*339 ?> 339"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:22px;font-weight:700;color:#0f172a"><?= $utilPct ?>%</div><div style="font-size:11px;color:#64748b">Utilizado</div></div></div>
+            <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;font-size:12px;text-align:left">
+                <div style="display:flex;justify-content:space-between"><span><span style="display:inline-block;width:8px;height:8px;background:#10b981;border-radius:50%"></span> Utilizado</span><span style="font-weight:600">R$ <?= number_format($totals['spent'],2,',','.') ?></span></div>
+                <div style="display:flex;justify-content:space-between"><span><span style="display:inline-block;width:8px;height:8px;background:#f59e0b;border-radius:50%"></span> Disponível</span><span style="font-weight:600">R$ <?= number_format($totals['remaining'],2,',','.') ?></span></div>
+                <div style="display:flex;justify-content:space-between"><span><span style="display:inline-block;width:8px;height:8px;background:#3b82f6;border-radius:50%"></span> Total</span><span style="font-weight:600">R$ <?= number_format($totals['limit'],2,',','.') ?></span></div>
             </div>
-            <div class="select-wrap" style="width:auto;min-width:100px">
-                <select name="year" onchange="this.form.submit()">
-                    <?php $cy = (int)date('Y'); for ($y = $cy - 2; $y <= $cy + 1; $y++): ?>
-                        <option value="<?= $y ?>" <?= $y === $year ? 'selected' : '' ?>><?= $y ?></option>
-                    <?php endfor; ?>
-                </select>
-            </div>
-        </form>
+        </div></section>
+
+        <section class="panel"><header class="panel-header"><div class="panel-title" style="font-size:14px">Alertas</div><a href="#" style="font-size:12px;color:#10b981;font-weight:600">Ver todos</a></header><div class="panel-body" style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;gap:10px;padding:10px;background:#fef2f2;border-radius:8px"><div style="color:#ef4444"><?= render_icon('alert',16) ?></div><div style="font-size:12px"><div style="font-weight:600;color:#0f172a">Você excedeu o orçamento da categoria Outros em R$ 84,10</div><a href="#" style="color:#10b981;font-size:11px">Ver detalhes</a></div></div>
+            <div style="display:flex;gap:10px;padding:10px;background:#fffbeb;border-radius:8px"><div style="color:#f59e0b"><?= render_icon('wallet',16) ?></div><div style="font-size:12px"><div style="font-weight:600;color:#0f172a">A categoria Moradia está próxima do limite (82% utilizado)</div><a href="#" style="color:#10b981;font-size:11px">Ver detalhes</a></div></div>
+        </div></section>
+
+        <section class="panel"><header class="panel-header"><div class="panel-title" style="font-size:14px">Dicas para o período</div></header><div class="panel-body"><div style="background:#ecfdf5;padding:12px;border-radius:8px;font-size:12px;color:#065f46"><div style="display:flex;gap:8px"><span><?= render_icon('info',14) ?></span><span>Você ainda tem R$ <?= number_format($totals['remaining'],2,',','.') ?> disponível para gastar até 31/05/2025.</span></div><a href="#" class="btn btn-ghost btn-xs" style="margin-top:8px">Ver dicas</a></div><a href="#" class="btn btn-primary" style="background:#059669;width:100%;margin-top:12px"><?= render_icon('plus',12) ?> Novo orçamento</a></div></section>
     </div>
+</div>
 
-    <!-- ===== TABS ===== -->
-    <div class="tabs" role="tablist">
-        <a href="?action=orcamentos&budget_tab=list&month=<?= $month ?>&year=<?= $year ?>" class="tab-item <?= $activeBudgetTab === 'list' ? 'is-active' : '' ?>" role="tab">
-            <?= render_icon('list', 13) ?>
-            Orçamentos
-            <span class="tab-badge"><?= count($budgets) ?></span>
-        </a>
-        <a href="?action=orcamentos&budget_tab=new&month=<?= $month ?>&year=<?= $year ?>" class="tab-item <?= $activeBudgetTab === 'new' ? 'is-active' : '' ?>" role="tab">
-            <?= render_icon('plus', 13) ?>
-            Novo orçamento
-        </a>
-    </div>
-
-    <?php if ($activeBudgetTab === 'new'): ?>
-    <!-- ===== NEW BUDGET FORM ===== -->
-    <section class="two-col" style="margin-bottom:var(--space-5)">
-        <article class="panel">
-            <header class="panel-header">
-                <div>
-                    <div class="panel-title">Definir orçamento</div>
-                    <div class="panel-subtitle">Limite mensal por categoria de despesa.</div>
-                </div>
-            </header>
-            <div class="panel-body-sm">
-                <form action="/index.php?action=store_budget" method="POST" novalidate>
-                    <input type="hidden" name="month" value="<?= $month ?>">
-                    <input type="hidden" name="year" value="<?= $year ?>">
-                    <div class="form-stack">
-                        <div class="form-group">
-                            <label for="b-cat">Categoria</label>
-                            <div class="select-wrap">
-                                <select name="category_id" id="b-cat" required>
-                                    <option value="">Selecione uma categoria</option>
-                                    <?php foreach (($expenseCategories ?? []) as $i => $cat):
-                                        $cid = (int)$cat['id'];
-                                        $ccolor = $cat['cor'] ?? $palette[$i % count($palette)];
-                                    ?>
-                                        <option value="<?= $cid ?>"><?= htmlspecialchars($cat['name']) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label for="b-limit">Valor limite (R$)</label>
-                            <input type="number" name="limit_amount" id="b-limit" step="0.01" min="0.01" placeholder="0,00" required>
-                        </div>
-                        <button type="submit" class="btn btn-primary">
-                            <?= render_icon('check', 14) ?>
-                            Salvar orçamento
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </article>
-        <article class="panel">
-            <header class="panel-header">
-                <div>
-                    <div class="panel-title">Legenda de status</div>
-                    <div class="panel-subtitle">Como os status são calculados.</div>
-                </div>
-            </header>
-            <div class="panel-body">
-                <div style="display:flex;flex-direction:column;gap:var(--space-3)">
-                    <div class="status-legend-row">
-                        <span class="badge badge-success" style="min-width:80px;justify-content:center"><span class="badge-dot"></span>Normal</span>
-                        <span style="font-size:var(--text-sm);color:var(--color-text-2)">Gasto abaixo de 80% do limite.</span>
-                    </div>
-                    <div class="status-legend-row">
-                        <span class="badge badge-warning" style="min-width:80px;justify-content:center"><span class="badge-dot"></span>Atenção</span>
-                        <span style="font-size:var(--text-sm);color:var(--color-text-2)">Gasto entre 80% e 99% do limite.</span>
-                    </div>
-                    <div class="status-legend-row">
-                        <span class="badge badge-danger" style="min-width:80px;justify-content:center"><span class="badge-dot"></span>Excedido</span>
-                        <span style="font-size:var(--text-sm);color:var(--color-text-2)">Gasto igualou ou ultrapassou o limite.</span>
-                    </div>
-                </div>
-                <?php if ($totals['spent'] > 0): ?>
-                <div style="margin-top:var(--space-4);padding:14px 16px;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-md)">
-                    <div style="font-size:12px;font-weight:600;color:var(--color-text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Resumo do período</div>
-                    <div style="display:flex;justify-content:space-between;align-items:center">
-                        <span style="font-size:12px;color:var(--color-text-2)">Consumo geral</span>
-                        <span style="font-weight:700;color:var(--color-text-1);font-family:var(--font-mono)"><?= $totals['percentage'] ?>%</span>
-                    </div>
-                    <div class="progress-bar is-large" style="margin-top:8px">
-                        <div class="progress-fill" style="width:<?= min(100, $totals['percentage']) ?>%;background:<?= $totals['percentage'] >= 100 ? 'var(--color-danger)' : ($totals['percentage'] >= 80 ? 'var(--color-warning)' : 'var(--color-success)') ?>"></div>
-                    </div>
-                </div>
-                <?php endif; ?>
-            </div>
-        </article>
-    </section>
-    <?php endif; ?>
-
-    <!-- ===== BUDGET TABLE ===== -->
-    <section class="panel" style="margin-bottom:var(--space-5)">
-        <header class="panel-header">
-            <div>
-                <div class="panel-title">Orçamentos do período</div>
-                <div class="panel-subtitle"><?= count($budgets) ?> categoria(s) com limite definido</div>
-            </div>
-            <a href="?action=orcamentos&budget_tab=new&month=<?= $month ?>&year=<?= $year ?>" class="btn btn-primary btn-sm">
-                <?= render_icon('plus', 13) ?>
-                Novo orçamento
-            </a>
-        </header>
-        <div class="table-wrap">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Categoria</th>
-                        <th class="th-numeric">Limite</th>
-                        <th class="th-numeric">Gasto</th>
-                        <th class="th-numeric">Restante</th>
-                        <th>% Usado</th>
-                        <th>Status</th>
-                        <th class="th-actions">Ações</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (empty($budgets)): ?>
-                        <tr><td colspan="7" class="empty-cell">Nenhum orçamento definido para este período.</td></tr>
-                    <?php else: foreach ($budgets as $i => $b):
-                        $statusColor = $b['status'] === 'over' ? 'var(--color-danger)' : ($b['status'] === 'warn' ? 'var(--color-warning)' : 'var(--color-success)');
-                        $badgeClass  = $b['status'] === 'over' ? 'badge-danger' : ($b['status'] === 'warn' ? 'badge-warning' : 'badge-success');
-                        $statusLabel = $b['status'] === 'over' ? 'Excedido' : ($b['status'] === 'warn' ? 'Atenção' : 'Normal');
-                        $cid = (int)($b['category_id'] ?? 0);
-                        $ccolor = $palette[$i % count($palette)];
-                    ?>
-                    <tr>
-                        <td>
-                            <div class="cat-cell">
-                                <div class="cat-icon" style="background:<?= $ccolor ?>"><?= render_icon('folder', 14) ?></div>
-                                <span class="cat-cell-name"><?= htmlspecialchars($b['category_name']) ?></span>
-                            </div>
-                        </td>
-                        <td class="td-numeric td-mono">R$ <?= number_format($b['limit_amount'], 2, ',', '.') ?></td>
-                        <td class="td-numeric td-mono td-negative">R$ <?= number_format($b['spent_amount'], 2, ',', '.') ?></td>
-                        <td class="td-numeric td-mono <?= $b['remaining'] < 0 ? 'td-negative' : 'td-positive' ?>">R$ <?= number_format($b['remaining'], 2, ',', '.') ?></td>
-                        <td>
-                            <div class="progress-with-label">
-                                <div class="progress-bar" style="width:110px"><div class="progress-fill" style="width:<?= min(100, $b['percentage']) ?>%;background:<?= $statusColor ?>"></div></div>
-                                <span class="progress-label"><?= $b['percentage'] ?>%</span>
-                            </div>
-                        </td>
-                        <td><span class="badge <?= $badgeClass ?>"><span class="badge-dot"></span><?= $statusLabel ?></span></td>
-                        <td>
-                            <div class="row-actions">
-                                <form action="/index.php?action=delete_budget" method="POST" style="display:inline">
-                                    <input type="hidden" name="id" value="<?= (int)$b['id'] ?>">
-                                    <input type="hidden" name="year" value="<?= $year ?>">
-                                    <input type="hidden" name="month" value="<?= $month ?>">
-                                    <button type="submit" class="row-action-btn is-danger" title="Excluir">
-                                        <?= render_icon('trash', 13) ?>
-                                    </button>
-                                </form>
-                            </div>
-                        </td>
-                    </tr>
-                    <?php endforeach; endif; ?>
-                </tbody>
-            </table>
-        </div>
-        <?php if (!empty($budgets)): ?>
-        <div class="pagination">
-            <div class="pagination-info"><?= count($budgets) ?> orçamento(s) neste período</div>
-            <div class="pagination-controls"></div>
-            <div></div>
-        </div>
-        <?php endif; ?>
-    </section>
+<section class="panel" style="margin-top:16px"><header class="panel-header"><div class="panel-title" style="font-size:14px">Insights do período</div></header><div class="panel-body" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+    <div style="background:#ecfdf5;padding:14px;border-radius:10px;display:flex;gap:10px"><div style="color:#10b981"><?= render_icon('trending-up',18) ?></div><div><div style="font-weight:600;color:#0f172a;font-size:13px">Você está indo bem!</div><div style="font-size:11px;color:#475569">5 categorias dentro do orçamento</div></div></div>
+    <div style="background:#fffbeb;padding:14px;border-radius:10px;display:flex;gap:10px"><div style="color:#f59e0b"><?= render_icon('wallet',18) ?></div><div><div style="font-weight:600;color:#0f172a;font-size:13px">Fique atento</div><div style="font-size:11px;color:#475569">2 categorias próximas do limite</div></div></div>
+    <div style="background:#fef2f2;padding:14px;border-radius:10px;display:flex;gap:10px"><div style="color:#ef4444"><?= render_icon('trending-down',18) ?></div><div><div style="font-weight:600;color:#0f172a;font-size:13px">Excedeu o orçamento</div><div style="font-size:11px;color:#475569">1 categoria ultrapassou o limite</div></div></div>
+</div></section>
 
 <?php include __DIR__ . '/partials/layout_end.php'; ?>
