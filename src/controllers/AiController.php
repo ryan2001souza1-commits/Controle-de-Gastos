@@ -61,8 +61,9 @@ class AiController
         if (!is_array($history)) $history = [];
 
         // Validações
+        $msgLen = function_exists('mb_strlen') ? mb_strlen($message) : strlen($message);
         if ($message === '') { http_response_code(400); echo json_encode(['error'=>'Digite uma pergunta.']); return; }
-        if (mb_strlen($message) > 2000) { http_response_code(400); echo json_encode(['error'=>'Mensagem muito longa (máx. 2000 caracteres).']); return; }
+        if ($msgLen > 2000) { http_response_code(400); echo json_encode(['error'=>'Mensagem muito longa (máx. 2000 caracteres).']); return; }
         // sanitiza histórico tamanho
         if (count($history) > 20) $history = array_slice($history, -20);
 
@@ -87,7 +88,8 @@ class AiController
         // Tenta resposta determinística primeiro (economia)
         $deterministic = $this->ai->tryDeterministicAnswer($message, $context);
         if ($deterministic !== null) {
-            $this->ai->incrementUsage($userId, (int)(mb_strlen($deterministic)/4));
+            $dLen = function_exists('mb_strlen') ? mb_strlen($deterministic) : strlen($deterministic);
+            $this->ai->incrementUsage($userId, (int)($dLen/4));
             echo json_encode(['reply'=>$deterministic, 'source'=>'deterministic', 'context'=>$context, 'limit'=>$this->ai->checkRateLimit($userId, $user->plano ?? 'gratuito')]);
             return;
         }
@@ -95,7 +97,9 @@ class AiController
         // Chama IA
         try {
             $reply = $this->ai->callAi($message, $context, $history);
-            $tokensApprox = (int)((mb_strlen($message)+mb_strlen($reply))/4);
+            $mLen = function_exists('mb_strlen') ? mb_strlen($message) : strlen($message);
+            $rLen = function_exists('mb_strlen') ? mb_strlen($reply) : strlen($reply);
+            $tokensApprox = (int)(($mLen+$rLen)/4);
             $this->ai->incrementUsage($userId, $tokensApprox);
             echo json_encode(['reply'=>$reply, 'source'=>'ai', 'limit'=>$this->ai->checkRateLimit($userId, $user->plano ?? 'gratuito')]);
         } catch (Throwable $e) {
@@ -109,8 +113,9 @@ class AiController
                 echo json_encode(['reply'=>$fallback, 'source'=>'fallback', 'warning'=>$msg]);
                 return;
             }
+            $eLen = function_exists('mb_strlen') ? mb_strlen($msg) : strlen($msg);
             http_response_code(502);
-            echo json_encode(['error'=>'Não consegui responder agora. ' . (mb_strlen($msg) < 200 ? $msg : 'Tente novamente em instantes.')]);
+            echo json_encode(['error'=>'Não consegui responder agora. ' . ($eLen < 200 ? $msg : 'Tente novamente em instantes.')]);
         }
     }
 }

@@ -92,11 +92,15 @@ PROMPT;
      * Tenta responder deterministicamente sem chamar IA para economizar tokens.
      * Retorna string|null. Se null, deve chamar IA.
      */
+    private function strLower(string $s): string { return function_exists('mb_strtolower') ? mb_strtolower($s) : strtolower($s); }
+    private function strLen(string $s): int { return function_exists('mb_strlen') ? mb_strlen($s) : strlen($s); }
+    private function subStr(string $s,int $a,?int $b=null): string { if (function_exists('mb_substr')) return $b===null? mb_substr($s,$a): mb_substr($s,$a,$b); return $b===null? substr($s,$a): substr($s,$a,$b); }
+
     public function tryDeterministicAnswer(string $question, array $ctx): ?string
     {
-        $q = mb_strtolower(trim($question));
+        $q = $this->strLower(trim($question));
         // normaliza acentos básico
-        $norm = iconv('UTF-8','ASCII//TRANSLIT',$q) ?: $q;
+        $norm = function_exists('iconv') ? (iconv('UTF-8','ASCII//TRANSLIT',$q) ?: $q) : $q;
 
         $fmt = fn($v) => 'R$ ' . number_format((float)$v, 2, ',', '.');
 
@@ -170,9 +174,9 @@ PROMPT;
         foreach ($history as $h) {
             if (!isset($h['role'],$h['content'])) continue;
             $role = $h['role']==='user'?'user':'assistant';
-            $messages[] = ['role'=>$role,'content'=>mb_substr((string)$h['content'],0,2000)];
+            $messages[] = ['role'=>$role,'content'=>$this->subStr((string)$h['content'],0,2000)];
         }
-        $messages[] = ['role'=>'user','content'=>mb_substr($userMessage,0,2000)];
+        $messages[] = ['role'=>'user','content'=>$this->subStr($userMessage,0,2000)];
 
         $payload = json_encode([
             'model' => $cfg['model'],
@@ -181,29 +185,46 @@ PROMPT;
             'temperature' => $cfg['temperature'],
         ], JSON_UNESCAPED_UNICODE);
 
-        $ch = curl_init($cfg['url']);
-        $headers = [
-            'Content-Type: application/json',
-            'Authorization: Bearer ' . $cfg['key'],
-        ];
-        // OpenRouter requer headers adicionais
-        if (str_contains($cfg['url'], 'openrouter')) {
-            $ref = getenv('APP_URL') ?: 'https://controle-de-gastos.vercel.app';
-            $headers[] = 'HTTP-Referer: ' . $ref;
-            $headers[] = 'X-Title: Controle de Gastos - Assistente IA';
+        if (!function_exists('curl_init')) {
+            // fallback via file_get_contents se curl não disponível
+            $headers = [];
+            $headers[] = 'Content-Type: application/json';
+            $headers[] = 'Authorization: Bearer ' . $cfg['key'];
+            if (str_contains($cfg['url'], 'openrouter')) {
+                $ref = getenv('APP_URL') ?: 'https://controle-de-gastos.vercel.app';
+                $headers[] = 'HTTP-Referer: ' . $ref;
+                $headers[] = 'X-Title: Controle de Gastos - Assistente IA';
+            }
+            $ctx = stream_context_create(['http'=>['method'=>'POST','header'=>implode("\r\n",$headers)."\r\n",'content'=>$payload,'timeout'=>18,'ignore_errors'=>true]]);
+            $resp = @file_get_contents($cfg['url'], false, $ctx);
+            $err = $resp===false ? (error_get_last()['message'] ?? 'conexão falhou') : '';
+            $code = 0;
+            $hdr = function_exists('http_get_last_response_headers') ? (http_get_last_response_headers() ?? []) : ($http_response_header ?? []);
+            foreach ($hdr as $h) if (preg_match('#HTTP/\d\.\d\s+(\d+)#',$h,$m)) { $code=(int)$m[1]; break; }
+        } else {
+            $ch = curl_init($cfg['url']);
+            $headersCurl = [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $cfg['key'],
+            ];
+            if (str_contains($cfg['url'], 'openrouter')) {
+                $ref = getenv('APP_URL') ?: 'https://controle-de-gastos.vercel.app';
+                $headersCurl[] = 'HTTP-Referer: ' . $ref;
+                $headersCurl[] = 'X-Title: Controle de Gastos - Assistente IA';
+            }
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => $payload,
+                CURLOPT_HTTPHEADER => $headersCurl,
+                CURLOPT_TIMEOUT => 18,
+                CURLOPT_CONNECTTIMEOUT => 8,
+            ]);
+            $resp = curl_exec($ch);
+            $err = curl_error($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
         }
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => $payload,
-            CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_TIMEOUT => 18,
-            CURLOPT_CONNECTTIMEOUT => 8,
-        ]);
-        $resp = curl_exec($ch);
-        $err = curl_error($ch);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
 
         if ($err) throw new RuntimeException('Falha de conexão com a IA: ' . $err);
         if ($resp === false) throw new RuntimeException('Resposta vazia da IA.');
