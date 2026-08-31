@@ -102,26 +102,75 @@ class AiFinanceContext
 
     private function orcamentoResumo(int $userId, int $year, int $month): array
     {
-        $stmt = $this->db->prepare("
-            SELECT COALESCE(SUM(valor_limite),0) as limite
-            FROM orcamentos WHERE usuario_id=? AND ano=? AND mes=?
-        ");
-        $stmt->execute([$userId, $year, $month]);
-        $limite = (float)$stmt->fetchColumn();
-
-        // gasto real nas categorias orçadas ou total despesa do mês se sem orçamento categorizado
         $start = sprintf('%04d-%02d-01', $year, $month);
         $end = date('Y-m-t', strtotime($start));
-        $gasto = $this->sumTransacoes($userId, 'despesa', $start, $end);
 
-        $disponivel = round($limite > 0 ? $limite - $gasto : 0, 2);
-        $pct = $limite > 0 ? round(min(100, ($gasto / $limite) * 100), 1) : 0;
+        // Detalhe por categoria (se houver orçamentos)
+        $stmt = $this->db->prepare("
+            SELECT o.categoria_id, c.nome as categoria_nome, o.valor_limite as limite,
+                   COALESCE(SUM(t.valor),0) as gasto
+            FROM orcamentos o
+            JOIN categorias c ON c.id = o.categoria_id AND c.usuario_id = o.usuario_id
+            LEFT JOIN transacoes t ON t.categoria_id = o.categoria_id AND t.usuario_id = o.usuario_id AND t.tipo='despesa' AND t.data BETWEEN ? AND ?
+            WHERE o.usuario_id=? AND o.ano=? AND o.mes=?
+            GROUP BY o.categoria_id, c.nome, o.valor_limite
+            ORDER BY o.valor_limite DESC
+        ");
+        $stmt->execute([$start, $end, $userId, $year, $month]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $limiteTotal = 0; $gastoTotal = 0;
+        $detalhes = [];
+        $ultrapassaram = [];
+        $emRisco = [];
+        foreach ($rows as $r) {
+            $lim = (float)$r['limite'];
+            $gasto = (float)$r['gasto'];
+            $disp = round($lim - $gasto, 2);
+            $pct = $lim > 0 ? round(min(200, ($gasto / $lim) * 100), 1) : 0;
+            $status = $pct >= 100 ? 'ultrapassado' : ($pct >= 80 ? 'risco' : 'ok');
+            $item = [
+                'categoria' => $r['categoria_nome'],
+                'limite' => round($lim,2),
+                'gasto' => round($gasto,2),
+                'disponivel' => $disp,
+                'percentual' => $pct,
+                'status' => $status,
+            ];
+            $detalhes[] = $item;
+            $limiteTotal += $lim;
+            // para total consideramos apenas gasto das categorias orçadas se houver orçamento, senão total despesas
+            $gastoTotal += $gasto;
+            if ($status === 'ultrapassado') $ultrapassaram[] = $item;
+            elseif ($status === 'risco') $emRisco[] = $item;
+        }
+
+        if (empty($rows)) {
+            // sem orçamento por categoria: usa total despesas do mês
+            $gastoTotal = $this->sumTransacoes($userId, 'despesa', $start, $end);
+            $limiteTotal = 0;
+        } else {
+            // se houver orçamento, gastoTotal já é soma dos gastos orçados; para limite total vs gasto total real,
+            // usa gasto real total para disponível geral (mais útil para "quanto posso gastar")
+            $gastoReal = $this->sumTransacoes($userId, 'despesa', $start, $end);
+            // mantém gastoTotal como soma orçada para detalhe, mas para disponível geral usa gastoReal
+            $gastoTotal = $gastoReal;
+        }
+
+        $disponivel = $limiteTotal > 0 ? round($limiteTotal - $gastoTotal, 2) : 0;
+        $pctTotal = $limiteTotal > 0 ? round(min(200, ($gastoTotal / $limiteTotal) * 100), 1) : 0;
+        $statusGeral = $limiteTotal==0 ? 'sem_orcamento' : ($pctTotal >= 100 ? 'ultrapassado' : ($pctTotal >= 80 ? 'risco' : ($pctTotal >= 60 ? 'atencao' : 'ok')));
 
         return [
-            'limite' => round($limite, 2),
-            'utilizado' => round($gasto, 2),
+            'limite' => round($limiteTotal, 2),
+            'utilizado' => round($gastoTotal, 2),
             'disponivel' => $disponivel,
-            'percentual_usado' => $pct,
+            'percentual_usado' => $pctTotal,
+            'status' => $statusGeral,
+            'categorias' => $detalhes,
+            'ultrapassaram' => $ultrapassaram,
+            'em_risco' => $emRisco,
+            'dias_restantes' => (int)date('t', strtotime($start)) - (int)date('j'),
         ];
     }
 

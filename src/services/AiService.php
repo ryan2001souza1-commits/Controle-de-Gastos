@@ -110,6 +110,7 @@ REGRAS DE DADOS:
 - Quando fizer sentido (comparação, evolução), use comparativo_anterior, historico_mensal e categorias_anterior para comparar com meses anteriores (ex: variação %).
 - Faça cálculos simples quando útil (percentuais, saldo, % do orçamento, % das receitas gastas).
 - Para análise de CATEGORIAS: identifique categoria com maior gasto e menor gasto, calcule percentual de cada categoria sobre o total de despesas, destaque categorias com >=30% (merecem atenção) usando resumo_categorias.destaques, e aponte mudanças relevantes (>=15% vs mês anterior) usando resumo_categorias.variacoes. Use categorias e resumo_categorias do contexto.
+- Para análise de ORÇAMENTO: use orcamento.limite, orcamento.utilizado, orcamento.disponivel, orcamento.percentual_usado e orcamento.status. Diferencie valor utilizado (quanto já gastou) de disponível (limite - utilizado). Nunca use saldo bancário como orçamento. Para detalhes por categoria use orcamento.categorias[], orcamento.ultrapassaram[] e orcamento.em_risco[]. Calcule projeção se perguntarem "vou conseguir terminar o mês?": gasto médio diário = utilizado / dias_passados; projeção = média * dias_no_mês; compare com limite.
 - Identifique padrões: maior categoria, aumento vs mês anterior, orçamento >80-100%, metas com baixo %.
 
 ESTILO:
@@ -166,7 +167,7 @@ PROMPT;
 
         $fmt = fn($v) => 'R$ ' . number_format((float)$v, 2, ',', '.');
 
-        // resumo geral finanças (economia de tokens)
+        // Resumo geral finanças (economia de tokens)
         if (preg_match('/como est.*financ|resumo.*financ|situac.*financeira/', $norm)) {
             $catLine = '';
             if (!empty($ctx['categorias'])) {
@@ -176,6 +177,57 @@ PROMPT;
             $orc = $ctx['orcamento'];
             $orcLine = ($orc['limite']>0 ? " Orçamento: {$orc['percentual_usado']}% usado, {$fmt($orc['disponivel'])} livres." : " Sem orçamento definido.");
             return "Em {$ctx['periodo']} suas finanças estão assim: receitas **{$fmt($ctx['receitas'])}**, despesas **{$fmt($ctx['despesas'])}**, saldo **{$fmt($ctx['saldo'])}**.{$catLine}{$orcLine} Quer uma análise mais detalhada de alguma parte?";
+        }
+        // === ANÁLISE INTELIGENTE DE ORÇAMENTO (deve vir antes de categoria/despesas para pegar "gastando demais", etc.)
+        if (preg_match('/\b(orcamento|orçamento|posso gastar|ainda posso|disponivel|disponível|gastando demais|dentro do orcamento|terminar o mes)\b/', $norm)) {
+            $o = $ctx['orcamento'] ?? [];
+            if (($o['limite'] ?? 0) <= 0) return "Você ainda não definiu um orçamento para {$ctx['periodo']}. Defina um limite mensal em **Orçamentos** para eu acompanhar quanto ainda pode gastar.";
+            $base = "Orçamento: **{$fmt($o['limite'])}**\nUtilizado: **{$fmt($o['utilizado'])}**\nDisponível: **{$fmt($o['disponivel'])}**\nUtilização: **{$o['percentual_usado']}%**";
+            // "Quanto ainda posso gastar?" — foco no disponível
+            if (preg_match('/quanto.*posso gastar|ainda posso gastar|disponivel/', $norm)) {
+                $txt = $base;
+                if (!empty($o['categorias'])) {
+                    $cats = array_map(fn($c)=>"{$c['categoria']}: {$fmt($c['disponivel'])} livres ({$c['percentual']}% usado)", array_slice($o['categorias'],0,3));
+                    $txt .= "\n\nPor categoria:\n- ".implode("\n- ", $cats);
+                }
+                if ($o['disponivel'] < 0) $txt .= "\n\n⚠️ Você já ultrapassou o orçamento em ". $fmt(abs($o['disponivel'])) .".";
+                elseif ($o['percentual_usado'] >= 90) $txt .= "\n\n⚠️ Atenção: só restam {$fmt($o['disponivel'])} — risco alto de estourar.";
+                return $txt;
+            }
+            // "Estou gastando demais?" — avalia
+            if (preg_match('/gastando demais|estou.*gastando/', $norm)) {
+                if ($o['status'] === 'ultrapassado') return $base."\n\n⚠️ Sim — você já ultrapassou o orçamento total. Categorias estouradas: ".implode(', ', array_map(fn($c)=>$c['categoria']." ({$c['percentual']}%)", $o['ultrapassaram'])).". Sugestão: pause gastos não essenciais e revise ".($o['ultrapassaram'][0]['categoria'] ?? 'a maior categoria').".";
+                if ($o['status'] === 'risco') return $base."\n\n⚠️ Está no limite de risco ({$o['percentual_usado']}% usado). Categorias em risco: ".implode(', ', array_map(fn($c)=>$c['categoria']." ({$c['percentual']}%)", $o['em_risco'])).".";
+                if ($o['percentual_usado'] >= 60) return $base."\n\nVocê está gastando em ritmo moderado-alto, mas ainda dentro do orçamento.";
+                return $base."\n\nNão — seu gasto está controlado ({$o['percentual_usado']}% do orçamento).";
+            }
+            // "Vou conseguir terminar o mês dentro do orçamento?" — projeção
+            if (preg_match('/vou.*conseguir|terminar.*mes.*orçamento|dentro do orcamento.*mes/', $norm)) {
+                $diasNoMes = (int)date('t');
+                $diasRest = $o['dias_restantes'] ?? max(0, $diasNoMes - (int)date('j'));
+                $diasPass = max(1, $diasNoMes - $diasRest);
+                $mediaDia = $diasPass > 0 ? $o['utilizado'] / $diasPass : 0;
+                $proj = round($mediaDia * $diasNoMes, 2);
+                $txt = $base."\n\nProjeção: média de {$fmt($mediaDia)}/dia → estimado {$fmt($proj)} no fim do mês.";
+                if ($o['limite'] > 0) {
+                    if ($proj > $o['limite']) $txt .= " ⚠️ Projeção ultrapassa o limite em ". $fmt($proj - $o['limite']) .". Sugestão: reduza para ~". $fmt(max(0, ($o['limite'] - $o['utilizado']) / max(1,$diasRest)) ) ."/dia nos próximos {$diasRest} dias.";
+                    else $txt .= " ✅ Dentro do orçamento, sobrariam ". $fmt($o['limite'] - $proj) .".";
+                }
+                return $txt;
+            }
+            // "Como está meu orçamento?" — geral com detalhes
+            $txt = $base;
+            if (!empty($o['ultrapassaram'])) {
+                $txt .= "\n\n⚠️ Ultrapassaram o limite: ".implode(', ', array_map(fn($c)=>"**{$c['categoria']}** ({$fmt($c['gasto'])}/{$fmt($c['limite'])} = {$c['percentual']}%)", $o['ultrapassaram'])).".";
+            }
+            if (!empty($o['em_risco'])) {
+                $txt .= "\n\n⚠️ Em risco (≥80%): ".implode(', ', array_map(fn($c)=>"{$c['categoria']} ({$c['percentual']}%)", $o['em_risco'])).".";
+            }
+            if ($o['status'] === 'ok') $txt .= "\n\n✅ Orçamento saudável.";
+            elseif ($o['status'] === 'atencao') $txt .= "\n\nAtenção: uso acima de 60%.";
+            // dica prática
+            if ($o['disponivel'] > 0 && $o['percentual_usado'] < 80) $txt .= " Você ainda pode gastar {$fmt($o['disponivel'])} até o fim do mês.";
+            return $txt;
         }
         // saldo
         if (preg_match('/\b(saldo|quanto tenho|saldo atual)\b/', $norm)) {
@@ -259,15 +311,6 @@ PROMPT;
             $delta = $ctx['despesas'] - $ctx['comparativo_anterior']['despesas'];
             $sig = $delta>0? 'aumento':'redução';
             return "Em {$ctx['periodo']} suas despesas foram **{$fmt($ctx['despesas'])}** (mês anterior {$fmt($ctx['comparativo_anterior']['despesas'])} — {$sig} de {$fmt(abs($delta))}). Quer que eu analise por categoria?";
-        }
-        // orçamento
-        if (preg_match('/\b(orcamento|orçamento|posso gastar|ainda posso|disponivel|disponível)\b/', $norm)) {
-            $o = $ctx['orcamento'];
-            if (($o['limite'] ?? 0) <= 0) return "Você ainda não definiu um orçamento para {$ctx['periodo']}. Defina um limite mensal em Orçamentos para eu acompanhar quanto ainda pode gastar.";
-            $msg = "Seu orçamento de {$ctx['periodo']} é **{$fmt($o['limite'])}**. Já utilizou **{$fmt($o['utilizado'])}** ({$o['percentual_usado']}%) e ainda tem **{$fmt($o['disponivel'])}** disponíveis.";
-            if ($o['percentual_usado'] >= 90) $msg .= " Atenção: quase no limite — evite novos gastos não essenciais.";
-            elseif ($o['percentual_usado'] >= 70) $msg .= " Você está com uso moderado-alto, bom momento para revisar categorias.";
-            return $msg . " Quer que eu simule um gasto de R\$ 300?";
         }
         // metas
         if (preg_match('/\b(meta|metas|objetivo|caminho certo)\b/', $norm)) {
