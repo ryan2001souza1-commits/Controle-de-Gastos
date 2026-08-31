@@ -136,6 +136,13 @@ if ($action === 'register') {
     $expenseController->storeBudget();
 } elseif ($action === 'delete_budget') {
     $expenseController->deleteBudget();
+} elseif ($action === 'sobre') {
+    requireLogin();
+    $pageTitle = 'Sobre Nós';
+    $pageSubtitle = 'Conheça nossa história, missão e valores.';
+    $activeMenu = 'sobre';
+    $showPeriodPicker = false;
+    require basePath('sobre.php');
 } elseif ($action === 'configuracoes') {
     $profileController->index();
 } elseif ($action === 'update_profile') {

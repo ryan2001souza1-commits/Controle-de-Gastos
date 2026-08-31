@@ -34,6 +34,7 @@ $menuItems = [
     'orcamentos'  => ['href' => '/index.php?action=orcamentos',  'label' => 'Orçamentos',  'icon' => 'wallet'],
     'metas'       => ['href' => '/index.php?action=metas',       'label' => 'Metas',       'icon' => 'target'],
     'relatorios'  => ['href' => '/index.php?action=relatorios',  'label' => 'Relatórios',  'icon' => 'chart'],
+    'sobre'       => ['href' => '/index.php?action=sobre',       'label' => 'Sobre',       'icon' => 'info'],
     'configuracoes' => ['href' => '/index.php?action=configuracoes', 'label' => 'Configurações', 'icon' => 'settings'],
     'reportar' => ['href' => '/index.php?action=reportar', 'label' => 'Reportar problema', 'icon' => 'alert'],
     'meus_relatos' => ['href' => '/index.php?action=meus_relatos', 'label' => 'Meus relatos', 'icon' => 'info'],
