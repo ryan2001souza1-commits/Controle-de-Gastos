@@ -40,6 +40,14 @@ $deltaIncome  = $prevIncomes  > 0 ? round((($totalIncomes  - $prevIncomes ) / $p
 $deltaExpense = $prevExpenses > 0 ? round((($totalExpenses - $prevExpenses) / $prevExpenses) * 100) : 0;
 $deltaBalance = $prevBalance  > 0 ? round((($balance       - $prevBalance ) / $prevBalance ) * 100) : 0;
 
+$isDashboardAdvanced = (bool)($data['is_dashboard_advanced'] ?? false);
+$isAiInsights       = (bool)($data['is_ai_insights'] ?? false);
+$premiumSummary = $data['premium_summary'] ?? null;
+$premiumGoals   = $data['premium_goals'] ?? null;
+$premiumBudgets = $data['premium_budgets'] ?? null;
+$insights = $data['insights'] ?? [];
+$alerts   = $data['alerts'] ?? [];
+
 function fmtBRL($value) {
     return number_format((float)$value, 2, ',', '.');
 }
@@ -287,6 +295,87 @@ if ($otherTotal > 0) {
             </div>
         </article>
     </section>
+
+    <?php if ($isDashboardAdvanced && $premiumSummary): ?>
+    <!-- ===== INDICADORES AVANCADOS (PRO+) ===== -->
+    <section class="charts-grid charts-grid-3" style="grid-template-columns:repeat(3,1fr)">
+        <article class="panel">
+            <header class="panel-header"><div class="chart-card-title">Resumo Avançado</div></header>
+            <div class="panel-body" style="display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;justify-content:space-between;font-size:12px"><span>Media mensal gastos</span><strong>R$ <?= fmtBRL($premiumSummary['avg_expense']) ?></strong></div>
+                <div style="display:flex;justify-content:space-between;font-size:12px"><span>Media mensal receitas</span><strong>R$ <?= fmtBRL($premiumSummary['avg_income']) ?></strong></div>
+                <div style="display:flex;justify-content:space-between;font-size:12px"><span>Taxa de economia</span><strong style="color:<?= $premiumSummary['economy_pct']>=0?'#059669':'#dc2626' ?>"><?= number_format($premiumSummary['economy_pct'],1,',','.') ?>%</strong></div>
+                <div style="display:flex;justify-content:space-between;font-size:12px"><span>Receitas comprometidas</span><strong><?= number_format($premiumSummary['committed_pct'],1,',','.') ?>%</strong></div>
+            </div>
+        </article>
+        <article class="panel">
+            <header class="panel-header"><div class="chart-card-title">Metas (<?= $premiumGoals['completed'] ?? 0 ?> concluidas)</div></header>
+            <div class="panel-body" style="display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;justify-content:space-between;font-size:12px"><span>Total de metas</span><strong><?= $premiumGoals['total'] ?? 0 ?></strong></div>
+                <div style="display:flex;justify-content:space-between;font-size:12px"><span>Concluidas</span><strong style="color:#059669"><?= $premiumGoals['completed'] ?? 0 ?></strong></div>
+                <div style="display:flex;justify-content:space-between;font-size:12px"><span>Em andamento</span><strong style="color:#d97706"><?= $premiumGoals['in_progress'] ?? 0 ?></strong></div>
+                <div style="display:flex;justify-content:space-between;font-size:12px"><span>Progresso medio</span><strong><?= $premiumGoals['avg_progress'] ?? 0 ?>%</strong></div>
+            </div>
+        </article>
+        <article class="panel">
+            <header class="panel-header"><div class="chart-card-title">Orçamentos</div></header>
+            <div class="panel-body" style="display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;justify-content:space-between;font-size:12px"><span>Total de orcamentos</span><strong><?= $premiumBudgets['total'] ?? 0 ?></strong></div>
+                <div style="display:flex;justify-content:space-between;font-size:12px"><span>Dentro do limite</span><strong style="color:#059669"><?= $premiumBudgets['ok'] ?? 0 ?></strong></div>
+                <div style="display:flex;justify-content:space-between;font-size:12px"><span>Proximos do limite</span><strong style="color:#d97706"><?= $premiumBudgets['warn'] ?? 0 ?></strong></div>
+                <div style="display:flex;justify-content:space-between;font-size:12px"><span>Excedidos</span><strong style="color:#dc2626"><?= $premiumBudgets['over'] ?? 0 ?></strong></div>
+            </div>
+        </article>
+    </section>
+    <?php elseif (!$isDashboardAdvanced): ?>
+    <!-- ===== UPGRADE DASHBOARD PRO ===== -->
+    <section class="charts-grid charts-grid-1" style="grid-template-columns:1fr">
+        <article class="panel" style="border:1px dashed #cbd5e1;background:#f8fafc">
+            <header class="panel-header"><div class="chart-card-title" style="color:#64748b">Indicadores Avançados</div></header>
+            <div class="panel-body" style="text-align:center;padding:24px">
+                <div style="color:#94a3b8;font-size:12px;margin-bottom:8px">Disponível no plano PRO</div>
+                <div style="color:#94a3b8;font-size:11px">Métricas avançadas, evolução financeira, metas e orçamentos detalhados.</div>
+            </div>
+        </article>
+    </section>
+    <?php endif; ?>
+
+    <?php if ($isAiInsights && (!empty($insights) || !empty($alerts))): ?>
+    <!-- ===== INSIGHTS PREMIUM ===== -->
+    <section class="charts-grid charts-grid-1" style="grid-template-columns:1fr">
+        <article class="panel" style="border-left:3px solid #7c3aed">
+            <header class="panel-header"><div class="chart-card-title">Insights Financeiros</div></header>
+            <div class="panel-body" style="display:flex;flex-direction:column;gap:12px">
+                <?php foreach (array_slice($insights, 0, 4) as $ins): $toneMap=['success'=>'#059669','warning'=>'#d97706','danger'=>'#dc2626','info'=>'#2563eb']; $color=$toneMap[$ins['tone']] ?? '#64748b'; ?>
+                <div style="display:flex;gap:10px;align-items:flex-start;font-size:12px">
+                    <div style="width:28px;height:28px;border-radius:50%;background:<?= $color ?>20;color:<?= $color ?>;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid <?= $color ?>40"><?= render_icon($ins['icon'] ?? 'zap', 12) ?></div>
+                    <span style="color:#334155"><?= htmlspecialchars($ins['text']) ?></span>
+                </div>
+                <?php endforeach; ?>
+                <?php if (empty($insights)): ?>
+                <div style="color:#94a3b8;font-size:12px">Continue registrando seus lancamentos para receber insights personalizados.</div>
+                <?php endif; ?>
+                <?php foreach (array_slice($alerts, 0, 2) as $alert): $color=$toneMap[$alert['tone']] ?? '#d97706'; ?>
+                <div style="display:flex;gap:10px;align-items:flex-start;font-size:12px;padding:10px;background:#fef2f2;border-radius:8px;border-left:3px solid <?= $color ?>">
+                    <div style="color:<?= $color ?>;font-weight:600">Alerta:</div>
+                    <span style="color:#7f1d1d"><?= htmlspecialchars($alert['text']) ?></span>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </article>
+    </section>
+    <?php elseif (!$isAiInsights): ?>
+    <!-- ===== UPGRADE INSIGHTS PREMIUM ===== -->
+    <section class="charts-grid charts-grid-1" style="grid-template-columns:1fr">
+        <article class="panel" style="border:1px dashed #cbd5e1;background:#f8fafc">
+            <header class="panel-header"><div class="chart-card-title" style="color:#64748b">Insights Financeiros</div></header>
+            <div class="panel-body" style="text-align:center;padding:24px">
+                <div style="color:#94a3b8;font-size:12px;margin-bottom:8px">Disponível no plano PREMIUM</div>
+                <div style="color:#94a3b8;font-size:11px">Analise inteligente baseada nos seus dados financeiros reais.</div>
+            </div>
+        </article>
+    </section>
+    <?php endif; ?>
 
     <!-- ===== INFO BANNER ===== -->
     <div class="info-banner">

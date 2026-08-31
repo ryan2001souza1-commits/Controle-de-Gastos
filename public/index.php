@@ -48,6 +48,7 @@ require_once __DIR__ . '/../src/services/LancamentoLimitService.php';
 require_once __DIR__ . '/../src/services/CategoriaLimitService.php';
 require_once __DIR__ . '/../src/services/OrcamentoLimitService.php';
 require_once __DIR__ . '/../src/services/MetaLimitService.php';
+require_once __DIR__ . '/../src/services/DashboardPremiumService.php';
 require_once __DIR__ . '/../src/controllers/AuthController.php';
 require_once __DIR__ . '/partials/icons.php';
 require_once __DIR__ . '/../src/controllers/ExpenseController.php';
@@ -85,8 +86,9 @@ $lancamentoLimitService = new LancamentoLimitService($expenseModel, $incomeModel
 $categoriaLimitService = new CategoriaLimitService($categoryModel, $planService);
 $orcamentoLimitService = new OrcamentoLimitService($budgetModel, $planService);
 $metaLimitService = new MetaLimitService($goalModel, $planService);
+$dashboardPremiumService = new DashboardPremiumService($db, $planService, $expenseService, $budgetService, $goalService);
 $authController = new AuthController($authService, new GoogleAuthService(), $userModel);
-$expenseController = new ExpenseController($expenseModel, $incomeModel, $categoryModel, $expenseService, $budgetModel, $budgetService, $lancamentoLimitService, $categoriaLimitService, $orcamentoLimitService, $planService);
+$expenseController = new ExpenseController($expenseModel, $incomeModel, $categoryModel, $expenseService, $budgetModel, $budgetService, $lancamentoLimitService, $categoriaLimitService, $orcamentoLimitService, $planService, $dashboardPremiumService);
 $goalController = new GoalController($goalModel, $goalService, $metaLimitService);
 $profileController = new ProfileController($userModel, $db);
 $bugModel = new BugReport($db);

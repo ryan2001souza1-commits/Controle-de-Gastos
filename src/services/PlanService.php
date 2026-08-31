@@ -113,6 +113,8 @@ class PlanService
      *   - ia_history         : gravar/recuperar historico de conversa (PRO+)
      *   - ia_upload          : upload de arquivos para a IA (PRO+)
      *   - ia_images          : geracao de imagens pela IA (PREMIUM)
+     *   - dashboard_advanced : cards avancados no Dashboard (PRO+)
+     *   - ai_insights        : insights e alertas inteligentes (PREMIUM)
      */
     private const FEATURES = [
         'relatorios' => [
@@ -176,6 +178,16 @@ class PlanService
             self::SLUG_PREMIUM => true,
         ],
         'ia_images' => [
+            self::SLUG_FREE    => false,
+            self::SLUG_PRO     => false,
+            self::SLUG_PREMIUM => true,
+        ],
+        'dashboard_advanced' => [
+            self::SLUG_FREE    => false,
+            self::SLUG_PRO     => true,
+            self::SLUG_PREMIUM => true,
+        ],
+        'ai_insights' => [
             self::SLUG_FREE    => false,
             self::SLUG_PRO     => false,
             self::SLUG_PREMIUM => true,

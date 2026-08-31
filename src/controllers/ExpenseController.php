@@ -12,6 +12,7 @@ class ExpenseController
     private CategoriaLimitService $categoriaLimitService;
     private OrcamentoLimitService $orcamentoLimitService;
     private PlanService $planService;
+    private DashboardPremiumService $dashboardPremiumService;
 
     public function __construct(
         Expense $expenseModel,
@@ -23,7 +24,8 @@ class ExpenseController
         LancamentoLimitService $limitService,
         CategoriaLimitService $categoriaLimitService,
         OrcamentoLimitService $orcamentoLimitService,
-        PlanService $planService
+        PlanService $planService,
+        DashboardPremiumService $dashboardPremiumService
     ) {
         $this->expenseModel = $expenseModel;
         $this->incomeModel  = $incomeModel;
@@ -35,6 +37,7 @@ class ExpenseController
         $this->categoriaLimitService = $categoriaLimitService;
         $this->orcamentoLimitService = $orcamentoLimitService;
         $this->planService = $planService;
+        $this->dashboardPremiumService = $dashboardPremiumService;
     }
 
     public function dashboard(): void
@@ -53,7 +56,7 @@ class ExpenseController
             $endDate
         );
 
-        // Enriquecer com orçamento do mês e metas (evita cards vazios)
+        // Enriquecer com orcamento do mes e metas (evita cards vazios)
         try {
             $y = (int)date('Y', strtotime($startDate));
             $m = (int)date('n', strtotime($startDate));
@@ -74,6 +77,34 @@ class ExpenseController
         } catch (Throwable $e) {
             error_log('[dashboard goals] ' . $e->getMessage());
             $data['goals'] = $data['goals'] ?? [];
+        }
+
+        // --- Premium: dados avancados ---
+        $isDashboardAdvanced = $this->dashboardPremiumService->isDashboardAdvanced($userId);
+        $isAiInsights = $this->dashboardPremiumService->isAiInsights($userId);
+
+        $data['is_dashboard_advanced'] = $isDashboardAdvanced;
+        $data['is_ai_insights'] = $isAiInsights;
+
+        if ($isDashboardAdvanced) {
+            try {
+                $data['premium_summary'] = $this->dashboardPremiumService->getSummary($userId, $startDate, $endDate);
+                $data['premium_goals'] = $this->dashboardPremiumService->getGoalsSummary($userId);
+                $y = (int)date('Y', strtotime($startDate));
+                $m = (int)date('n', strtotime($startDate));
+                $data['premium_budgets'] = $this->dashboardPremiumService->getBudgetsSummary($userId, $y, $m);
+            } catch (Throwable $e) {
+                error_log('[dashboard premium] ' . $e->getMessage());
+            }
+        }
+
+        if ($isAiInsights) {
+            try {
+                $data['insights'] = $this->dashboardPremiumService->getInsights($userId, $startDate, $endDate);
+                $data['alerts'] = $this->dashboardPremiumService->getAlerts($userId, $startDate, $endDate);
+            } catch (Throwable $e) {
+                error_log('[dashboard ai_insights] ' . $e->getMessage());
+            }
         }
 
         $expenseCategories = $this->categoryModel->findAll($userId, 'despesa');
