@@ -29,10 +29,127 @@ class PlanService
     public const STATUS_PENDENTE  = 'pendente';
     public const STATUS_CANCELADO = 'cancelado';
 
+    /**
+     * Representa "sem limite" (ex: historico ilimitado do PREMIUM).
+     * Use null para checagem: $valor === self::LIMIT_UNLIMITED.
+     */
+    public const LIMIT_UNLIMITED = null;
+
     private const TODOS_SLUGS = [
         self::SLUG_FREE,
         self::SLUG_PRO,
         self::SLUG_PREMIUM,
+    ];
+
+    /**
+     * Tabela central de LIMITES por plano.
+     * Unica fonte de verdade — NUNCA replicar em controllers.
+     *
+     * Chave: tipo de limite. Valor: array [slug => int|null].
+     * null = sem limite (ilimitado).
+     *
+     * Tipos disponiveis (chaves publicas para uso em chamadas):
+     *   - lancamentos      : int  - transacoes por mes
+     *   - categorias       : int  - categorias personalizadas
+     *   - orcamentos       : int  - orcamentos ativos
+     *   - metas            : int  - metas ativas
+     *   - historico_meses  : int|null - meses de historico disponivel (null=ilimitado)
+     *   - ia_perguntas_dia : int  - perguntas ao assistente IA por dia
+     *   - ia_insights_dia  : int  - insights automaticos da IA por dia
+     */
+    private const LIMITES = [
+        'lancamentos' => [
+            self::SLUG_FREE    => 100,
+            self::SLUG_PRO     => 500,
+            self::SLUG_PREMIUM => 2000,
+        ],
+        'categorias' => [
+            self::SLUG_FREE    => 10,
+            self::SLUG_PRO     => 50,
+            self::SLUG_PREMIUM => 200,
+        ],
+        'orcamentos' => [
+            self::SLUG_FREE    => 3,
+            self::SLUG_PRO     => 15,
+            self::SLUG_PREMIUM => 50,
+        ],
+        'metas' => [
+            self::SLUG_FREE    => 3,
+            self::SLUG_PRO     => 15,
+            self::SLUG_PREMIUM => 50,
+        ],
+        'historico_meses' => [
+            self::SLUG_FREE    => 3,
+            self::SLUG_PRO     => 24,
+            self::SLUG_PREMIUM => self::LIMIT_UNLIMITED, // ilimitado
+        ],
+        'ia_perguntas_dia' => [
+            self::SLUG_FREE    => 10,
+            self::SLUG_PRO     => 40,
+            self::SLUG_PREMIUM => 100,
+        ],
+        'ia_insights_dia' => [
+            self::SLUG_FREE    => 0,
+            self::SLUG_PRO     => 5,
+            self::SLUG_PREMIUM => 20,
+        ],
+    ];
+
+    /**
+     * Tabela central de RECURSOS (features) por plano.
+     * Cada feature e um bool por slug.
+     *
+     * Features disponiveis (chaves publicas):
+     *   - exportar_csv       : exportar relatorios em CSV
+     *   - exportar_pdf       : exportar relatorios em PDF
+     *   - comparacao_meses   : comparacao entre meses
+     *   - filtros_avancados  : filtros avancados em relatorios
+     *   - ia_analise_metas   : analise de metas pela IA
+     *   - ia_assistant       : acesso ao assistente IA (todo plano)
+     *   - categorias_ilimitadas : sem limite de categorias (compat)
+     *   - metas_ilimitadas   : sem limite de metas (compat)
+     */
+    private const FEATURES = [
+        'exportar_csv' => [
+            self::SLUG_FREE    => false,
+            self::SLUG_PRO     => true,
+            self::SLUG_PREMIUM => true,
+        ],
+        'exportar_pdf' => [
+            self::SLUG_FREE    => false,
+            self::SLUG_PRO     => true,
+            self::SLUG_PREMIUM => true,
+        ],
+        'comparacao_meses' => [
+            self::SLUG_FREE    => false,
+            self::SLUG_PRO     => true,
+            self::SLUG_PREMIUM => true,
+        ],
+        'filtros_avancados' => [
+            self::SLUG_FREE    => false,
+            self::SLUG_PRO     => true,
+            self::SLUG_PREMIUM => true,
+        ],
+        'ia_analise_metas' => [
+            self::SLUG_FREE    => false,
+            self::SLUG_PRO     => true,
+            self::SLUG_PREMIUM => true,
+        ],
+        'ia_assistant' => [
+            self::SLUG_FREE    => true,
+            self::SLUG_PRO     => true,
+            self::SLUG_PREMIUM => true,
+        ],
+        'categorias_ilimitadas' => [
+            self::SLUG_FREE    => false,
+            self::SLUG_PRO     => false,
+            self::SLUG_PREMIUM => true,
+        ],
+        'metas_ilimitadas' => [
+            self::SLUG_FREE    => false,
+            self::SLUG_PRO     => false,
+            self::SLUG_PREMIUM => true,
+        ],
     ];
 
     public function __construct(PDO $db)
@@ -182,58 +299,94 @@ class PlanService
     }
 
     /**
-     * Verifica se o plano do usuario tem uma determinada feature.
-     * Esta estrutura permite adicionar features sem alterar a logica em todo o codigo.
+     * Verifica se o plano tem uma feature.
      *
-     * Features disponiveis (ESTA ETAPA — apenas FREE):
-     *   - 'ia_assistant'   — assistente financeiro IA
-     *   - 'ia_rate_limit'  — qual limite de mensagens IA (retorna int)
-     *   - 'categorias_ilimitadas' — sem limite de categorias
-     *   - 'metas_ilimitadas' — sem limite de metas
-     *
-     * Futuras (exemplo de como sera implementado):
-     *   return match($slug) {
-     *       self::SLUG_PREMIUM => true,
-     *       self::SLUG_PRO => in_array($feature, ['ia_assistant','export_pdf'], true),
-     *       default => false,
-     *   };
+     * Features disponiveis:
+     *   - exportar_csv, exportar_pdf, comparacao_meses,
+     *     filtros_avancados, ia_analise_metas, ia_assistant,
+     *     categorias_ilimitadas, metas_ilimitadas
      */
     public function hasFeature(string $planSlug, string $feature): bool
     {
         $slug = $this->normalizeSlug($planSlug);
-        // ESTA ETAPA: FREE suporta apenas ia_assistant
-        // Pro e Premium serao implementados nas proximas etapas
-        return match ($feature) {
-            'ia_assistant' => true, // todo plano tem IA
-            'ia_rate_limit' => true, // todo plano tem rate limit (AiService define por plano)
-            'categorias_ilimitadas' => $slug !== self::SLUG_FREE,
-            'metas_ilimitadas' => $slug !== self::SLUG_FREE,
-            'export_pdf' => $slug === self::SLUG_PREMIUM,
-            'relatorios_avancados' => $slug === self::SLUG_PREMIUM,
-            default => false,
-        };
+        if (!isset(self::FEATURES[$feature])) {
+            return false;
+        }
+        return self::FEATURES[$feature][$slug] ?? false;
     }
 
     /**
      * Retorna o limite de uma funcionalidade para o plano informado.
-     * Retorna null se o plano nao possui o recurso.
      *
-     * Limites por plano (ESTA ETAPA — apenas para IA):
-     *   'ai_assistant'  — int: maximo de mensagens por dia
+     * Tipos disponiveis:
+     *   - lancamentos, categorias, orcamentos, metas,
+     *     historico_meses, ia_perguntas_dia, ia_insights_dia
+     *
+     * Retorna int|null:
+     *   - int: limite numerico (inclui 0 para "nenhum")
+     *   - null: sem limite (ilimitado — use LIMIT_UNLIMITED para checar)
+     *
+     * Exemplo:
+     *   $limite = $planSvc->getLimit($slug, 'historico_meses');
+     *   if ($limite === PlanService::LIMIT_UNLIMITED) { ... }
      */
-    public function getLimit(string $planSlug, string $limitType): int
+    public function getLimit(string $planSlug, string $limitType): int|null
     {
         $slug = $this->normalizeSlug($planSlug);
-        $limites = [
-            'ai_assistant' => [
-                self::SLUG_FREE    => 5,
-                self::SLUG_PRO     => 20,
-                self::SLUG_PREMIUM => 50,
-            ],
-        ];
-        if (!isset($limites[$limitType])) return 0;
-        if (!isset($limites[$limitType][$slug])) return 0;
-        return $limites[$limitType][$slug];
+        if (!isset(self::LIMITES[$limitType])) {
+            return 0;
+        }
+        return self::LIMITES[$limitType][$slug] ?? 0;
+    }
+
+    /**
+     * Retorna o limite de uma funcionalidade para o usuario informado.
+     * Alias de getLimit que obtem o plano do usuario automaticamente.
+     *
+     * Exemplo:
+     *   $planSvc->getUserLimit($userId, 'lancamentos')
+     */
+    public function getUserLimit(int $userId, string $limitType): int|null
+    {
+        $slug = $this->getUserPlanSlug($userId);
+        return $this->getLimit($slug, $limitType);
+    }
+
+    /**
+     * Verifica se o plano do usuario tem uma feature.
+     * Alias de hasFeature que obtem o plano automaticamente.
+     */
+    public function userHasFeature(int $userId, string $feature): bool
+    {
+        $slug = $this->getUserPlanSlug($userId);
+        return $this->hasFeature($slug, $feature);
+    }
+
+    /**
+     * Retorna todos os limites do plano como array associativo.
+     * Util para pasar contexto para views ou para auditoria.
+     */
+    public function getAllLimits(string $planSlug): array
+    {
+        $slug = $this->normalizeSlug($planSlug);
+        $result = [];
+        foreach (self::LIMITES as $type => $values) {
+            $result[$type] = $values[$slug] ?? 0;
+        }
+        return $result;
+    }
+
+    /**
+     * Retorna todas as features do plano como array associativo.
+     */
+    public function getAllFeatures(string $planSlug): array
+    {
+        $slug = $this->normalizeSlug($planSlug);
+        $result = [];
+        foreach (self::FEATURES as $feature => $values) {
+            $result[$feature] = $values[$slug] ?? false;
+        }
+        return $result;
     }
 
     /**
