@@ -4,11 +4,13 @@ class GoalController
 {
     private Goal $goalModel;
     private GoalService $goalService;
+    private MetaLimitService $metaLimitService;
 
-    public function __construct(Goal $goalModel, GoalService $goalService)
+    public function __construct(Goal $goalModel, GoalService $goalService, MetaLimitService $metaLimitService)
     {
         $this->goalModel = $goalModel;
         $this->goalService = $goalService;
+        $this->metaLimitService = $metaLimitService;
     }
 
     public function index(): void
@@ -44,6 +46,12 @@ class GoalController
 
         if ($name === '' || $target <= 0 || $saved < 0) {
             header('Location: /index.php?action=metas&error=invalid_data');
+            exit;
+        }
+
+        $check = $this->metaLimitService->check($userId);
+        if (!$check['allowed']) {
+            header('Location: /index.php?action=metas&error=limit:' . urlencode($check['message']));
             exit;
         }
 

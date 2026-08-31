@@ -143,4 +143,11 @@ class Goal
         $stmt->execute($params);
         return (int) $stmt->fetchColumn();
     }
+
+    public function countByUser(int $userId): int
+    {
+        $stmt = $this->db->prepare('SELECT COUNT(*) FROM metas WHERE usuario_id = ?');
+        $stmt->execute([$userId]);
+        return (int) $stmt->fetchColumn();
+    }
 }
