@@ -21,7 +21,7 @@ class AiService
     {
         $key = getenv('AI_API_KEY') ?: getenv('OPENROUTER_API_KEY') ?: getenv('OPENAI_API_KEY') ?: '';
         $url = getenv('AI_API_URL') ?: getenv('OPENROUTER_API_URL') ?: 'https://openrouter.ai/api/v1/chat/completions';
-        $model = getenv('AI_MODEL') ?: getenv('OPENROUTER_MODEL') ?: 'openai/gpt-4o-mini';
+        $model = getenv('AI_MODEL') ?: getenv('OPENROUTER_MODEL') ?: 'qwen/qwen3-30b-a3b:free';
         $maxTokens = (int)(getenv('AI_MAX_TOKENS') ?: 700);
         $temperature = (float)(getenv('AI_TEMPERATURE') ?: 0.35);
         return [
@@ -100,6 +100,17 @@ PROMPT;
 
         $fmt = fn($v) => 'R$ ' . number_format((float)$v, 2, ',', '.');
 
+        // resumo geral finanças (economia de tokens)
+        if (preg_match('/como est.*financ|resumo.*financ|situac.*financeira/', $norm)) {
+            $catLine = '';
+            if (!empty($ctx['categorias'])) {
+                $top = $ctx['categorias'][0];
+                $catLine = " Maior gasto: **{$top['nome']}** com {$fmt($top['valor'])} ({$top['percentual']}%).";
+            }
+            $orc = $ctx['orcamento'];
+            $orcLine = ($orc['limite']>0 ? " Orçamento: {$orc['percentual_usado']}% usado, {$fmt($orc['disponivel'])} livres." : " Sem orçamento definido.");
+            return "Em {$ctx['periodo']} suas finanças estão assim: receitas **{$fmt($ctx['receitas'])}**, despesas **{$fmt($ctx['despesas'])}**, saldo **{$fmt($ctx['saldo'])}**.{$catLine}{$orcLine} Quer uma análise mais detalhada de alguma parte?";
+        }
         // saldo
         if (preg_match('/\b(saldo|quanto tenho|saldo atual)\b/', $norm)) {
             return "Seu saldo deste mês ({$ctx['periodo']}) é de **{$fmt($ctx['saldo'])}** (receitas {$fmt($ctx['receitas'])} − despesas {$fmt($ctx['despesas'])}). " .
