@@ -1,18 +1,21 @@
 <?php
 require_once __DIR__ . '/../services/AiFinanceContext.php';
 require_once __DIR__ . '/../services/AiService.php';
+require_once __DIR__ . '/../services/PlanService.php';
 
 class AiController
 {
     private PDO $db;
     private AiFinanceContext $ctxBuilder;
     private AiService $ai;
+    private PlanService $planService;
 
     public function __construct(PDO $db)
     {
         $this->db = $db;
         $this->ctxBuilder = new AiFinanceContext($db);
         $this->ai = new AiService($db);
+        $this->planService = new PlanService($db);
     }
 
     public function page(): void
@@ -20,7 +23,7 @@ class AiController
         requireLogin();
         $userId = (int)$_SESSION['user_id'];
         $user = (new User($this->db))->findById($userId);
-        $plano = $user->plano ?? 'gratuito';
+        $plano = PlanService::normalizeSlug($user->plano ?? null);
         $limitInfo = $this->ai->checkRateLimit($userId, $plano);
         $isConfigured = AiService::isConfigured();
         $contextPreview = $this->ctxBuilder->build($userId);
@@ -84,13 +87,15 @@ class AiController
             $cleanHistory[] = ['role' => $role, 'content' => $content];
         }
 
-        // Rate limit
-        $limitInfo = $this->ai->checkRateLimit($userId, $user->plano ?? 'gratuito');
+        // Rate limit — plano determinado pelo servidor via PlanService
+        $planoSlug = PlanService::normalizeSlug($user->plano ?? null);
+        $limitInfo = $this->ai->checkRateLimit($userId, $planoSlug);
         if (!$limitInfo['canProceed']) {
             http_response_code(429);
+            $planoNome = $this->planService->getPlanDisplayName($planoSlug);
             echo json_encode([
                 'success'=>false,
-                'error'=>"Limite diário atingido ({$limitInfo['limit']} mensagens/dia no plano ".strtoupper($user->plano)."). Tente novamente amanhã.",
+                'error'=>"Limite diário atingido ({$limitInfo['limit']} mensagens/dia no plano {$planoNome}). Tente novamente amanhã.",
                 'remaining'=>0
             ], JSON_UNESCAPED_UNICODE);
             return;
