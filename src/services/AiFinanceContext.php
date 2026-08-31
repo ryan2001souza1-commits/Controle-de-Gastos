@@ -32,8 +32,9 @@ class AiFinanceContext
         $prevReceitas = $this->sumTransacoes($userId, 'receita', $prevStart, $prevEnd);
         $prevDespesas = $this->sumTransacoes($userId, 'despesa', $prevStart, $prevEnd);
 
-        // Despesas por categoria (top 5) no mês
-        $categorias = $this->categoriasTop($userId, $start, $end, 5);
+        // Despesas por categoria (top 10) no mês — para análise completa
+        $categorias = $this->categoriasTop($userId, $start, $end, 10);
+        $categoriasAnterior = $this->categoriasTop($userId, $prevStart, $prevEnd, 10);
 
         // Orçamento do mês
         $orcamento = $this->orcamentoResumo($userId, $year, $month);
@@ -44,6 +45,9 @@ class AiFinanceContext
         // Histórico mensal (últimos 6 meses)
         $historico = $this->historicoMensal($userId, 6);
 
+        // Resumo de categorias para análise inteligente
+        $resumoCategorias = $this->resumoCategorias($categorias, $categoriasAnterior);
+
         return [
             'periodo' => $label,
             'periodo_extenso' => $now->format('F \d\e Y'),
@@ -52,6 +56,8 @@ class AiFinanceContext
             'saldo' => $saldo,
             'orcamento' => $orcamento,
             'categorias' => $categorias,
+            'categorias_anterior' => $categoriasAnterior,
+            'resumo_categorias' => $resumoCategorias,
             'metas' => $metas,
             'historico_mensal' => $historico,
             'comparativo_anterior' => [
@@ -138,6 +144,38 @@ class AiFinanceContext
             ];
         }
         return $out;
+    }
+
+    private function resumoCategorias(array $atuais, array $anterior): array
+    {
+        if (empty($atuais)) {
+            return ['total_categorias'=>0, 'maior'=>null, 'menor'=>null, 'destaques'=>[], 'variacoes'=>[]];
+        }
+        $maior = $atuais[0];
+        $menor = $atuais[count($atuais)-1];
+        // destaques: categorias >30% merecem atenção
+        $destaques = array_values(array_filter($atuais, fn($c)=>$c['percentual']>=30));
+        // variações vs mês anterior
+        $mapAnt = [];
+        foreach ($anterior as $a) $mapAnt[strtolower($a['nome'])] = (float)$a['valor'];
+        $variacoes = [];
+        foreach ($atuais as $c) {
+            $ant = $mapAnt[strtolower($c['nome'])] ?? 0;
+            if ($ant > 0) {
+                $diff = round((($c['valor'] - $ant) / $ant) * 100, 1);
+                if (abs($diff) >= 15) $variacoes[] = ['nome'=>$c['nome'], 'atual'=>$c['valor'], 'anterior'=>$ant, 'variacao_percentual'=>$diff];
+            } elseif ($ant == 0 && $c['valor'] > 0) {
+                $variacoes[] = ['nome'=>$c['nome'], 'atual'=>$c['valor'], 'anterior'=>0, 'variacao_percentual'=>100];
+            }
+        }
+        usort($variacoes, fn($a,$b)=>abs($b['variacao_percentual']) <=> abs($a['variacao_percentual']));
+        return [
+            'total_categorias'=>count($atuais),
+            'maior'=>$maior,
+            'menor'=>$menor,
+            'destaques'=>$destaques,
+            'variacoes'=>array_slice($variacoes,0,3),
+        ];
     }
 
     private function historicoMensal(int $userId, int $months): array

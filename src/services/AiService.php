@@ -107,8 +107,9 @@ ANTES DE RESPONDER, analise os dados financeiros do contexto JSON. Nunca invente
 
 REGRAS DE DADOS:
 - Para perguntas sobre "este mês"/mês atual, use receitas/despesas/saldo/categorias/orçamento do período atual do contexto.
-- Quando fizer sentido (comparação, evolução), use comparativo_anterior e historico_mensal para comparar com meses anteriores (ex: variação %).
+- Quando fizer sentido (comparação, evolução), use comparativo_anterior, historico_mensal e categorias_anterior para comparar com meses anteriores (ex: variação %).
 - Faça cálculos simples quando útil (percentuais, saldo, % do orçamento, % das receitas gastas).
+- Para análise de CATEGORIAS: identifique categoria com maior gasto e menor gasto, calcule percentual de cada categoria sobre o total de despesas, destaque categorias com >=30% (merecem atenção) usando resumo_categorias.destaques, e aponte mudanças relevantes (>=15% vs mês anterior) usando resumo_categorias.variacoes. Use categorias e resumo_categorias do contexto.
 - Identifique padrões: maior categoria, aumento vs mês anterior, orçamento >80-100%, metas com baixo %.
 
 ESTILO:
@@ -186,14 +187,75 @@ PROMPT;
             return "Em {$ctx['periodo']} você teve **{$fmt($ctx['receitas'])}** em receitas. Mês anterior foi {$fmt($ctx['comparativo_anterior']['receitas'])}. " .
                    ($ctx['receitas'] > $ctx['comparativo_anterior']['receitas'] ? "Houve aumento em relação ao mês anterior." : "Ficou estável ou abaixo do mês anterior.");
         }
-        // despesas / onde gasto mais (inclui gastando/gast* variações)
-        if (preg_match('/\b(despesa|despesas|gasto|gastos|gastei|gastando|onde.*gast|mais.*gast)\b/', $norm) && !str_contains($norm,'receita')) {
-            if (strpos($norm,'onde')!==false || strpos($norm,'mais')!==false || strpos($norm,'categoria')!==false) {
-                if (empty($ctx['categorias'])) return "Você ainda não registrou despesas por categoria em {$ctx['periodo']}. Registre lançamentos para eu detalhar onde está gastando mais.";
-                $top = $ctx['categorias'][0];
-                $list = implode(', ', array_map(fn($c)=>"{$c['nome']} ({$fmt($c['valor'])} - {$c['percentual']}%)", array_slice($ctx['categorias'],0,3)));
-                return "Suas maiores despesas em {$ctx['periodo']} foram: **{$list}**. A principal é **{$top['nome']}** com {$fmt($top['valor'])} ({$top['percentual']}% do total de {$fmt($ctx['despesas'])}). Quer sugestões para otimizar essa categoria?";
+        // === ANÁLISE INTELIGENTE DE CATEGORIAS ===
+        $isCategoriaPergunta = preg_match('/categoria|percentual|atencao|destaque|pesando|maior.*(gasto|despesa)|menor.*(gasto|despesa)|onde.*gast|qual.*maior|qual.*menor|como.*gastos.*categoria|quanto.*gasto.*com/i', $q) || preg_match('/\b(categoria|gastando|gastos por categoria)\b/i', $norm);
+        // "Quanto gasto com X?" — busca por nome de categoria
+        if (preg_match('/quanto.*gasto.*com\s+([a-zçãôáéíóúâê\s]+)/i', $q, $mCat)) {
+            $buscaRaw = trim($mCat[1] ?? '');
+            $buscaNorm = $norm; // usa norm para busca sem acento
+            // extrai apenas o nome após "com"
+            if (preg_match('/quanto.*gasto.*com\s+([a-z\s]+)/', $norm, $m2)) $buscaNorm = trim($m2[1]);
+            if (empty($ctx['categorias'])) return "Você ainda não registrou despesas por categoria em {$ctx['periodo']}. Registre lançamentos para eu detalhar seus gastos.";
+            $encontrada = null;
+            foreach ($ctx['categorias'] as $c) {
+                $nomeNorm = $this->strLower(function_exists('iconv') ? (iconv('UTF-8','ASCII//TRANSLIT',$c['nome']) ?: $c['nome']) : $c['nome']);
+                if (str_contains($nomeNorm, $buscaNorm) || str_contains($buscaNorm, $nomeNorm) || str_contains($this->strLower($q), $this->strLower($c['nome']))) { $encontrada = $c; break; }
             }
+            if ($encontrada) {
+                $rec = $encontrada['percentual'] >= 30 ? " Ela representa {$encontrada['percentual']}% das suas despesas e merece atenção." : "";
+                // variação vs anterior se houver
+                $varTxt = '';
+                if (!empty($ctx['resumo_categorias']['variacoes'])) {
+                    foreach ($ctx['resumo_categorias']['variacoes'] as $v) {
+                        if (strtolower($v['nome']) === strtolower($encontrada['nome'])) {
+                            $sinal = $v['variacao_percentual']>0?'aumento':'redução';
+                            $varTxt = " Variação vs mês anterior: {$sinal} de ".abs($v['variacao_percentual'])."%.";
+                            break;
+                        }
+                    }
+                }
+                return "Em {$ctx['periodo']} você gastou **{$fmt($encontrada['valor'])}** com **{$encontrada['nome']}** ({$encontrada['percentual']}% do total de {$fmt($ctx['despesas'])}).{$rec}{$varTxt}";
+            }
+            return "Não encontrei gastos com **\"".trim($buscaRaw)."\"** em {$ctx['periodo']}. Suas categorias com gasto são: ".implode(', ', array_map(fn($c)=>$c['nome']." ({$fmt($c['valor'])})", $ctx['categorias'])).".";
+        }
+        if ($isCategoriaPergunta) {
+            if (empty($ctx['categorias'])) return "Você ainda não registrou despesas por categoria em {$ctx['periodo']}. Registre lançamentos para eu detalhar onde está gastando mais.";
+            $resumo = $ctx['resumo_categorias'] ?? null;
+            $maior = $resumo['maior'] ?? $ctx['categorias'][0];
+            $menor = $resumo['menor'] ?? end($ctx['categorias']);
+            // "menor gasto"
+            if (preg_match('/menor.*(gasto|despesa)/', $norm)) {
+                return "Sua menor despesa em {$ctx['periodo']} foi **{$menor['nome']}** com **{$fmt($menor['valor'])}** ({$menor['percentual']}% do total).";
+            }
+            // "como estão meus gastos por categoria" / percentual de cada
+            if (preg_match('/como.*gastos.*categoria|percentual.*categoria|gastos por categoria/i', $q)) {
+                $linhas = [];
+                foreach ($ctx['categorias'] as $c) $linhas[] = "- **{$c['nome']}**: {$fmt($c['valor'])} ({$c['percentual']}%)";
+                $txt = "Seus gastos por categoria em {$ctx['periodo']} (total {$fmt($ctx['despesas'])}):\n".implode("\n",$linhas);
+                if (!empty($resumo['destaques'])) {
+                    $txt .= "\n\n⚠️ Atenção: ".implode(', ', array_map(fn($d)=>"**{$d['nome']}** ({$d['percentual']}%)", $resumo['destaques']))." concentram boa parte dos gastos.";
+                }
+                // recomendação responsável: não cortar essencial de forma absurda
+                $txt .= "\n\n✅ Recomendações:\n• Revise primeiro as categorias com maior % antes de cortar.\n• Defina um limite realista para {$maior['nome']} e acompanhe semanalmente.";
+                return $txt;
+            }
+            // "Onde estou gastando mais?" / "maior" / "pesando"
+            $list = implode(', ', array_map(fn($c)=>"{$c['nome']} ({$fmt($c['valor'])} - {$c['percentual']}%)", array_slice($ctx['categorias'],0,3)));
+            $resp = "Em {$ctx['periodo']} suas maiores despesas foram: **{$list}**. A principal é **{$maior['nome']}** com {$fmt($maior['valor'])} ({$maior['percentual']}% do total de {$fmt($ctx['despesas'])}).";
+            if (!empty($resumo['destaques'])) {
+                $resp .= " Categorias que merecem atenção (>=30%): ".implode(', ', array_map(fn($d)=>$d['nome']." ({$d['percentual']}%)", $resumo['destaques'])).".";
+            }
+            if (!empty($resumo['variacoes'])) {
+                $v = $resumo['variacoes'][0];
+                $resp .= " Maior variação vs mês anterior: **{$v['nome']}** ".($v['variacao_percentual']>0?'aumento':'queda')." de ".abs($v['variacao_percentual'])."%.";
+            }
+            // recomendação com base real, sem cortes absurdos
+            $recVal = round($maior['valor'] * 0.1, 2);
+            $resp .= " Uma sugestão responsável é tentar reduzir cerca de 10% em {$maior['nome']} (cerca de {$fmt($recVal)}), ajustando sem comprometer o essencial. Quer um plano semanal para isso?";
+            return $resp;
+        }
+        // despesas gerais (quando não é pergunta específica de categoria)
+        if (preg_match('/\b(despesa|despesas|gasto|gastos|gastei|gastando)\b/', $norm) && !str_contains($norm,'receita') && !str_contains($norm,'categoria') && !str_contains($norm,'onde') && !str_contains($norm,'maior') && !str_contains($norm,'menor') && !str_contains($norm,'percentual')) {
             $delta = $ctx['despesas'] - $ctx['comparativo_anterior']['despesas'];
             $sig = $delta>0? 'aumento':'redução';
             return "Em {$ctx['periodo']} suas despesas foram **{$fmt($ctx['despesas'])}** (mês anterior {$fmt($ctx['comparativo_anterior']['despesas'])} — {$sig} de {$fmt(abs($delta))}). Quer que eu analise por categoria?";
