@@ -48,8 +48,8 @@ $isAdminSession = !empty($_SESSION['is_admin']) && (int)$_SESSION['is_admin'] ==
 $canSeeRelatorios = true;
 $userIdForFeatures = $_SESSION['user_id'] ?? null;
 if ($userIdForFeatures !== null) {
-    require_once __DIR__ . '/../src/services/PlanService.php';
-    require_once __DIR__ . '/../src/config/config.php';
+    require_once dirname(__DIR__, 2) . '/src/services/PlanService.php';
+    require_once dirname(__DIR__, 2) . '/src/config/config.php';
     $db = getDBConnection();
     $planSvc = new PlanService($db);
     $planSlug = $planSvc->getUserPlanSlug($userIdForFeatures);
