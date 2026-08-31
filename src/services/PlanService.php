@@ -84,9 +84,9 @@ class PlanService
             self::SLUG_PREMIUM => self::LIMIT_UNLIMITED, // ilimitado
         ],
         'ia_perguntas_dia' => [
-            self::SLUG_FREE    => 10,
-            self::SLUG_PRO     => 40,
-            self::SLUG_PREMIUM => 100,
+            self::SLUG_FREE    => 20,
+            self::SLUG_PRO     => 300,
+            self::SLUG_PREMIUM => self::LIMIT_UNLIMITED, // ilimitado
         ],
         'ia_insights_dia' => [
             self::SLUG_FREE    => 0,
@@ -110,6 +110,9 @@ class PlanService
      *   - metas_ilimitadas   : sem limite de metas (compat)
      *   - relatorios         : acesso a tela de Relatorios (PRO+)
      *   - historico          : acesso a Historico completo (PRO+)
+     *   - ia_history         : gravar/recuperar historico de conversa (PRO+)
+     *   - ia_upload          : upload de arquivos para a IA (PRO+)
+     *   - ia_images          : geracao de imagens pela IA (PREMIUM)
      */
     private const FEATURES = [
         'relatorios' => [
@@ -158,6 +161,21 @@ class PlanService
             self::SLUG_PREMIUM => true,
         ],
         'metas_ilimitadas' => [
+            self::SLUG_FREE    => false,
+            self::SLUG_PRO     => false,
+            self::SLUG_PREMIUM => true,
+        ],
+        'ia_history' => [
+            self::SLUG_FREE    => false,
+            self::SLUG_PRO     => true,
+            self::SLUG_PREMIUM => true,
+        ],
+        'ia_upload' => [
+            self::SLUG_FREE    => false,
+            self::SLUG_PRO     => true,
+            self::SLUG_PREMIUM => true,
+        ],
+        'ia_images' => [
             self::SLUG_FREE    => false,
             self::SLUG_PRO     => false,
             self::SLUG_PREMIUM => true,
@@ -425,5 +443,41 @@ class PlanService
     public static function normalizeStatus(?string $status): string
     {
         return strtolower(trim((string)($status ?? self::STATUS_ATIVO)));
+    }
+
+    private const AI_MODELS = [
+        self::SLUG_FREE => [
+            'gpt-4.1-nano',
+        ],
+        self::SLUG_PRO => [
+            'gpt-4.1-nano',
+            'gpt-4.1-mini',
+        ],
+        self::SLUG_PREMIUM => [
+            'gpt-4.1-nano',
+            'gpt-4.1-mini',
+            'gpt-5',
+            'gpt-5-thinking',
+            'claude',
+            'gemini',
+        ],
+    ];
+
+    public function getAvailableModels(int $userId): array
+    {
+        $planSlug = $this->getUserPlanSlug($userId);
+        return self::AI_MODELS[$planSlug] ?? self::AI_MODELS[self::SLUG_FREE];
+    }
+
+    public function isModelAllowedForUser(int $userId, string $model): bool
+    {
+        $allowed = $this->getAvailableModels($userId);
+        return in_array($model, $allowed, true);
+    }
+
+    public function getFirstAvailableModel(int $userId): string
+    {
+        $models = $this->getAvailableModels($userId);
+        return $models[0] ?? 'gpt-4.1-nano';
     }
 }
