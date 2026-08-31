@@ -111,6 +111,7 @@ REGRAS DE DADOS:
 - Faça cálculos simples quando útil (percentuais, saldo, % do orçamento, % das receitas gastas).
 - Para análise de CATEGORIAS: identifique categoria com maior gasto e menor gasto, calcule percentual de cada categoria sobre o total de despesas, destaque categorias com >=30% (merecem atenção) usando resumo_categorias.destaques, e aponte mudanças relevantes (>=15% vs mês anterior) usando resumo_categorias.variacoes. Use categorias e resumo_categorias do contexto.
 - Para análise de ORÇAMENTO: use orcamento.limite, orcamento.utilizado, orcamento.disponivel, orcamento.percentual_usado e orcamento.status. Diferencie valor utilizado (quanto já gastou) de disponível (limite - utilizado). Nunca use saldo bancário como orçamento. Para detalhes por categoria use orcamento.categorias[], orcamento.ultrapassaram[] e orcamento.em_risco[]. Calcule projeção se perguntarem "vou conseguir terminar o mês?": gasto médio diário = utilizado / dias_passados; projeção = média * dias_no_mês; compare com limite.
+- Para análise de METAS: use metas[].nome, metas[].alvo, metas[].atual, metas[].restante, metas[].percentual, metas[].status, metas[].meses_restantes e metas[].sugestao_mensal. Calcule quanto falta: restante = alvo - atual. Para "estou no caminho certo?", avalie status (concluida/boa_progresso/iniciante/sem_prazo) e compare % com o tempo decorrido do prazo. Para "quanto preciso guardar por mês?", use metas[].sugestao_mensal quando disponível (restante / meses_restantes). NUNCA invente prazos — se metas[].prazo for null, não mencione meses nem faça sugestão mensal, apenas calcule quanto falta no total. Use status e percentual para advice concreto.
 - Identifique padrões: maior categoria, aumento vs mês anterior, orçamento >80-100%, metas com baixo %.
 
 ESTILO:
@@ -312,12 +313,76 @@ PROMPT;
             $sig = $delta>0? 'aumento':'redução';
             return "Em {$ctx['periodo']} suas despesas foram **{$fmt($ctx['despesas'])}** (mês anterior {$fmt($ctx['comparativo_anterior']['despesas'])} — {$sig} de {$fmt(abs($delta))}). Quer que eu analise por categoria?";
         }
-        // metas
+        // === ANÁLISE INTELIGENTE DE METAS ===
         if (preg_match('/\b(meta|metas|objetivo|caminho certo)\b/', $norm)) {
-            if (empty($ctx['metas'])) return "Você ainda não cadastrou metas. Crie uma meta em \"Metas\" para eu acompanhar seu progresso.";
+            if (empty($ctx['metas'])) return "Você ainda não cadastrou metas. Crie uma meta em **Metas** para eu acompanhar seu progresso.";
+            $metas = $ctx['metas'];
+            // "Quanto falta para minha meta?" — quanto preciso guardar/saldo da meta
+            if (preg_match('/quanto.*falta|quanto.*guardar|quanto.*sobrou|quanto.*preciso/', $norm)) {
+                $lines = [];
+                foreach ($metas as $m) {
+                    $linha = "**{$m['nome']}**: {$m['percentual']}% concluída — faltam **{$fmt($m['restante'])}**";
+                    if ($m['sugestao_mensal'] !== null) $linha .= " → sugestão de **{$fmt($m['sugestao_mensal'])}**/mês ({$m['meses_restantes']} meses)";
+                    $lines[] = $linha;
+                }
+                $concluidas = array_filter($metas, fn($m)=>$m['status']==='concluida');
+                $txt = "Situação das metas:\n" . implode("\n", $lines);
+                if (!empty($concluidas)) $txt .= "\n\n✅ ".count($concluidas)." meta(s) já concluída(s)!";
+                return $txt;
+            }
+            // "Estou no caminho certo?" / "como estão minhas metas?" — avaliação de progresso
+            if (preg_match('/caminho certo|como.*meta|status.*meta|progresso.*meta/', $norm) || preg_match('/\b(meta|metas)\b/', $norm)) {
+                $concluidas = array_filter($metas, fn($m)=>$m['status']==='concluida');
+                $emRisco = array_filter($metas, fn($m)=>$m['status']==='iniciante' && $m['meses_restantes'] !== null && $m['percentual'] < 20);
+                $txt = "Suas metas:\n";
+                $linhas = [];
+                foreach ($metas as $m) {
+                    $badge = match($m['status']) {
+                        'concluida' => '✅ Concluída',
+                        'boa_progresso' => '🟡 Boa',
+                        'iniciante' => '🔴 Inicial',
+                        'sem_prazo' => '⚪ Sem prazo',
+                        default => '⚪',
+                    };
+                    $prazotxt = $m['prazo'] ? " — prazo {$m['prazo']}" : " — sem prazo definido";
+                    $sobra = $m['restante'] > 0 ? ", faltam {$fmt($m['restante'])}" : "";
+                    $sugestao = $m['sugestao_mensal'] !== null ? ", guardar {$fmt($m['sugestao_mensal'])}/mês" : "";
+                    $linhas[] = "- {$badge} **{$m['nome']}**: {$m['percentual']}% ({$fmt($m['atual'])}/{$fmt($m['alvo'])}){$prazotxt}{$sobra}{$sugestao}";
+                }
+                $txt .= implode("\n", $linhas);
+                if (!empty($concluidas)) $txt .= "\n\n✅ ".count($concluidas)." meta(s) concluída(s)!";
+                if (!empty($emRisco)) {
+                    $nomes = implode(', ', array_map(fn($m)=>$m['nome'], $emRisco));
+                    $txt .= "\n\n⚠️ {$nomes} — progresso baixo e prazo se aproximando. Acelere os aportes!";
+                }
+                $txt .= "\n\nQuer planos para acelerar alguma meta?";
+                return $txt;
+            }
+            // "Quanto preciso guardar por mês?"
+            if (preg_match('/guardar.*mes|apartar.*mes|montante.*mes|quanto.*mes/', $norm)) {
+                $comPrazo = array_filter($metas, fn($m)=>$m['sugestao_mensal'] !== null);
+                $semPrazo = array_filter($metas, fn($m)=>$m['sugestao_mensal'] === null && $m['restante'] > 0);
+                $txt = "Para suas metas:\n";
+                foreach ($comPrazo as $m) {
+                    $txt .= "- **{$m['nome']}**: {$fmt($m['sugestao_mensal'])}/mês pelos próximos {$m['meses_restantes']} meses ({$fmt($m['restante'])} restantes).\n";
+                }
+                if (!empty($semPrazo)) {
+                    $txt .= "\nMetas sem prazo definido — só calcular quanto pretende guardar:\n";
+                    foreach ($semPrazo as $m) $txt .= "- {$m['nome']}: {$fmt($m['restante'])} restantes.\n";
+                    $txt .= "\nDefina um prazo em Metas para eu calcular a sugestão mensal.";
+                }
+                $concluidas = array_filter($metas, fn($m)=>$m['status']==='concluida');
+                if (!empty($concluidas)) $txt .= "\n\n✅ ".count($concluidas)." meta(s) já concluída(s)!";
+                return $txt;
+            }
+            // fallback: listagem simples
             $lines = [];
-            foreach ($ctx['metas'] as $m) $lines[] = "- **{$m['nome']}**: {$fmt($m['atual'])} de {$fmt($m['alvo'])} ({$m['percentual']}%)" . ($m['prazo']?" — prazo {$m['prazo']}":"");
-            return "Suas metas:\n" . implode("\n", $lines) . "\n\nVocê está indo bem nas metas com maior percentual. Quer dicas para acelerar a que está mais atrasada?";
+            foreach ($metas as $m) {
+                $restanteTxt = $m['restante'] > 0 ? ", faltam {$fmt($m['restante'])}" : "";
+                $prazoTxt = $m['prazo'] ? " — prazo {$m['prazo']}" : "";
+                $lines[] = "- **{$m['nome']}**: {$fmt($m['atual'])} de {$fmt($m['alvo'])} ({$m['percentual']}%){$restanteTxt}{$prazoTxt}";
+            }
+            return "Suas metas:\n" . implode("\n", $lines) . "\n\nQuer uma análise mais detalhada de alguma meta específica?";
         }
         return null;
     }

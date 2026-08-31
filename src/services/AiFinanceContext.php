@@ -179,17 +179,47 @@ class AiFinanceContext
         $stmt = $this->db->prepare("SELECT nome, valor_objetivo as alvo, valor_acumulado as atual, data_limite as prazo FROM metas WHERE usuario_id=? ORDER BY data_limite ASC NULLS LAST, nome ASC LIMIT $limit");
         $stmt->execute([$userId]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $hoje = new DateTimeImmutable('first day of this month');
         $out = [];
         foreach ($rows as $r) {
             $alvo = (float)$r['alvo'];
             $atual = (float)$r['atual'];
+            $restante = round(max(0, $alvo - $atual), 2);
             $pct = $alvo > 0 ? round(min(100, ($atual / $alvo) * 100), 1) : 0;
+            // meses restantes: pelo menos 1 se ainda há valor a acumular e há prazo
+            $meses = null;
+            $sugestaoMensal = null;
+            $status = 'em_andamento';
+            if ($alvo > 0 && $atual >= $alvo) {
+                $status = 'concluida';
+            }
+            if (!empty($r['prazo'])) {
+                try {
+                    $prazo = new DateTimeImmutable($r['prazo']);
+                    $diff = (int)$hoje->diff($prazo)->format('%r%m') + (int)$hoje->diff($prazo)->format('%r%y') * 12;
+                    $meses = max(1, $diff);
+                    if ($status !== 'concluida' && $meses > 0) {
+                        $sugestaoMensal = round($restante / $meses, 2);
+                    }
+                    if ($status !== 'concluida') {
+                        $status = $pct >= 100 ? 'concluida' : ($pct >= 50 ? 'boa_progresso' : 'iniciante');
+                    }
+                } catch (Exception $e) {
+                    // data inválida: mantém sem meses
+                }
+            } else {
+                $status = $pct >= 100 ? 'concluida' : 'sem_prazo';
+            }
             $out[] = [
                 'nome' => $r['nome'],
                 'alvo' => round($alvo, 2),
                 'atual' => round($atual, 2),
+                'restante' => $restante,
                 'percentual' => $pct,
                 'prazo' => $r['prazo'] ? date('d/m/Y', strtotime($r['prazo'])) : null,
+                'meses_restantes' => $meses,
+                'sugestao_mensal' => $sugestaoMensal,
+                'status' => $status,
             ];
         }
         return $out;
