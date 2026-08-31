@@ -40,7 +40,7 @@ class AiService
     {
         $key = self::env('AI_API_KEY') ?: self::env('OPENROUTER_API_KEY') ?: self::env('OPENAI_API_KEY');
         $url = self::env('AI_API_URL') ?: self::env('OPENROUTER_API_URL') ?: 'https://openrouter.ai/api/v1/chat/completions';
-        $model = self::env('AI_MODEL') ?: self::env('OPENROUTER_MODEL') ?: 'qwen/qwen3-30b-a3b:free';
+        $model = self::env('AI_MODEL') ?: self::env('OPENROUTER_MODEL') ?: 'openrouter/free';
         $maxTokens = (int)(self::env('AI_MAX_TOKENS') ?: 700);
         $temperature = (float)(self::env('AI_TEMPERATURE') ?: 0.35);
         return [
@@ -56,6 +56,15 @@ class AiService
     {
         $c = self::getConfig();
         return $c['key'] !== '';
+    }
+
+    public static function isFreeModel(string $model): bool
+    {
+        $m = strtolower(trim($model));
+        if ($m === 'openrouter/free') return true;
+        // qualquer modelo com sufixo :free é considerado gratuito (ex: qwen/...:free)
+        if (str_ends_with($m, ':free')) return true;
+        return false;
     }
 
     public function getUserLimit(string $plano): int
@@ -181,6 +190,10 @@ PROMPT;
         if ($cfg['key'] === '') {
             throw new RuntimeException('IA não configurada: defina AI_API_KEY no .env ou na Vercel.');
         }
+        // Proteção custo zero: só permite modelos gratuitos
+        if (!self::isFreeModel($cfg['model'])) {
+            throw new RuntimeException('Modelo configurado não é gratuito. Configure AI_MODEL=openrouter/free ou um modelo com sufixo :free.');
+        }
 
         $system = $this->getSystemPrompt();
         // Monta mensagens: system + contexto + histórico + nova pergunta
@@ -259,7 +272,14 @@ PROMPT;
         if ($code < 200 || $code >= 300) {
             $msg = $data['error']['message'] ?? (is_string($data['error'] ?? null) ? $data['error'] : null) ?? substr($resp,0,600);
             if (is_array($msg)) $msg = json_encode($msg, JSON_UNESCAPED_UNICODE);
+            $msgLower = strtolower((string)$msg);
             error_log('[ai] http_error code='.$code.' msg='.substr((string)$msg,0,400));
+            // Proteção custo zero: nunca cair para modelo pago se free falhar
+            $isFree = self::isFreeModel($cfg['model']);
+            $noFreeAvailable = $isFree && ($code === 404 || $code === 429 || $code === 503 || str_contains($msgLower,'no free') || str_contains($msgLower,'no model') || str_contains($msgLower,'unavailable') || str_contains($msgLower,'not found'));
+            if ($noFreeAvailable) {
+                throw new RuntimeException('Os modelos gratuitos estão temporariamente indisponíveis. Tente novamente em alguns instantes.');
+            }
             // Mensagens amigáveis por código
             if ($code === 401) throw new RuntimeException('API Key inválida ou não autorizada.');
             if ($code === 402) throw new RuntimeException('Créditos insuficientes no OpenRouter.');
@@ -325,6 +345,10 @@ PROMPT;
             $contentVal = $hasContent ? $data['choices'][0]['message']['content'] : null;
             $contentDesc = $contentVal === null ? 'null' : (is_string($contentVal) ? (trim($contentVal)===''? 'vazio':'string('.strlen($contentVal).')') : gettype($contentVal));
             error_log('[ai] ERRO content vazio — hasChoices='.($hasChoices?'sim':'nao').' hasMessage='.($hasMsg?'sim':'nao').' content='.$contentDesc.' raw_snip='.substr($snip,0,1200).' data_keys='.implode(',',array_keys($data)).' choice_keys='.($choice?implode(',',array_keys($choice)):'none'));
+            // Se for roteador gratuito e veio vazio, trata como indisponibilidade temporária (custo zero)
+            if (self::isFreeModel($cfg['model'])) {
+                throw new RuntimeException('Os modelos gratuitos estão temporariamente indisponíveis. Tente novamente em alguns instantes.');
+            }
             if (!$hasChoices) throw new RuntimeException('Resposta inesperada: estrutura diferente da esperada (sem choices).');
             if (!$hasMsg) throw new RuntimeException('Resposta inesperada: estrutura diferente da esperada (sem message).');
             if ($contentVal === null) throw new RuntimeException('Resposta vazia: content null');
