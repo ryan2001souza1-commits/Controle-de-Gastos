@@ -26,7 +26,7 @@ class AiLimitService
 
     public function countToday(int $userId): int
     {
-        $today = date('Y-m-d');
+        $today = appToday();
         $stmt = $this->db->prepare('SELECT requests FROM ai_usage WHERE user_id=? AND date=?');
         $stmt->execute([$userId, $today]);
         return (int)($stmt->fetchColumn() ?: 0);

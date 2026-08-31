@@ -42,6 +42,48 @@ if (getenv('VERCEL_ENV') === false) {
  * Formato das variáveis individuais (para dev local):
  *   DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS
  */
+/**
+ * Timezone da aplicacao — usado por todos os servicos de limite.
+ * Configure via variavel de ambiente APP_TZ ou use o default.
+ * Exige timezone PHP valido (ex: America/Sao_Paulo, UTC).
+ */
+function appTimezone(): string
+{
+    static $tz = null;
+    if ($tz === null) {
+        $tz = getenv('APP_TZ') ?: ('UTC');
+        if ($tz !== date_default_timezone_get()) {
+            @date_default_timezone_set($tz);
+        }
+    }
+    return $tz;
+}
+
+/**
+ * Data atual no timezone da aplicacao (Y-m-d).
+ */
+function appToday(): string
+{
+    appTimezone();
+    return gmdate('Y-m-d');
+}
+
+/**
+ * Extrai array ['year' => int, 'month' => int] de uma data no timezone da aplicacao.
+ * Se $date for null, usa hoje.
+ */
+function appYearMonth(?string $date = null): array
+{
+    appTimezone();
+    $d = $date !== null
+        ? DateTime::createFromFormat('Y-m-d', $date) ?: new DateTime()
+        : new DateTime();
+    return [
+        'year'  => (int)$d->format('Y'),
+        'month' => (int)$d->format('n'),
+    ];
+}
+
 function getDbConfig(): array
 {
     $url = getenv('DATABASE_URL');

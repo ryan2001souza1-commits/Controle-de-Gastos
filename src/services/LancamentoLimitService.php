@@ -77,12 +77,9 @@ class LancamentoLimitService
             ];
         }
 
-        $d = DateTime::createFromFormat('Y-m-d', $date);
-        if (!$d) {
-            $d = new DateTime();
-        }
-        $year = (int)$d->format('Y');
-        $month = (int)$d->format('n');
+        $ym = appYearMonth($date);
+        $year  = $ym['year'];
+        $month = $ym['month'];
         $usados = $this->countMonthTransactions($userId, $year, $month);
 
         if ($usados >= $limite) {

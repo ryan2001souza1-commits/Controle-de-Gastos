@@ -76,7 +76,7 @@ class AiService
     public function checkRateLimit(int $userId, string $plano): array
     {
         $limit = $this->getUserLimit($plano);
-        $today = date('Y-m-d');
+        $today = appToday();
         $stmt = $this->db->prepare("SELECT requests FROM ai_usage WHERE user_id=? AND date=?");
         $stmt->execute([$userId, $today]);
         $used = (int)($stmt->fetchColumn() ?: 0);
@@ -90,7 +90,7 @@ class AiService
 
     public function incrementUsage(int $userId, int $tokensApprox = 0): void
     {
-        $today = date('Y-m-d');
+        $today = appToday();
         $this->db->prepare("
             INSERT INTO ai_usage (user_id, date, requests, tokens_used)
             VALUES (?, ?, 1, ?)
