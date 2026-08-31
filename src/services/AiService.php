@@ -268,21 +268,69 @@ PROMPT;
             if ($code === 404) throw new RuntimeException('Modelo não encontrado: '.$cfg['model']);
             throw new RuntimeException('Erro da IA ('.$code.'): ' . substr((string)$msg,0,300));
         }
-        // OpenRouter / OpenAI — formatos possíveis (content, reasoning, text)
+        // Diagnóstico: verifica estrutura real do OpenRouter
         $choice = $data['choices'][0] ?? null;
-        $content = $choice['message']['content'] ?? null;
-        // fallback para reasoning (Qwen3 retorna reasoning separado)
-        if (($content === null || trim((string)$content) === '') && isset($choice['message']['reasoning'])) {
-            $content = $choice['message']['reasoning'];
+        // Log seguro da estrutura (sem segredos) quando necessário
+        $hasChoices = isset($data['choices']) && is_array($data['choices']);
+        $hasMessage = isset($choice['message']) && is_array($choice['message']);
+        $contentType = isset($choice['message']['content']) ? (is_array($choice['message']['content']) ? 'array('.count($choice['message']['content']).')' : gettype($choice['message']['content']).':'.strlen((string)$choice['message']['content'])) : 'ausente';
+        error_log('[ai] diag choices='.($hasChoices?'sim('.count($data['choices']).')':'nao').' message='.($hasMessage?'sim':'nao').' content='.$contentType.' http='.$code);
+
+        // Extração robusta: tenta todas as formas conhecidas do OpenRouter/Qwen
+        $content = null;
+        if (isset($choice['message']['content'])) {
+            $c = $choice['message']['content'];
+            if (is_string($c) && trim($c) !== '') {
+                $content = $c;
+            } elseif (is_array($c)) {
+                // Qwen pode retornar content como array de parts [{type:text,text:...}]
+                $parts = [];
+                foreach ($c as $part) {
+                    if (is_string($part) && trim($part) !== '') $parts[] = $part;
+                    elseif (is_array($part) && isset($part['text']) && is_string($part['text']) && trim($part['text']) !== '') $parts[] = $part['text'];
+                    elseif (is_array($part) && isset($part['content']) && is_string($part['content']) && trim($part['content']) !== '') $parts[] = $part['content'];
+                }
+                $joined = implode("\n", array_filter($parts));
+                if (trim($joined) !== '') $content = $joined;
+            }
         }
-        if (($content === null || trim((string)$content) === '') && isset($choice['text'])) {
+        // Fallbacks para modelos de raciocínio Qwen3
+        if (($content === null || trim((string)$content) === '') && isset($choice['message']['reasoning']) && is_string($choice['message']['reasoning']) && trim($choice['message']['reasoning']) !== '') {
+            $content = $choice['message']['reasoning'];
+            error_log('[ai] fallback reasoning len='.strlen($content));
+        }
+        if (($content === null || trim((string)$content) === '') && isset($choice['message']['reasoning_details']) && is_array($choice['message']['reasoning_details'])) {
+            $rtexts = [];
+            foreach ($choice['message']['reasoning_details'] as $rd) {
+                if (is_array($rd) && isset($rd['text']) && is_string($rd['text'])) $rtexts[] = $rd['text'];
+                elseif (is_string($rd)) $rtexts[] = $rd;
+            }
+            $joined = implode("\n", array_filter($rtexts, fn($v) => trim($v) !== ''));
+            if (trim($joined) !== '') { $content = $joined; error_log('[ai] fallback reasoning_details len='.strlen($content)); }
+        }
+        if (($content === null || trim((string)$content) === '') && isset($choice['message']['reasoning_content']) && is_string($choice['message']['reasoning_content']) && trim($choice['message']['reasoning_content']) !== '') {
+            $content = $choice['message']['reasoning_content'];
+        }
+        if (($content === null || trim((string)$content) === '') && isset($choice['text']) && is_string($choice['text']) && trim($choice['text']) !== '') {
             $content = $choice['text'];
         }
-        if (($content === null || trim((string)$content) === '')) {
-            error_log('[ai] content vazio, resp_snip='.substr($resp,0,800));
+        if (($content === null || trim((string)$content) === '') && isset($choice['delta']['content']) && is_string($choice['delta']['content']) && trim($choice['delta']['content']) !== '') {
+            $content = $choice['delta']['content'];
         }
+        // Diagnóstico específico para cada tipo de falha (sem expor segredos)
         if ($content === null || trim((string)$content) === '') {
-            throw new RuntimeException('Resposta da IA vazia.');
+            $snip = substr($resp, 0, 2000);
+            $hasChoices = isset($data['choices']) && is_array($data['choices']) && count($data['choices'])>0;
+            $hasMsg = $hasChoices && isset($data['choices'][0]['message']);
+            $hasContent = $hasMsg && array_key_exists('content', $data['choices'][0]['message']);
+            $contentVal = $hasContent ? $data['choices'][0]['message']['content'] : null;
+            $contentDesc = $contentVal === null ? 'null' : (is_string($contentVal) ? (trim($contentVal)===''? 'vazio':'string('.strlen($contentVal).')') : gettype($contentVal));
+            error_log('[ai] ERRO content vazio — hasChoices='.($hasChoices?'sim':'nao').' hasMessage='.($hasMsg?'sim':'nao').' content='.$contentDesc.' raw_snip='.substr($snip,0,1200).' data_keys='.implode(',',array_keys($data)).' choice_keys='.($choice?implode(',',array_keys($choice)):'none'));
+            if (!$hasChoices) throw new RuntimeException('Resposta inesperada: estrutura diferente da esperada (sem choices).');
+            if (!$hasMsg) throw new RuntimeException('Resposta inesperada: estrutura diferente da esperada (sem message).');
+            if ($contentVal === null) throw new RuntimeException('Resposta vazia: content null');
+            if (is_string($contentVal) && trim($contentVal)==='') throw new RuntimeException('Resposta vazia: content vazio');
+            throw new RuntimeException('Resposta vazia da IA.');
         }
         return trim((string)$content);
     }
