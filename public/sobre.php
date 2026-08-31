@@ -14,7 +14,7 @@ $userInitials = $userInitials ?? strtoupper(substr($userName, 0, 1));
   <div class="sobre-top">
     <!-- Nossa História -->
     <article class="sobre-card">
-      <div class="sobre-kicker">Desde 2021</div>
+      <div class="sobre-kicker">Desde 2026</div>
       <h2 class="sobre-card-title is-lg">Nossa História</h2>
       <div class="sobre-media">
         <img src="https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1200&q=80&ixlib=rb-4.0.3" alt="Equipe reunida em torno de quadro branco com gráficos financeiros" loading="lazy" decoding="async" onerror="this.style.display='none'">
@@ -24,7 +24,7 @@ $userInitials = $userInitials ?? strtoupper(substr($userName, 0, 1));
         Fundada em 2026 por entusiastas de finanças e tecnologia, a nossa plataforma nasceu de uma necessidade real de simplificar a gestão financeira pessoal. Começamos com uma pequena planilha que evoluiu para esta solução completa, focada em <strong>empoderar as pessoas através da educação financeira</strong>.
       </p>
       <div class="sobre-stats" aria-hidden="true">
-        <div class="sobre-stat"><div class="sobre-stat-num">2021</div><div class="sobre-stat-label">Fundação</div></div>
+        <div class="sobre-stat"><div class="sobre-stat-num">2026</div><div class="sobre-stat-label">Fundação</div></div>
         <div class="sobre-stat"><div class="sobre-stat-num">100%</div><div class="sobre-stat-label">Foco no usuário</div></div>
         <div class="sobre-stat"><div class="sobre-stat-num">24h</div><div class="sobre-stat-label">Dados protegidos</div></div>
       </div>
