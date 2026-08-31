@@ -97,7 +97,11 @@ if ($otherTotal > 0) {
             <?= render_icon('check', 13) ?><span>Operação realizada com sucesso!</span>
         </div>
     <?php endif; ?>
-    <?php if (isset($_GET['error'])): ?>
+    <?php if (($_GET['error'] ?? '') === 'upgrade'): ?>
+        <div class="alert alert-error" role="alert">
+            <?= render_icon('info', 13) ?><span>Recurso disponível no seu plano. Faça upgrade para liberar.</span>
+        </div>
+    <?php elseif (isset($_GET['error'])): ?>
         <div class="alert alert-error" role="alert">
             <?= render_icon('info', 13) ?><span>Ocorreu um erro. Tente novamente.</span>
         </div>

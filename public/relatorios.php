@@ -5,6 +5,7 @@ $totalIncomes=(float)($report['total_incomes']??0);$totalExpenses=(float)($repor
 ?>
 <!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Relatórios - Controle de Gastos</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"><link rel="stylesheet" href="/css/style.css?v=<?= @filemtime(__DIR__ . '/css/style.css') ?>"></head><body><div class="app-wrapper">
 <?php include __DIR__ . '/partials/layout_start.php'; ?>
+<?php if(($_GET['error'] ?? '') === 'upgrade'): ?><div class="alert alert-error" role="alert"><?= render_icon('info',13) ?><span>Relatórios disponíveis no seu plano.</span></div><?php endif; ?>
 
 <section class="metric-strip">
     <article class="metric-card"><div class="metric-card-icon" style="background:#ecfdf5;color:#10b981"><?= render_icon('arrow-up',18) ?></div><div class="metric-card-body"><div class="metric-card-label">Receitas</div><div class="metric-card-value" style="color:#059669">R$ <?= number_format($totalIncomes,2,',','.') ?></div><div class="text-xs" style="color:#64748b">↑ 12,5% vs período anterior</div></div></article>

@@ -100,16 +100,28 @@ class PlanService
      * Cada feature e um bool por slug.
      *
      * Features disponiveis (chaves publicas):
-     *   - exportar_csv       : exportar relatorios em CSV
-     *   - exportar_pdf       : exportar relatorios em PDF
+     *   - exportar_csv       : exportar relatorios em CSV / Excel
+     *   - exportar_pdf       : exportar relatorios em PDF (PREMIUM)
      *   - comparacao_meses   : comparacao entre meses
      *   - filtros_avancados  : filtros avancados em relatorios
      *   - ia_analise_metas   : analise de metas pela IA
      *   - ia_assistant       : acesso ao assistente IA (todo plano)
      *   - categorias_ilimitadas : sem limite de categorias (compat)
      *   - metas_ilimitadas   : sem limite de metas (compat)
+     *   - relatorios         : acesso a tela de Relatorios (PRO+)
+     *   - historico          : acesso a Historico completo (PRO+)
      */
     private const FEATURES = [
+        'relatorios' => [
+            self::SLUG_FREE    => false,
+            self::SLUG_PRO     => true,
+            self::SLUG_PREMIUM => true,
+        ],
+        'historico' => [
+            self::SLUG_FREE    => false,
+            self::SLUG_PRO     => true,
+            self::SLUG_PREMIUM => true,
+        ],
         'exportar_csv' => [
             self::SLUG_FREE    => false,
             self::SLUG_PRO     => true,
@@ -117,7 +129,7 @@ class PlanService
         ],
         'exportar_pdf' => [
             self::SLUG_FREE    => false,
-            self::SLUG_PRO     => true,
+            self::SLUG_PRO     => false,
             self::SLUG_PREMIUM => true,
         ],
         'comparacao_meses' => [

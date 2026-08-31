@@ -11,6 +11,7 @@ class ExpenseController
     private LancamentoLimitService $limitService;
     private CategoriaLimitService $categoriaLimitService;
     private OrcamentoLimitService $orcamentoLimitService;
+    private PlanService $planService;
 
     public function __construct(
         Expense $expenseModel,
@@ -21,7 +22,8 @@ class ExpenseController
         BudgetService $budgetService,
         LancamentoLimitService $limitService,
         CategoriaLimitService $categoriaLimitService,
-        OrcamentoLimitService $orcamentoLimitService
+        OrcamentoLimitService $orcamentoLimitService,
+        PlanService $planService
     ) {
         $this->expenseModel = $expenseModel;
         $this->incomeModel  = $incomeModel;
@@ -32,6 +34,7 @@ class ExpenseController
         $this->limitService = $limitService;
         $this->categoriaLimitService = $categoriaLimitService;
         $this->orcamentoLimitService = $orcamentoLimitService;
+        $this->planService = $planService;
     }
 
     public function dashboard(): void
@@ -545,6 +548,11 @@ class ExpenseController
         requireLogin();
         $userId = $_SESSION['user_id'];
 
+        if (!$this->planService->userHasFeature($userId, 'relatorios')) {
+            header('Location: /index.php?action=site&error=upgrade');
+            exit;
+        }
+
         $startDate  = $_GET['start_date']  ?? date('Y-m-01');
         $endDate    = $_GET['end_date']    ?? date('Y-m-t');
         $filterType = $_GET['type']        ?? '';
@@ -578,6 +586,10 @@ class ExpenseController
         }
 
         $expenseCategories = $this->categoryModel->findAll($userId, 'despesa');
+
+        $canExportCsv = $this->planService->userHasFeature($userId, 'exportar_csv');
+        $canExportPdf = $this->planService->userHasFeature($userId, 'exportar_pdf');
+        $canHistorico = $this->planService->userHasFeature($userId, 'historico');
 
         $pageTitle = 'Relatórios - Controle de Gastos';
         $userName  = $_SESSION['user_name'] ?? 'Usuário';

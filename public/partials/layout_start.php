@@ -44,6 +44,17 @@ $menuItems = [
 ];
 // Admin link visível apenas para quem tem permissão (verificado no backend também)
 $isAdminSession = !empty($_SESSION['is_admin']) && (int)$_SESSION['is_admin'] === 1;
+// Feature flags — carrega PlanService apenas se logado
+$canSeeRelatorios = true;
+$userIdForFeatures = $_SESSION['user_id'] ?? null;
+if ($userIdForFeatures !== null) {
+    require_once __DIR__ . '/../src/services/PlanService.php';
+    require_once __DIR__ . '/../src/config/config.php';
+    $db = getDBConnection();
+    $planSvc = new PlanService($db);
+    $planSlug = $planSvc->getUserPlanSlug($userIdForFeatures);
+    $canSeeRelatorios = $planSvc->hasFeature($planSlug, 'relatorios');
+}
 
 $sidebarIcons = [
     'dashboard' => '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
@@ -71,6 +82,7 @@ $bellIcon = '<svg width="16" height="16" fill="none" stroke="currentColor" strok
     </div>
     <nav class="sidebar-nav" aria-label="Menu principal">
         <?php foreach ($menuItems as $key => $item): ?>
+            <?php if ($key === 'relatorios' && !$canSeeRelatorios) { continue; } ?>
             <a href="<?= $item['href'] ?>" class="sidebar-link <?= $activeMenu === $key ? 'active' : '' ?>" <?= $activeMenu === $key ? 'aria-current="page"' : '' ?>>
                 <?= $sidebarIcons[$item['icon']] ?? '' ?>
                 <?= htmlspecialchars($item['label']) ?>
