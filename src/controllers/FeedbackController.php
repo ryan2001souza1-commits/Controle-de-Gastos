@@ -26,8 +26,10 @@ class FeedbackController
     public function form(): void
     {
         requireLogin();
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        $feedbacks = $this->feedbackModel->findByUser($userId, 5);
         $pageTitle = 'Enviar feedback';
-        $pageSubtitle = 'Sugestões, melhorias e críticas';
+        $pageSubtitle = 'Sua opinião é muito importante para nós!';
         $activeMenu = 'feedback';
         $showPeriodPicker = false;
         $success = ($_GET['success'] ?? '') === 'created';
@@ -72,8 +74,8 @@ class FeedbackController
         requireLogin();
         $userId = (int)($_SESSION['user_id'] ?? 0);
         $feedbacks = $this->feedbackModel->findByUser($userId, 50);
-        $pageTitle = 'Meu feedback';
-        $pageSubtitle = 'Acompanhe suas sugestões';
+        $pageTitle = 'Meu Feedback';
+        $pageSubtitle = 'Acompanhe o status dos seus feedbacks e veja nossas respostas.';
         $activeMenu = 'meu_feedback';
         $showPeriodPicker = false;
         require basePath('meu_feedback.php');
