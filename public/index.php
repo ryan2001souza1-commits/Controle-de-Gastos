@@ -165,6 +165,8 @@ if ($action === 'register') {
     require basePath('sobre.php');
 } elseif ($action === 'configuracoes') {
     $profileController->index();
+} elseif ($action === 'meu_plano') {
+    $profileController->meuPlano();
 } elseif ($action === 'update_profile') {
     $profileController->updateProfile();
 } elseif ($action === 'update_password') {

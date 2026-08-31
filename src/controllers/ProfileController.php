@@ -102,6 +102,74 @@ class ProfileController
         header('Location: /index.php?action=configuracoes&success=updated'); exit;
     }
 
+    public function meuPlano(): void
+    {
+        requireLogin();
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        $user = $this->userModel->findById($userId);
+        if (!$user) { header('Location: /?action=login'); exit; }
+
+        $planSvc = new PlanService($this->db);
+        $currentPlanSlug = $planSvc->getUserPlanSlug($userId);
+        $planData = $planSvc->getUserPlanData($user);
+        $currentFeatures = $planSvc->getAllFeatures($currentPlanSlug);
+        $currentLimits = $planSvc->getAllLimits($currentPlanSlug);
+        $allPlanos = $planSvc->getAvailablePlanos();
+
+        $planMeta = $planSvc->getPlanoBySlug($currentPlanSlug);
+        $currentPrice = $planSvc->getPlanPrice($currentPlanSlug);
+
+        $upgrades = [];
+        $upgradeSlugs = array_filter(
+            PlanService::getValidSlugs(),
+            fn(string $s) => !in_array($s, [$currentPlanSlug], true)
+        );
+        foreach ($upgradeSlugs as $slug) {
+            $upgrades[$slug] = [
+                'slug'    => $slug,
+                'nome'    => $planSvc->getPlanDisplayName($slug),
+                'preco'   => $planSvc->getPlanPrice($slug),
+                'features' => $planSvc->getAllFeatures($slug),
+                'limits'   => $planSvc->getAllLimits($slug),
+            ];
+        }
+
+        $featureLabels = [
+            'relatorios'          => ['label' => 'Relatórios',          'icon' => 'chart',     'desc' => 'Acesso à tela completa de relatórios'],
+            'historico'           => ['label' => 'Histórico',            'icon' => 'clock',     'desc' => 'Histórico de transações por mais meses'],
+            'exportar_csv'        => ['label' => 'Exportar CSV',         'icon' => 'download',  'desc' => 'Baixar relatórios em CSV'],
+            'exportar_pdf'        => ['label' => 'Exportar PDF',         'icon' => 'file-text', 'desc' => 'Baixar relatórios em PDF'],
+            'comparacao_meses'    => ['label' => 'Comparação de meses',   'icon' => 'bar-chart', 'desc' => 'Comparar gastos entre meses'],
+            'filtros_avancados'   => ['label' => 'Filtros avançados',    'icon' => 'filter',    'desc' => 'Filtros detalhados nos relatórios'],
+            'ia_analise_metas'    => ['label' => 'Análise de metas IA', 'icon' => 'target',    'desc' => 'IA analisa suas metas financeiras'],
+            'ia_assistant'        => ['label' => 'Assistente IA',        'icon' => 'zap',        'desc' => 'Acesso ao assistente financeiro IA'],
+            'categorias_ilimitadas' => ['label' => 'Categorias ilimitadas', 'icon' => 'folder', 'desc' => 'Sem limite de categorias'],
+            'metas_ilimitadas'   => ['label' => 'Metas ilimitadas',    'icon' => 'target',    'desc' => 'Sem limite de metas financeiras'],
+            'ia_history'          => ['label' => 'Histórico de IA',       'icon' => 'message-square', 'desc' => 'Manter histórico da conversa com IA'],
+            'ia_upload'           => ['label' => 'Upload para IA',        'icon' => 'upload',    'desc' => 'Enviar arquivos para análise da IA'],
+            'ia_images'           => ['label' => 'Imagens da IA',         'icon' => 'image',     'desc' => 'Gerar imagens com IA'],
+            'dashboard_advanced'   => ['label' => 'Dashboard avançado',     'icon' => 'layout',     'desc' => 'Cards e gráficos avançados no dashboard'],
+            'ai_insights'         => ['label' => 'Insights da IA',        'icon' => 'lightbulb', 'desc' => 'Alertas e insights inteligentes'],
+        ];
+
+        $limitLabels = [
+            'lancamentos'       => ['label' => 'Lançamentos / mês',     'icon' => 'list'],
+            'categorias'        => ['label' => 'Categorias personalizadas', 'icon' => 'folder'],
+            'orcamentos'        => ['label' => 'Orçamentos ativos',   'icon' => 'wallet'],
+            'metas'             => ['label' => 'Metas financeiras',   'icon' => 'target'],
+            'historico_meses'   => ['label' => 'Meses de histórico',   'icon' => 'clock'],
+            'ia_perguntas_dia' => ['label' => 'Perguntas IA / dia',  'icon' => 'zap'],
+            'ia_insights_dia'  => ['label' => 'Insights IA / dia',    'icon' => 'lightbulb'],
+        ];
+
+        $pageTitle = 'Meu Plano';
+        $pageSubtitle = 'Gerencie seu plano e veja os recursos disponíveis para você.';
+        $activeMenu = 'meu_plano';
+        $showPeriodPicker = false;
+        $userName = $_SESSION['user_name'] ?? $user->name;
+        require basePath('meu_plano.php');
+    }
+
     public function updatePassword(): void
     {
         requireLogin();

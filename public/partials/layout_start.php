@@ -37,6 +37,7 @@ $menuItems = [
     'relatorios'  => ['href' => '/index.php?action=relatorios',  'label' => 'Relatórios',  'icon' => 'chart'],
     'sobre'       => ['href' => '/index.php?action=sobre',       'label' => 'Sobre',       'icon' => 'info'],
     'configuracoes' => ['href' => '/index.php?action=configuracoes', 'label' => 'Configurações', 'icon' => 'settings'],
+    'meu_plano' => ['href' => '/index.php?action=meu_plano', 'label' => 'Meu Plano', 'icon' => 'star'],
     'reportar' => ['href' => '/index.php?action=reportar', 'label' => 'Reportar problema', 'icon' => 'alert'],
     'meus_relatos' => ['href' => '/index.php?action=meus_relatos', 'label' => 'Meus relatos', 'icon' => 'info'],
     'feedback' => ['href' => '/index.php?action=feedback', 'label' => 'Enviar feedback', 'icon' => 'star'],
