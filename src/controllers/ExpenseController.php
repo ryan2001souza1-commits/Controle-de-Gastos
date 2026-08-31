@@ -8,6 +8,7 @@ class ExpenseController
     private ExpenseService $expenseService;
     private Budget $budgetModel;
     private BudgetService $budgetService;
+    private LancamentoLimitService $limitService;
 
     public function __construct(
         Expense $expenseModel,
@@ -15,7 +16,8 @@ class ExpenseController
         Category $categoryModel,
         ExpenseService $expenseService,
         Budget $budgetModel,
-        BudgetService $budgetService
+        BudgetService $budgetService,
+        LancamentoLimitService $limitService
     ) {
         $this->expenseModel = $expenseModel;
         $this->incomeModel  = $incomeModel;
@@ -23,6 +25,7 @@ class ExpenseController
         $this->expenseService = $expenseService;
         $this->budgetModel = $budgetModel;
         $this->budgetService = $budgetService;
+        $this->limitService = $limitService;
     }
 
     public function dashboard(): void
@@ -92,6 +95,12 @@ class ExpenseController
             $d = DateTime::createFromFormat('Y-m-d', $date);
             if (!$d || $d->format('Y-m-d') !== $date) {
                 header('Location: /index.php?error=invalid_data');
+                exit;
+            }
+
+            $check = $this->limitService->check($userId, $date);
+            if (!$check['allowed']) {
+                header('Location: /index.php?action=lancamentos&error=' . urlencode('limit:' . $check['message']));
                 exit;
             }
 

@@ -61,8 +61,15 @@ foreach (($expenseCategories ?? []) as $i => $c) {
     <?php if (isset($_GET['success'])): ?>
         <div class="alert alert-success" role="status"><?= render_icon('check',13) ?><span><?= htmlspecialchars($msgs[$_GET['success']] ?? 'Operação realizada com sucesso!') ?></span></div>
     <?php endif; ?>
-    <?php if (isset($_GET['error'])): ?>
-        <div class="alert alert-error" role="alert"><?= render_icon('info',13) ?><span><?= htmlspecialchars($errs[$_GET['error']] ?? 'Ocorreu um erro.') ?></span></div>
+    <?php if (isset($_GET['error'])):
+        $errKey = $_GET['error'];
+        $errMsg = $errs[$errKey] ?? null;
+        $isLimit = is_string($errKey) && str_starts_with($errKey, 'limit:');
+        if ($isLimit) {
+            $errMsg = urldecode(substr($errKey, 6));
+        }
+    ?>
+        <div class="alert alert-error" role="alert"><?= render_icon('info',13) ?><span><?= htmlspecialchars($errMsg ?? 'Ocorreu um erro.') ?></span></div>
     <?php endif; ?>
 
     <!-- 4 metric cards — fiel à ref -->

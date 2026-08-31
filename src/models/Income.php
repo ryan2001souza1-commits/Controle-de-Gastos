@@ -27,6 +27,19 @@ class Income
         return (int) $stmt->fetchColumn();
     }
 
+    public function countByUserMonth(int $userId, int $year, int $month): int
+    {
+        $startDate = sprintf('%d-%02d-01', $year, $month);
+        $endDate = date('Y-m-t', strtotime($startDate));
+        $stmt = $this->db->prepare(
+            "SELECT COUNT(*) FROM transacoes
+             WHERE usuario_id = ? AND tipo = 'receita'
+             AND data >= ? AND data <= ?"
+        );
+        $stmt->execute([$userId, $startDate, $endDate]);
+        return (int)$stmt->fetchColumn();
+    }
+
     public function findByUser(
         int $userId,
         ?string $startDate = null,
