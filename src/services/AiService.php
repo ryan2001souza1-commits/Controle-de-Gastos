@@ -242,7 +242,6 @@ PROMPT;
             $resp = curl_exec($ch);
             $err = curl_error($ch);
             $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
         }
 
         // Log seguro apenas em caso de erro ou para debug mínimo

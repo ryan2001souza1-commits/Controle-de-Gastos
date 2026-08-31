@@ -36,8 +36,15 @@ class AiController
 
     public function chat(): void
     {
+        // Produção: erros no log, nunca no output (evita HTML antes do JSON)
+        // Causa raiz (curl_close) já corrigida em AiService.php; isto é proteção adicional
+        ini_set('display_errors', '0');
+        ini_set('display_startup_errors', '0');
+        error_reporting(E_ALL);
         // Garante JSON limpo — remove qualquer saída anterior (BOM, warnings)
         if (ob_get_length()) ob_clean();
+        // Limpa qualquer buffer pendente para garantir headers
+        while (ob_get_level() > 0 && ob_get_length()) ob_clean();
         header('Content-Type: application/json; charset=utf-8');
         // Apenas POST JSON
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
