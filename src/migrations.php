@@ -91,9 +91,12 @@ function runMigrations(PDO $db): void
             id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
             nome VARCHAR(50) NOT NULL,
             slug VARCHAR(30) UNIQUE NOT NULL,
-            preco NUMERIC(10,2) NOT NULL DEFAULT 0,
+            preco NUMERIC(10,2) DEFAULT 0,
             descricao TEXT,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            status VARCHAR(20) NOT NULL DEFAULT 'ativo'
+                CHECK (status IN ('ativo','inativo')),
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )",
         "CREATE TABLE IF NOT EXISTS bug_reports (
             id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -187,11 +190,43 @@ function runMigrations(PDO $db): void
         $db->exec($sql);
     }
 
-    // Seed planos básicos (idempotente)
+    // Seed planos basicos (idempotente)
+    // preco NULL para PRO/PREMIUM = preco ainda nao definido (etapa de estrutura apenas)
+    // preco 0 para gratuito = plano gratuito
     try {
-        $db->exec("INSERT INTO planos (nome, slug, preco, descricao) VALUES ('Gratuito','gratuito',0,'Plano gratuito com recursos essenciais') ON CONFLICT (slug) DO NOTHING");
-        $db->exec("INSERT INTO planos (nome, slug, preco, descricao) VALUES ('Pro','pro',19.90,'Plano Pro com recursos avançados') ON CONFLICT (slug) DO NOTHING");
-        $db->exec("INSERT INTO planos (nome, slug, preco, descricao) VALUES ('Premium','premium',39.90,'Plano Premium completo') ON CONFLICT (slug) DO NOTHING");
+        $db->exec("INSERT INTO planos (nome, slug, preco, descricao, status)
+            VALUES ('Gratuito','gratuito',0,'Plano gratuito com recursos essenciais.','ativo')
+            ON CONFLICT (slug) DO NOTHING");
+        $db->exec("INSERT INTO planos (nome, slug, preco, descricao, status)
+            VALUES ('Pro','pro',NULL,'Plano Pro com recursos avancados.','ativo')
+            ON CONFLICT (slug) DO NOTHING");
+        $db->exec("INSERT INTO planos (nome, slug, preco, descricao, status)
+            VALUES ('Premium','premium',NULL,'Plano Premium completo.','ativo')
+            ON CONFLICT (slug) DO NOTHING");
+    } catch (Throwable $e) {}
+
+    // Migra colunas caso a tabela planos ja exista com estrutura antiga
+    try {
+        $db->exec("ALTER TABLE planos ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'ativo'");
+    } catch (Throwable $e) {}
+    try {
+        $db->exec("ALTER TABLE planos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP");
+    } catch (Throwable $e) {}
+    try {
+        // Torna preco nullable (permite NULL para planos sem preco definido)
+        $db->exec("ALTER TABLE planos ALTER COLUMN preco DROP NOT NULL");
+    } catch (Throwable $e) {}
+    // Garante que preco DEFAULT 0 existe (apos tornar nullable)
+    try {
+        $db->exec("ALTER TABLE planos ALTER COLUMN preco SET DEFAULT 0");
+    } catch (Throwable $e) {}
+
+    // Reseta preco de PRO/PREMIUM para NULL (preco ainda nao definido nesta etapa).
+    // Idempotente e seguro: se ja forem NULL, nao faz nada.
+    try {
+        $upd = $db->prepare("UPDATE planos SET preco = NULL, updated_at = NOW()
+            WHERE slug IN ('pro', 'premium') AND preco IS NOT NULL");
+        $upd->execute();
     } catch (Throwable $e) {}
 
     // Criação/promotion do admin via variáveis de ambiente (sem credencial no código)

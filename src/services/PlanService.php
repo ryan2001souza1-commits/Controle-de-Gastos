@@ -98,11 +98,31 @@ class PlanService
     }
 
     /**
-     * Retorna todos os planos disponiveis na tabela planos.
+     * Retorna todos os planos ativos disponiveis na tabela planos.
+     * (Para uso em qualquer exibicao publica de catalogo.)
      */
     public function getAvailablePlanos(): array
     {
-        $stmt = $this->db->query('SELECT id, nome, slug, preco, descricao, created_at FROM planos ORDER BY preco ASC');
+        $stmt = $this->db->query(
+            "SELECT id, nome, slug, preco, descricao, status, created_at
+             FROM planos
+             WHERE status = 'ativo'
+             ORDER BY COALESCE(preco, 0) ASC, nome ASC"
+        );
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Retorna todos os planos (ativos e inativos).
+     * Apenas para uso administrativo.
+     */
+    public function getAllPlanosAdmin(): array
+    {
+        $stmt = $this->db->query(
+            "SELECT id, nome, slug, preco, descricao, status, created_at, updated_at
+             FROM planos
+             ORDER BY COALESCE(preco, 0) ASC, nome ASC"
+        );
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
@@ -111,10 +131,23 @@ class PlanService
      */
     public function getPlanoBySlug(string $slug): ?array
     {
-        $stmt = $this->db->prepare('SELECT id, nome, slug, preco, descricao FROM planos WHERE slug = ?');
+        $stmt = $this->db->prepare(
+            'SELECT id, nome, slug, preco, descricao, status, created_at, updated_at
+             FROM planos WHERE slug = ?'
+        );
         $stmt->execute([$this->normalizeSlug($slug)]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
+    }
+
+    /**
+     * Retorna true se o plano existe no catalogo e esta ativo.
+     * (Para qualquer logica que dependa de o plano estar "disponivel".)
+     */
+    public function isPlanoDisponivel(string $slug): bool
+    {
+        $plano = $this->getPlanoBySlug($slug);
+        return $plano !== null && ($plano['status'] ?? '') === self::STATUS_ATIVO;
     }
 
     /**
@@ -133,13 +166,17 @@ class PlanService
     }
 
     /**
-     * Retorna o preco formatado de um plano. String vazia se free.
+     * Retorna o preco formatado de um plano.
+     * Null = "A definir" (plano existente mas preco ainda nao configurado).
+     * Zero = "Gratuito".
      */
     public function getPlanPrice(string $slug): string
     {
         $plano = $this->getPlanoBySlug($slug);
-        if ($plano === null) return '';
-        $preco = (float)($plano['preco'] ?? 0);
+        if ($plano === null) return 'A definir';
+        $preco = $plano['preco'] ?? null;
+        if ($preco === null) return 'A definir';
+        $preco = (float)$preco;
         if ($preco <= 0) return 'Gratuito';
         return 'R$ ' . number_format($preco, 2, ',', '.') . '/mês';
     }

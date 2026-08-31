@@ -45,16 +45,24 @@ include __DIR__ . '/../partials/admin_layout_start.php';
             $resources = $planResources[$slug] ?? [];
             $limits = $planLimits[$slug] ?? [];
             $planColor = ['gratuito' => 'green', 'pro' => 'amber', 'premium' => 'purple'][$slug] ?? 'neutral';
+            $planStatus = $p['status'] ?? 'ativo';
+            $statusColor = $planStatus === 'ativo' ? 'green' : 'neutral';
+            $preco = $p['preco'] ?? null;
         ?>
             <div class="admin-plan-card" style="border-top:3px solid var(--admin-<?= $slug === 'gratuito' ? 'primary' : ($slug === 'pro' ? 'accent' : 'info') ?>)">
                 <div class="admin-plan-header">
                     <span class="admin-plan-name"><?= htmlspecialchars($p['nome']) ?></span>
                     <span class="admin-badge admin-badge-<?= $planColor ?>"><?= htmlspecialchars($slug) ?></span>
+                    <span class="admin-badge admin-badge-<?= $statusColor ?>" style="margin-left:4px"><?= htmlspecialchars($planStatus) ?></span>
                 </div>
                 <div class="admin-plan-price">
-                    <?= ((float)$p['preco'] > 0) ? 'R$ ' . number_format((float)$p['preco'], 2, ',', '.') : 'Grátis' ?>
-                    <?php if ((float)$p['preco'] > 0): ?>
+                    <?php if ($preco === null): ?>
+                        A definir
+                    <?php elseif ((float)$preco > 0): ?>
+                        R$ <?= number_format((float)$preco, 2, ',', '.') ?>
                         <span class="admin-plan-period">/mês</span>
+                    <?php else: ?>
+                        Grátis
                     <?php endif; ?>
                 </div>
                 <div class="admin-plan-desc"><?= htmlspecialchars($p['descricao'] ?? '') ?></div>
