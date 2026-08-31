@@ -17,17 +17,36 @@ class AiService
         $this->db = $db;
     }
 
+    private static function env(string $key): string
+    {
+        $v = getenv($key);
+        if ($v !== false && $v !== '') return $v;
+        if (isset($_ENV[$key]) && $_ENV[$key] !== '') return (string)$_ENV[$key];
+        if (isset($_SERVER[$key]) && $_SERVER[$key] !== '') return (string)$_SERVER[$key];
+        return '';
+    }
+
+    private static function envClean(string $v): string
+    {
+        $v = trim($v);
+        // remove aspas envolventes se existirem (ex: "sk-..." ou 'sk-...')
+        if (strlen($v) >= 2 && (($v[0]==='"' && substr($v,-1)==='"') || ($v[0]==="'" && substr($v,-1)==="'"))) {
+            $v = substr($v, 1, -1);
+        }
+        return trim($v);
+    }
+
     public static function getConfig(): array
     {
-        $key = getenv('AI_API_KEY') ?: getenv('OPENROUTER_API_KEY') ?: getenv('OPENAI_API_KEY') ?: '';
-        $url = getenv('AI_API_URL') ?: getenv('OPENROUTER_API_URL') ?: 'https://openrouter.ai/api/v1/chat/completions';
-        $model = getenv('AI_MODEL') ?: getenv('OPENROUTER_MODEL') ?: 'qwen/qwen3-30b-a3b:free';
-        $maxTokens = (int)(getenv('AI_MAX_TOKENS') ?: 700);
-        $temperature = (float)(getenv('AI_TEMPERATURE') ?: 0.35);
+        $key = self::env('AI_API_KEY') ?: self::env('OPENROUTER_API_KEY') ?: self::env('OPENAI_API_KEY');
+        $url = self::env('AI_API_URL') ?: self::env('OPENROUTER_API_URL') ?: 'https://openrouter.ai/api/v1/chat/completions';
+        $model = self::env('AI_MODEL') ?: self::env('OPENROUTER_MODEL') ?: 'qwen/qwen3-30b-a3b:free';
+        $maxTokens = (int)(self::env('AI_MAX_TOKENS') ?: 700);
+        $temperature = (float)(self::env('AI_TEMPERATURE') ?: 0.35);
         return [
-            'key' => trim($key),
-            'url' => trim($url),
-            'model' => trim($model),
+            'key' => self::envClean($key),
+            'url' => self::envClean($url),
+            'model' => self::envClean($model),
             'max_tokens' => $maxTokens,
             'temperature' => $temperature,
         ];

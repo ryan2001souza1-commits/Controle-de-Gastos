@@ -1,6 +1,7 @@
 <?php
 
 // Carrega .env automaticamente quando executado via CLI ou sem Vercel (não sobrescreve env real)
+// Compatível com Vercel: em produção as Environment Variables já estão disponíveis via getenv/$_ENV
 if (getenv('VERCEL_ENV') === false) {
     $envFile = dirname(__DIR__, 2) . '/.env';
     if (is_file($envFile)) {
@@ -9,7 +10,16 @@ if (getenv('VERCEL_ENV') === false) {
             if ($line === '' || str_starts_with($line, '#') || !str_contains($line, '=')) continue;
             [$k, $v] = explode('=', $line, 2);
             $k = trim($k); $v = trim($v);
-            if (getenv($k) === false) { putenv("$k=$v"); $_ENV[$k] = $v; $_SERVER[$k] = $v; }
+            // remove aspas envolventes: AI_API_KEY="sk-..."
+            if (strlen($v) >= 2 && (($v[0] === '"' && substr($v,-1) === '"') || ($v[0] === "'" && substr($v,-1) === "'"))) {
+                $v = substr($v, 1, -1);
+            }
+            $v = trim($v);
+            // não sobrescreve se já existe em qualquer superglobal
+            $exists = getenv($k) !== false && getenv($k) !== '';
+            if (!$exists && isset($_ENV[$k]) && $_ENV[$k] !== '') $exists = true;
+            if (!$exists && isset($_SERVER[$k]) && $_SERVER[$k] !== '') $exists = true;
+            if (!$exists) { putenv("$k=$v"); $_ENV[$k] = $v; $_SERVER[$k] = $v; }
         }
     }
 }
