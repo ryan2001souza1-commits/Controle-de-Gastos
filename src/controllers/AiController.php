@@ -120,6 +120,18 @@ class AiController
                 echo json_encode(['success'=>true, 'response'=>$fallback, 'reply'=>$fallback, 'source'=>'fallback', 'warning'=>$msg], JSON_UNESCAPED_UNICODE);
                 return;
             }
+            // Timeout da IA gratuita — mensagem exata exigida
+            if (str_contains($msg, 'demorou mais que o esperado')) {
+                http_response_code(502);
+                echo json_encode(['success'=>false, 'error'=>'A IA gratuita demorou mais que o esperado. Tente novamente em alguns instantes.'], JSON_UNESCAPED_UNICODE);
+                return;
+            }
+            // Modelos gratuitos indisponíveis — custo zero
+            if (str_contains($msg, 'temporariamente indisponíveis')) {
+                http_response_code(502);
+                echo json_encode(['success'=>false, 'error'=>$msg], JSON_UNESCAPED_UNICODE);
+                return;
+            }
             $eLen = function_exists('mb_strlen') ? mb_strlen($msg) : strlen($msg);
             $friendly = 'Não foi possível obter uma resposta da IA. Tente novamente.';
             if ($eLen < 200 && $msg !== '') $friendly .= ' ('.$msg.')';

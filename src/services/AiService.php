@@ -227,7 +227,7 @@ PROMPT;
                 $headers[] = 'HTTP-Referer: ' . $ref;
                 $headers[] = 'X-Title: Controle de Gastos - Assistente IA';
             }
-            $ctx = stream_context_create(['http'=>['method'=>'POST','header'=>implode("\r\n",$headers)."\r\n",'content'=>$payload,'timeout'=>9,'ignore_errors'=>true]]);
+            $ctx = stream_context_create(['http'=>['method'=>'POST','header'=>implode("\r\n",$headers)."\r\n",'content'=>$payload,'timeout'=>60,'ignore_errors'=>true]]);
             $resp = @file_get_contents($cfg['url'], false, $ctx);
             $err = $resp===false ? (error_get_last()['message'] ?? 'conexão falhou') : '';
             $code = 0;
@@ -249,8 +249,8 @@ PROMPT;
                 CURLOPT_POST => true,
                 CURLOPT_POSTFIELDS => $payload,
                 CURLOPT_HTTPHEADER => $headersCurl,
-                CURLOPT_TIMEOUT => 9,
-                CURLOPT_CONNECTTIMEOUT => 5,
+                CURLOPT_TIMEOUT => 60,
+                CURLOPT_CONNECTTIMEOUT => 10,
             ]);
             $resp = curl_exec($ch);
             $err = curl_error($ch);
@@ -262,7 +262,14 @@ PROMPT;
             error_log('[ai] url='.$cfg['url'].' model='.$cfg['model'].' http='.$code.' err='.($err?substr($err,0,200):'none').' resp_len='.strlen($resp??''));
         }
 
-        if ($err) throw new RuntimeException('Falha de conexão com a IA: ' . $err);
+        if ($err) {
+            $isTimeout = stripos($err, 'timed out') !== false || stripos($err, 'timeout') !== false || stripos($err, 'timedout') !== false;
+            if ($isTimeout) {
+                error_log('[ai] timeout model='.$cfg['model'].' err='.substr($err,0,200).' time=60s');
+                throw new RuntimeException('A IA gratuita demorou mais que o esperado. Tente novamente em alguns instantes.');
+            }
+            throw new RuntimeException('Falha de conexão com a IA: ' . $err);
+        }
         if ($resp === false || $resp === '') throw new RuntimeException('Resposta vazia da IA.');
         $data = json_decode($resp, true);
         if (json_last_error() !== JSON_ERROR_NONE) {
