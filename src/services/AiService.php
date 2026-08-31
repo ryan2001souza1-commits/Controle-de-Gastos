@@ -112,6 +112,7 @@ REGRAS DE DADOS:
 - Para análise de CATEGORIAS: identifique categoria com maior gasto e menor gasto, calcule percentual de cada categoria sobre o total de despesas, destaque categorias com >=30% (merecem atenção) usando resumo_categorias.destaques, e aponte mudanças relevantes (>=15% vs mês anterior) usando resumo_categorias.variacoes. Use categorias e resumo_categorias do contexto.
 - Para análise de ORÇAMENTO: use orcamento.limite, orcamento.utilizado, orcamento.disponivel, orcamento.percentual_usado e orcamento.status. Diferencie valor utilizado (quanto já gastou) de disponível (limite - utilizado). Nunca use saldo bancário como orçamento. Para detalhes por categoria use orcamento.categorias[], orcamento.ultrapassaram[] e orcamento.em_risco[]. Calcule projeção se perguntarem "vou conseguir terminar o mês?": gasto médio diário = utilizado / dias_passados; projeção = média * dias_no_mês; compare com limite.
 - Para análise de METAS: use metas[].nome, metas[].alvo, metas[].atual, metas[].restante, metas[].percentual, metas[].status, metas[].meses_restantes e metas[].sugestao_mensal. Calcule quanto falta: restante = alvo - atual. Para "estou no caminho certo?", avalie status (concluida/boa_progresso/iniciante/sem_prazo) e compare % com o tempo decorrido do prazo. Para "quanto preciso guardar por mês?", use metas[].sugestao_mensal quando disponível (restante / meses_restantes). NUNCA invente prazos — se metas[].prazo for null, não mencione meses nem faça sugestão mensal, apenas calcule quanto falta no total. Use status e percentual para advice concreto.
+- Para análise de COMPARAÇÃO HISTÓRICA: use comparativo.receitas (anterior/atual/delta/percentual/sinal), comparativo.despesas, comparativo.saldo, comparativo.categorias[], comparativo.maiores_aumentos[], comparativo.maiores_reducoes[] e historico_mensal[]. Para variação %, use: (atual - anterior) / anterior * 100. Mostre sinal +/−. Para "gastei mais este mês?", compare despesa atual vs anterior usando comparativo.despesas. Para "como estou vs mês passado", mostre receitas/despesas/saldo com variação %. Para "como estão meus últimos meses", use historico_mensal e resuma tendência. Destaque mudanças relevantes: categorias com variação >=15% ou que apareceram/desapareceram. NUNCA invente dados — se historico_mensal estiver vazio ou só tiver 1 mês, diga que não há histórico suficiente.
 - Identifique padrões: maior categoria, aumento vs mês anterior, orçamento >80-100%, metas com baixo %.
 
 ESTILO:
@@ -178,6 +179,89 @@ PROMPT;
             $orc = $ctx['orcamento'];
             $orcLine = ($orc['limite']>0 ? " Orçamento: {$orc['percentual_usado']}% usado, {$fmt($orc['disponivel'])} livres." : " Sem orçamento definido.");
             return "Em {$ctx['periodo']} suas finanças estão assim: receitas **{$fmt($ctx['receitas'])}**, despesas **{$fmt($ctx['despesas'])}**, saldo **{$fmt($ctx['saldo'])}**.{$catLine}{$orcLine} Quer uma análise mais detalhada de alguma parte?";
+        }
+        // === ANÁLISE INTELIGENTE DE COMPARAÇÃO HISTÓRICA (deve vir antes de orcamento/categoria para pegar "comparando com o mês passado" etc.)
+        $isComparacao = preg_match('/\b(comparar|comparando|comparacao|comparação|em relacao|em relação|ultimos meses|últimos meses|meses anteriores|ultimo mes|último mes|ultimo mês|ultimo mes|mes passado|mês passado|ultimos 3|ultimos 6|evolucao|evolução|tendencia|tendência|ano a ano|aumento.*despesas|despesas.*aumentar|despesas.*aumentaram|gastei mais|receitas.*diminuir|receitas.*cair)\b/', $norm);
+        if ($isComparacao) {
+            $comp = $ctx['comparativo'] ?? null;
+            $hist = $ctx['historico_mensal'] ?? [];
+            // Verifica se há dados históricos
+            $temAnterior = $comp && ($comp['receitas']['anterior'] > 0 || $comp['despesas']['anterior'] > 0);
+            $temHistorico = count($hist) >= 2;
+            if (!$temAnterior && !$temHistorico) {
+                return "Não há dados suficientes para comparar com meses anteriores. Registre mais lançamentos para eu gerar comparações.";
+            }
+            // Helper para linha de variação
+            $linhaVar = function(array $v, string $nome) use ($fmt) {
+                $sinal = $v['sinal'] === 'aumento' ? '↗️ aumento' : ($v['sinal'] === 'reducao' ? '↘️ redução' : '➖ estável');
+                $sinalDelta = $v['delta'] > 0 ? '+' : '';
+                return "**$nome**\nMês anterior: {$fmt($v['anterior'])}\nMês atual: {$fmt($v['atual'])}\nVariação: {$sinalDelta}{$v['percentual']}% ({$sinal})";
+            };
+
+            // "Como estão minhas finanças nos últimos meses?" — usa histórico
+            if (preg_match('/ultimos meses|últimos meses|ultimos 3|ultimos 6|historico|histórico|evolucao|evolução|tendencia|tendência/', $norm)) {
+                if (empty($hist)) return "Ainda não há histórico suficiente para mostrar evolução dos últimos meses. Continue registrando seus lançamentos.";
+                $linhas = [];
+                foreach ($hist as $h) {
+                    $linhas[] = "- {$h['mes']}: receitas {$fmt($h['receitas'])}, despesas {$fmt($h['despesas'])}, saldo {$fmt($h['saldo'])}";
+                }
+                $txt = "Evolução dos últimos " . count($hist) . " meses:\n" . implode("\n", $linhas);
+                // tendência simples: compara médias
+                $n = count($hist);
+                if ($n >= 2) {
+                    $metade = (int)floor($n/2);
+                    $recRec = array_sum(array_column(array_slice($hist, -$metade), 'receitas')) / max(1, $metade);
+                    $recAnt = array_sum(array_column(array_slice($hist, 0, $n-$metade), 'receitas')) / max(1, $n-$metade);
+                    $despRec = array_sum(array_column(array_slice($hist, -$metade), 'despesas')) / max(1, $metade);
+                    $despAnt = array_sum(array_column(array_slice($hist, 0, $n-$metade), 'despesas')) / max(1, $n-$metade);
+                    $txt .= "\n\nTendência (comparando metade mais recente vs metade mais antiga):";
+                    $txt .= "\n• Receitas: ".($recRec > $recAnt ? 'tendência de alta' : ($recRec < $recAnt ? 'tendência de queda' : 'estável'))." (média ".($n-$metade>0?$fmt($recAnt).' → ':'').$fmt($recRec).").";
+                    $txt .= "\n• Despesas: ".($despRec > $despAnt ? 'tendência de alta' : ($despRec < $despAnt ? 'tendência de queda' : 'estável'))." (média ".($n-$metade>0?$fmt($despAnt).' → ':'').$fmt($despRec).").";
+                }
+                return $txt;
+            }
+            // "Gastei mais este mês?" / "Minhas despesas aumentaram?" — variação de despesa
+            if (preg_match('/gastei mais|despesas.*aument|despesa.*aumento|minhas despesas|subiu.*despesa|aumentou.*despesa/', $norm)) {
+                $d = $comp['despesas'];
+                $linha = $linhaVar($d, 'Despesas');
+                if ($d['sinal'] === 'aumento' && $d['percentual'] >= 5) {
+                    $resp = $linha."\n\n⚠️ Sim, as despesas **aumentaram ".abs($d['percentual'])."%** (R$ ".number_format(abs($d['delta']), 2, ',', '.')." a mais).";
+                    if (!empty($comp['maiores_aumentos'])) {
+                        $resp .= " Principais responsáveis: ".implode(', ', array_map(fn($c)=>"{$c['nome']} (+{$c['percentual']}%, {$fmt($c['delta'])})", array_slice($comp['maiores_aumentos'],0,2))).".";
+                    }
+                } elseif ($d['sinal'] === 'reducao' && abs($d['percentual']) >= 5) {
+                    $resp = $linha."\n\n✅ Não — as despesas **diminuíram ".abs($d['percentual'])."%** (R$ ".number_format(abs($d['delta']), 2, ',', '.')." a menos).";
+                } else {
+                    $resp = $linha."\n\nAs despesas estão estáveis (variação de {$d['percentual']}%) em relação ao mês anterior.";
+                }
+                return $resp;
+            }
+            // "Como estou em relação ao mês passado?" — geral com receita/despesa/saldo
+            if (preg_match('/em relacao|em relação|comparar|comparando|comparacao|comparação|mes passado|mês passado|ultimo mes|último mes|ultimo mês/', $norm) || $isComparacao) {
+                $r = $comp['receitas'];
+                $d = $comp['despesas'];
+                $s = $comp['saldo'];
+                $linhas = [];
+                $linhas[] = $linhaVar($r, 'Receitas');
+                $linhas[] = $linhaVar($d, 'Despesas');
+                $linhas[] = $linhaVar($s, 'Saldo');
+                $temPrev = ($ctx['comparativo_anterior']['receitas'] > 0 || $ctx['comparativo_anterior']['despesas'] > 0);
+                $txt = "Comparação com o mês anterior (" . ($temPrev ? 'com dados' : 'sem dados completos') . "):\n\n" . implode("\n\n", $linhas);
+                // Destacar mudanças relevantes
+                $dest = [];
+                if (abs($d['percentual']) >= 15) $dest[] = "Despesas " . ($d['sinal']==='aumento'?'subiram':'caíram') . " ".abs($d['percentual'])."%";
+                if (abs($r['percentual']) >= 15) $dest[] = "Receitas " . ($r['sinal']==='aumento'?'subiram':'caíram') . " ".abs($r['percentual'])."%";
+                if (!empty($comp['maiores_aumentos'])) {
+                    $top = $comp['maiores_aumentos'][0];
+                    if (abs($top['percentual']) >= 15) $dest[] = "{$top['nome']} {$top['sinal']} ".abs($top['percentual'])."% ({$fmt($top['delta'])})";
+                }
+                if (!empty($comp['maiores_reducoes'])) {
+                    $top = $comp['maiores_reducoes'][0];
+                    if (abs($top['percentual']) >= 15) $dest[] = "{$top['nome']} {$top['sinal']} ".abs($top['percentual'])."% ({$fmt($top['delta'])})";
+                }
+                if (!empty($dest)) $txt .= "\n\n📌 Destaques: " . implode('; ', $dest) . ".";
+                return $txt;
+            }
         }
         // === ANÁLISE INTELIGENTE DE ORÇAMENTO (deve vir antes de categoria/despesas para pegar "gastando demais", etc.)
         if (preg_match('/\b(orcamento|orçamento|posso gastar|ainda posso|disponivel|disponível|gastando demais|dentro do orcamento|terminar o mes)\b/', $norm)) {

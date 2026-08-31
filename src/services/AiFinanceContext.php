@@ -48,6 +48,9 @@ class AiFinanceContext
         // Resumo de categorias para análise inteligente
         $resumoCategorias = $this->resumoCategorias($categorias, $categoriasAnterior);
 
+        // Comparativo completo entre mês atual e anterior (variação % + top mudanças)
+        $comparativo = $this->comparativoCompleto($receitas, $despesas, $prevReceitas, $prevDespesas, $categorias, $categoriasAnterior, $orcamento);
+
         return [
             'periodo' => $label,
             'periodo_extenso' => $now->format('F \d\e Y'),
@@ -60,6 +63,7 @@ class AiFinanceContext
             'resumo_categorias' => $resumoCategorias,
             'metas' => $metas,
             'historico_mensal' => $historico,
+            'comparativo' => $comparativo,
             'comparativo_anterior' => [
                 'receitas' => round($prevReceitas, 2),
                 'despesas' => round($prevDespesas, 2),
@@ -254,6 +258,69 @@ class AiFinanceContext
             'menor'=>$menor,
             'destaques'=>$destaques,
             'variacoes'=>array_slice($variacoes,0,3),
+        ];
+    }
+
+    private function variacao(float $atual, float $anterior): array
+    {
+        $delta = round($atual - $anterior, 2);
+        if ($anterior == 0 && $atual == 0) {
+            $pct = 0; $sinal = 'estavel';
+        } elseif ($anterior == 0) {
+            $pct = 100; $sinal = 'aumento';
+        } else {
+            $pct = round(($delta / abs($anterior)) * 100, 1);
+            $sinal = $delta > 0 ? 'aumento' : ($delta < 0 ? 'reducao' : 'estavel');
+        }
+        return ['anterior'=>round($anterior,2), 'atual'=>round($atual,2), 'delta'=>$delta, 'percentual'=>$pct, 'sinal'=>$sinal];
+    }
+
+    private function comparativoCompleto(float $receitas, float $despesas, float $prevReceitas, float $prevDespesas, array $categorias, array $categoriasAnterior, array $orcamento): array
+    {
+        // Variações principais
+        $varReceitas = $this->variacao($receitas, $prevReceitas);
+        $varDespesas = $this->variacao($despesas, $prevDespesas);
+        $varSaldo = $this->variacao($receitas - $despesas, $prevReceitas - $prevDespesas);
+
+        // Variação por categoria
+        $mapAnt = [];
+        foreach ($categoriasAnterior as $c) $mapAnt[strtolower($c['nome'])] = (float)$c['valor'];
+        $varCat = [];
+        foreach ($categorias as $c) {
+            $ant = $mapAnt[strtolower($c['nome'])] ?? 0;
+            $v = $this->variacao((float)$c['valor'], $ant);
+            $v['nome'] = $c['nome'];
+            $varCat[] = $v;
+        }
+        // Ordena por maior variação absoluta em %
+        usort($varCat, fn($a,$b)=>abs($b['percentual']) <=> abs($a['percentual']));
+
+        // Maior aumento / maior redução
+        $aumentos = array_values(array_filter($varCat, fn($v)=>$v['sinal']==='aumento' && $v['anterior']>0));
+        $reducoes = array_values(array_filter($varCat, fn($v)=>$v['sinal']==='reducao'));
+        usort($aumentos, fn($a,$b)=>abs($b['percentual']) <=> abs($a['percentual']));
+        usort($reducoes, fn($a,$b)=>abs($b['percentual']) <=> abs($a['percentual']));
+
+        // Variação do orçamento
+        $orc = ['tem_anterior' => false];
+        if (!empty($orcamento['limite'])) {
+            $orc = [
+                'utilizado' => $orcamento['utilizado'],
+                'limite' => $orcamento['limite'],
+                'percentual' => $orcamento['percentual_usado'],
+                'status' => $orcamento['status'] ?? null,
+                'observacao' => 'compare com limite orçado do mês anterior para avaliar evolução',
+            ];
+        }
+
+        return [
+            'receitas' => $varReceitas,
+            'despesas' => $varDespesas,
+            'saldo' => $varSaldo,
+            'categorias' => $varCat,
+            'maiores_aumentos' => array_slice($aumentos, 0, 3),
+            'maiores_reducoes' => array_slice($reducoes, 0, 3),
+            'orcamento' => $orc,
         ];
     }
 
