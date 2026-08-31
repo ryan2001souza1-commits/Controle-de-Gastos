@@ -14,6 +14,72 @@ class AiFinanceContext
      */
     public function build(int $userId): array
     {
+        return $this->buildInternal($userId, 6);
+    }
+
+    /**
+     * Contexto otimizado por intenção. Reduz drasticamente os tokens enviados
+     * à IA, mantendo só os blocos relevantes para a pergunta.
+     * Intents suportados: orcamento, metas, categorias, comparacao, geral.
+     */
+    public function buildForIntent(int $userId, string $intent): array
+    {
+        $full = $this->buildInternal($userId, 3);
+        switch ($intent) {
+            case 'orcamento':
+                return [
+                    'periodo' => $full['periodo'],
+                    'receitas' => $full['receitas'],
+                    'despesas' => $full['despesas'],
+                    'saldo' => $full['saldo'],
+                    'orcamento' => $full['orcamento'],
+                ];
+            case 'metas':
+                return [
+                    'periodo' => $full['periodo'],
+                    'metas' => $full['metas'],
+                ];
+            case 'categorias':
+                return [
+                    'periodo' => $full['periodo'],
+                    'receitas' => $full['receitas'],
+                    'despesas' => $full['despesas'],
+                    'saldo' => $full['saldo'],
+                    'categorias' => array_slice($full['categorias'], 0, 8),
+                    'resumo_categorias' => $full['resumo_categorias'],
+                ];
+            case 'comparacao':
+                return [
+                    'periodo' => $full['periodo'],
+                    'comparativo' => $full['comparativo'],
+                    'historico_mensal' => $full['historico_mensal'],
+                ];
+            case 'saldo':
+                return [
+                    'periodo' => $full['periodo'],
+                    'receitas' => $full['receitas'],
+                    'despesas' => $full['despesas'],
+                    'saldo' => $full['saldo'],
+                ];
+            case 'geral':
+            default:
+                return [
+                    'periodo' => $full['periodo'],
+                    'receitas' => $full['receitas'],
+                    'despesas' => $full['despesas'],
+                    'saldo' => $full['saldo'],
+                    'orcamento' => $this->trimOrcamento($full['orcamento']),
+                    'categorias' => array_slice($full['categorias'], 0, 5),
+                    'resumo_categorias' => $full['resumo_categorias'],
+                    'metas' => $full['metas'],
+                    'historico_mensal' => $full['historico_mensal'],
+                    'comparativo' => $this->trimComparativo($full['comparativo']),
+                ];
+        }
+    }
+
+    private function buildInternal(int $userId, int $historicoMeses): array
+    {
         $now = new DateTimeImmutable('now');
         $start = $now->modify('first day of this month')->format('Y-m-d');
         $end   = $now->modify('last day of this month')->format('Y-m-d');
@@ -42,8 +108,8 @@ class AiFinanceContext
         // Metas (máx 3)
         $metas = $this->metasResumo($userId, 3);
 
-        // Histórico mensal (últimos 6 meses)
-        $historico = $this->historicoMensal($userId, 6);
+        // Histórico mensal
+        $historico = $this->historicoMensal($userId, $historicoMeses);
 
         // Resumo de categorias para análise inteligente
         $resumoCategorias = $this->resumoCategorias($categorias, $categoriasAnterior);
@@ -69,6 +135,27 @@ class AiFinanceContext
                 'despesas' => round($prevDespesas, 2),
                 'saldo' => round($prevReceitas - $prevDespesas, 2),
             ],
+        ];
+    }
+
+    private function trimOrcamento(array $o): array
+    {
+        // Mantém só campos essenciais para análise geral
+        return [
+            'limite' => $o['limite'] ?? 0,
+            'utilizado' => $o['utilizado'] ?? 0,
+            'disponivel' => $o['disponivel'] ?? 0,
+            'percentual_usado' => $o['percentual_usado'] ?? 0,
+            'status' => $o['status'] ?? 'sem_orcamento',
+        ];
+    }
+
+    private function trimComparativo(array $c): array
+    {
+        return [
+            'receitas' => $c['receitas'] ?? null,
+            'despesas' => $c['despesas'] ?? null,
+            'saldo' => $c['saldo'] ?? null,
         ];
     }
 

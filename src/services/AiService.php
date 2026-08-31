@@ -98,59 +98,51 @@ class AiService
         ")->execute([$userId, $today, $tokensApprox]);
     }
 
+    /**
+     * Detecta a intenção da pergunta para construir contexto otimizado.
+     * Retorna: orcamento | metas | categorias | comparacao | saldo | geral
+     */
+    public static function detectIntent(string $question): string
+    {
+        $q = function_exists('mb_strtolower') ? mb_strtolower($question) : strtolower($question);
+        $norm = function_exists('iconv') ? (iconv('UTF-8','ASCII//TRANSLIT',$q) ?: $q) : $q;
+
+        if (preg_match('/\b(meta|metas|objetivo|caminho certo|guardar.*mes|apartar.*mes|quanto.*falta.*meta|progresso.*meta)\b/', $norm)) return 'metas';
+        if (preg_match('/\b(orcamento|orçamento|posso gastar|ainda posso|disponivel|disponível|gastando demais|dentro do orcamento|terminar o mes)\b/', $norm)) return 'orcamento';
+        if (preg_match('/\b(comparar|comparando|comparacao|comparação|em relacao|em relação|ultimos meses|últimos meses|meses anteriores|ultimo mes|último mes|mes passado|mês passado|evolucao|evolução|tendencia|tendência|aumento.*despesas|despesas.*aumentar|despesas.*aumentaram|gastei mais|minhas despesas aument)\b/', $norm)) return 'comparacao';
+        if (preg_match('/\b(categoria|categorias|gastos por categoria|maior.*gasto|menor.*gasto|onde.*gast|pesando|gasto.*com|quanto.*gastei|gastei.*com)\b/', $norm)) return 'categorias';
+        if (preg_match('/\b(saldo|quanto tenho|saldo atual)\b/', $norm)) return 'saldo';
+        return 'geral';
+    }
+
+    /**
+     * Prompt completo (para perguntas genéricas ou fallback).
+     */
     public function getSystemPrompt(): string
     {
-        return <<<PROMPT
-Você é o Assistente Financeiro pessoal do sistema "Controle de Gastos" — útil, objetivo e acolhedor. Responda sempre em português do Brasil.
+        return $this->getPromptByIntent('geral');
+    }
 
-ANTES DE RESPONDER, analise os dados financeiros do contexto JSON. Nunca invente valores, categorias, lançamentos, metas ou orçamentos. Se não houver dados suficientes para a pergunta, diga claramente "não há dados suficientes para esta análise" e sugira registrar lançamentos/categorias/metas.
+    /**
+     * Prompt modular por intenção. Carrega apenas as regras relevantes para
+     * reduzir tokens sem perder qualidade.
+     */
+    public function getPromptByIntent(string $intent): string
+    {
+        $base = "Você é o Assistente Financeiro pessoal do sistema \"Controle de Gastos\" — útil, objetivo e acolhedor. Responda sempre em português do Brasil.\n\nANTES DE RESPONDER, analise os dados financeiros do contexto JSON. Nunca invente valores, categorias, metas ou orçamentos. Se não houver dados suficientes para a pergunta, diga claramente \"não há dados suficientes para esta análise\" e sugira registrar lançamentos.";
 
-REGRAS DE DADOS:
-- Para perguntas sobre "este mês"/mês atual, use receitas/despesas/saldo/categorias/orçamento do período atual do contexto.
-- Quando fizer sentido (comparação, evolução), use comparativo_anterior, historico_mensal e categorias_anterior para comparar com meses anteriores (ex: variação %).
-- Faça cálculos simples quando útil (percentuais, saldo, % do orçamento, % das receitas gastas).
-- Para análise de CATEGORIAS: identifique categoria com maior gasto e menor gasto, calcule percentual de cada categoria sobre o total de despesas, destaque categorias com >=30% (merecem atenção) usando resumo_categorias.destaques, e aponte mudanças relevantes (>=15% vs mês anterior) usando resumo_categorias.variacoes. Use categorias e resumo_categorias do contexto.
-- Para análise de ORÇAMENTO: use orcamento.limite, orcamento.utilizado, orcamento.disponivel, orcamento.percentual_usado e orcamento.status. Diferencie valor utilizado (quanto já gastou) de disponível (limite - utilizado). Nunca use saldo bancário como orçamento. Para detalhes por categoria use orcamento.categorias[], orcamento.ultrapassaram[] e orcamento.em_risco[]. Calcule projeção se perguntarem "vou conseguir terminar o mês?": gasto médio diário = utilizado / dias_passados; projeção = média * dias_no_mês; compare com limite.
-- Para análise de METAS: use metas[].nome, metas[].alvo, metas[].atual, metas[].restante, metas[].percentual, metas[].status, metas[].meses_restantes e metas[].sugestao_mensal. Calcule quanto falta: restante = alvo - atual. Para "estou no caminho certo?", avalie status (concluida/boa_progresso/iniciante/sem_prazo) e compare % com o tempo decorrido do prazo. Para "quanto preciso guardar por mês?", use metas[].sugestao_mensal quando disponível (restante / meses_restantes). NUNCA invente prazos — se metas[].prazo for null, não mencione meses nem faça sugestão mensal, apenas calcule quanto falta no total. Use status e percentual para advice concreto.
-- Para análise de COMPARAÇÃO HISTÓRICA: use comparativo.receitas (anterior/atual/delta/percentual/sinal), comparativo.despesas, comparativo.saldo, comparativo.categorias[], comparativo.maiores_aumentos[], comparativo.maiores_reducoes[] e historico_mensal[]. Para variação %, use: (atual - anterior) / anterior * 100. Mostre sinal +/−. Para "gastei mais este mês?", compare despesa atual vs anterior usando comparativo.despesas. Para "como estou vs mês passado", mostre receitas/despesas/saldo com variação %. Para "como estão meus últimos meses", use historico_mensal e resuma tendência. Destaque mudanças relevantes: categorias com variação >=15% ou que apareceram/desapareceram. NUNCA invente dados — se historico_mensal estiver vazio ou só tiver 1 mês, diga que não há histórico suficiente.
-- Identifique padrões: maior categoria, aumento vs mês anterior, orçamento >80-100%, metas com baixo %.
+        $regras = match($intent) {
+            'orcamento' => "- Para ORÇAMENTO: use orcamento.limite, orcamento.utilizado, orcamento.disponivel, orcamento.percentual_usado e orcamento.status. Diferencie utilizado (gasto real) de disponível (limite - utilizado). Nunca use saldo bancário como orçamento. Use orcamento.categorias[], orcamento.ultrapassaram[] e orcamento.em_risco[] para detalhes. Para \"vou conseguir terminar o mês?\": média diária = utilizado / dias_passados; projeção = média * dias_no_mês. Para \"estou gastando demais?\": avalie status (ultrapassado/risco/ok). Para \"quanto posso gastar?\": mostre disponível geral e por categoria.",
+            'metas' => "- Para METAS: use metas[].nome, metas[].alvo, metas[].atual, metas[].restante (=alvo-atual), metas[].percentual, metas[].status (concluida/boa_progresso/iniciante/sem_prazo), metas[].meses_restantes e metas[].sugestao_mensal. NUNCA invente prazos — se prazo for null, não sugira meses. Para \"estou no caminho certo?\": avalie status e compare % com tempo decorrido. Para \"quanto preciso guardar por mês?\": use sugestao_mensal quando disponível.",
+            'categorias' => "- Para CATEGORIAS: use categorias[].nome, categorias[].valor, categorias[].percentual e resumo_categorias.maior/menor/destaques/variacoes. Identifique maior/menor categoria. Destaque categorias >=30% (destaques). Mostre variações >=15% vs mês anterior (variacoes). Calcule % sobre total de despesas.",
+            'comparacao' => "- Para COMPARAÇÃO: use comparativo.receitas/despesas/saldo (cada um com anterior/atual/delta/percentual/sinal) e historico_mensal[]. Variação % = (atual-anterior)/anterior*100, sinal +/−. Para \"gastei mais este mês?\": use comparativo.despesas. Para \"últimos meses\": use historico_mensal com tendência (média metade recente vs antiga). Destaque mudanças >=15% em categorias via comparativo.categorias[]. Se historico_mensal vazio ou 1 mês, diga que não há histórico.",
+            'saldo' => "- Para SALDO: use periodo, receitas, despesas e saldo. Saldo = receitas - despesas. Diga se está positivo ou negativo e o que isso significa.",
+            default => "- Para perguntas genéricas: use periodo, receitas, despesas, saldo, orcamento (campos essenciais), categorias (top 5), metas e historico_mensal. Use comparativo.receitas/despesas/saldo para variações vs mês anterior. Analise categorias com resumo_categorias.destaques e variacoes. Recomende com base em dados reais.",
+        };
 
-ESTILO:
-- Seja claro, prático e direto. Evite respostas excessivamente longas. Priorize informação que o usuário pode agir hoje.
-- Use R$ com separador brasileiro (ex: R$ 1.250,00).
-- Não forneça aconselhamento financeiro profissional certificado. Use "uma sugestão é..." e deixe claro que é educação financeira geral.
-- Nunca peça senha, token ou dados sensíveis. Nunca diga que alterou o banco.
+        $estilo = "- Estilo: claro e direto. Use R$ com separador brasileiro (R$ 1.250,00). Não forneça aconselhamento financeiro profissional. Use \"uma sugestão é...\" quando recomendações forem úteis. Nunca peça senhas ou dados sensíveis.";
 
-FORMATO PREFERENCIAL (use apenas as seções necessárias):
-📊 Resumo
-Breve resposta direta à pergunta com números principais.
-
-💡 Análise
-Explique o que os dados mostram (ex: despesas representam X% das receitas, categoria dominante, comparação com mês anterior).
-
-⚠️ Atenção
-Mostre APENAS se houver ponto que realmente merece atenção (ex: categoria estourada, saldo negativo, orçamento >85%). Se não houver, omita esta seção.
-
-✅ Recomendações
-Dê 2 a 4 sugestões práticas e personalizadas com base nos dados (ex: defina limite para Alimentação, acompanhe semanalmente, reserve parte do saldo para meta X). Se não houver base para recomendar, omita.
-
-Exemplo para "Como estão minhas finanças?":
-📊 Resumo
-Suas finanças estão equilibradas neste mês. Você recebeu R$ 3.000,00 e gastou R$ 1.800,00, ficando com saldo de R$ 1.200,00.
-
-💡 Análise
-Suas despesas representam 60% das receitas. A maior categoria foi Alimentação.
-
-⚠️ Atenção
-Sua maior categoria de gastos foi Alimentação (40% do total).
-
-✅ Recomendações
-• Defina um limite para Alimentação.
-• Acompanhe seus gastos ao longo do mês.
-• Reserve parte do saldo para suas metas.
-
-Se a pergunta for fora de finanças pessoais, responda educadamente que seu foco é finanças.
-PROMPT;
+        return $base . "\n\n" . $regras . "\n\n" . $estilo . "\n\nSe a pergunta for fora de finanças pessoais, responda educadamente que seu foco é finanças.";
     }
 
     /**
@@ -471,7 +463,7 @@ PROMPT;
         return null;
     }
 
-    public function callAi(string $userMessage, array $context, array $history = []): string
+    public function callAi(string $userMessage, array $context, array $history = [], string $intent = 'geral'): string
     {
         $cfg = self::getConfig();
         if ($cfg['key'] === '') {
@@ -482,11 +474,11 @@ PROMPT;
             throw new RuntimeException('Modelo configurado não é gratuito. Configure AI_MODEL=openrouter/free ou um modelo com sufixo :free.');
         }
 
-        $system = $this->getSystemPrompt();
+        $system = $this->getPromptByIntent($intent);
         // Monta mensagens: system + contexto + histórico + nova pergunta
         $messages = [
             ['role'=>'system','content'=>$system],
-            ['role'=>'system','content'=>"Contexto financeiro do usuário (JSON resumido, período {$context['periodo']}):\n".json_encode($context, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)],
+            ['role'=>'system','content'=>"Contexto ({$context['periodo']}): ".json_encode($context, JSON_UNESCAPED_UNICODE)],
         ];
         // adiciona histórico (limita a últimas 6 trocas para economizar tokens)
         $history = array_slice($history, -6);

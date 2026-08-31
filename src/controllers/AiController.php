@@ -84,9 +84,12 @@ class AiController
             return;
         }
 
-        // Monta contexto financeiro resumido (sempre isolado por user_id da sessão)
+        // Detecta intenção para reduzir tokens do contexto enviado à IA
+        $intent = AiService::detectIntent($message);
+
+        // Monta contexto financeiro otimizado (sempre isolado por user_id da sessão)
         try {
-            $context = $this->ctxBuilder->build($userId);
+            $context = $this->ctxBuilder->buildForIntent($userId, $intent);
         } catch (Throwable $e) {
             error_log('[ai context] '.$e->getMessage());
             http_response_code(500);
@@ -106,7 +109,7 @@ class AiController
 
         // Chama IA
         try {
-            $reply = $this->ai->callAi($message, $context, $history);
+            $reply = $this->ai->callAi($message, $context, $history, $intent);
             try { $mLen = function_exists('mb_strlen') ? mb_strlen($message) : strlen($message); $rLen = function_exists('mb_strlen') ? mb_strlen($reply) : strlen($reply); $this->ai->incrementUsage($userId, (int)(($mLen+$rLen)/4)); } catch (Throwable $e) { error_log('[ai] increment ai failed: '.$e->getMessage()); }
             $out = json_encode(['success'=>true, 'response'=>$reply, 'reply'=>$reply, 'source'=>'ai', 'limit'=>$this->ai->checkRateLimit($userId, $user->plano ?? 'gratuito')], JSON_UNESCAPED_UNICODE);
             if ($out === false) { error_log('[ai] json_encode ai failed: '.json_last_error_msg()); $out = json_encode(['success'=>true, 'response'=>$reply, 'reply'=>$reply, 'source'=>'ai'], JSON_UNESCAPED_UNICODE); }
