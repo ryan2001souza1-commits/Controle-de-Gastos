@@ -9,6 +9,7 @@ class ExpenseController
     private Budget $budgetModel;
     private BudgetService $budgetService;
     private LancamentoLimitService $limitService;
+    private CategoriaLimitService $categoriaLimitService;
 
     public function __construct(
         Expense $expenseModel,
@@ -17,7 +18,8 @@ class ExpenseController
         ExpenseService $expenseService,
         Budget $budgetModel,
         BudgetService $budgetService,
-        LancamentoLimitService $limitService
+        LancamentoLimitService $limitService,
+        CategoriaLimitService $categoriaLimitService
     ) {
         $this->expenseModel = $expenseModel;
         $this->incomeModel  = $incomeModel;
@@ -26,6 +28,7 @@ class ExpenseController
         $this->budgetModel = $budgetModel;
         $this->budgetService = $budgetService;
         $this->limitService = $limitService;
+        $this->categoriaLimitService = $categoriaLimitService;
     }
 
     public function dashboard(): void
@@ -156,6 +159,12 @@ class ExpenseController
 
             if ($this->categoryModel->countByName($name, $type, $userId) > 0) {
                 header('Location: /index.php?action=categorias&error=duplicate_category');
+                exit;
+            }
+
+            $check = $this->categoriaLimitService->check($userId);
+            if (!$check['allowed']) {
+                header('Location: /index.php?action=categorias&error=' . urlencode('limit:' . $check['message']));
                 exit;
             }
 

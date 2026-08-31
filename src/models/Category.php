@@ -127,6 +127,15 @@ class Category
         return (int) $stmt->fetchColumn();
     }
 
+    public function countUserCategories(int $userId): int
+    {
+        $stmt = $this->db->prepare(
+            'SELECT COUNT(*) FROM categorias WHERE usuario_id = ?'
+        );
+        $stmt->execute([$userId]);
+        return (int)$stmt->fetchColumn();
+    }
+
     public function countByName(
         string $name,
         string $type,
