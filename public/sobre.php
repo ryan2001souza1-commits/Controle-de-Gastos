@@ -21,7 +21,7 @@ $userInitials = $userInitials ?? strtoupper(substr($userName, 0, 1));
         <span class="sobre-media-caption">A Equipe Fundadora</span>
       </div>
       <p class="sobre-text">
-        Fundada em 2021 por entusiastas de finanças e tecnologia, a nossa plataforma nasceu de uma necessidade real de simplificar a gestão financeira pessoal. Começamos com uma pequena planilha que evoluiu para esta solução completa, focada em <strong>empoderar as pessoas através da educação financeira</strong>.
+        Fundada em 2026 por entusiastas de finanças e tecnologia, a nossa plataforma nasceu de uma necessidade real de simplificar a gestão financeira pessoal. Começamos com uma pequena planilha que evoluiu para esta solução completa, focada em <strong>empoderar as pessoas através da educação financeira</strong>.
       </p>
       <div class="sobre-stats" aria-hidden="true">
         <div class="sobre-stat"><div class="sobre-stat-num">2021</div><div class="sobre-stat-label">Fundação</div></div>
