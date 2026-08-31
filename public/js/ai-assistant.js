@@ -119,11 +119,10 @@
       const reply = replyRaw;
       addMessage('assistant', reply, data.source==='deterministic' ? 'Resposta rápida' : 'IA');
       history.push({role:'assistant', content: reply});
-      if (data.limit) {
-        remainingEl.textContent = `${data.limit.remaining} mensagens restantes hoje`;
-        if (data.limit.remaining===0) status.textContent='Limite diário atingido';
+      if (typeof data.remaining === 'number') {
+        remainingEl.textContent = `${data.remaining} mensagens restantes hoje`;
+        if (data.remaining === 0) status.textContent='Limite diário atingido';
       }
-      if (data.warning) addError(data.warning);
       status.textContent='';
     } catch (err) {
       console.error('[ai]', err);
