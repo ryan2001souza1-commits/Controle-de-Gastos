@@ -56,6 +56,26 @@ class Budget
         return $row ?: null;
     }
 
+    public function countByUser(int $userId): int
+    {
+        $stmt = $this->db->prepare(
+            'SELECT COUNT(*) FROM orcamentos WHERE usuario_id = ?'
+        );
+        $stmt->execute([$userId]);
+        return (int)$stmt->fetchColumn();
+    }
+
+    public function exists(int $userId, int $categoryId, int $year, int $month): bool
+    {
+        $stmt = $this->db->prepare(
+            'SELECT 1 FROM orcamentos
+             WHERE usuario_id = ? AND categoria_id = ? AND ano = ? AND mes = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$userId, $categoryId, $year, $month]);
+        return (bool)$stmt->fetchColumn();
+    }
+
     public function upsert(int $userId, int $categoryId, int $year, int $month, float $limitAmount): bool
     {
         $stmt = $this->db->prepare('

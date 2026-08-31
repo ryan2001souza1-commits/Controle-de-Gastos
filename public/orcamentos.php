@@ -10,7 +10,12 @@ $utilPct=$totals['percentage']??0;
 <!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Orçamentos - Controle de Gastos</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"><link rel="stylesheet" href="/css/style.css?v=<?= @filemtime(__DIR__ . '/css/style.css') ?>"></head><body><div class="app-wrapper">
 <?php include __DIR__ . '/partials/layout_start.php'; ?>
 <?php if(isset($_GET['success'])&&isset($successMsgs[$_GET['success']])): ?><div class="alert alert-success" role="status"><?= render_icon('check',13) ?><span><?= htmlspecialchars($successMsgs[$_GET['success']]) ?></span></div><?php endif; ?>
-<?php if(isset($_GET['error'])&&isset($errors[$_GET['error']])): ?><div class="alert alert-error" role="alert"><?= render_icon('info',13) ?><span><?= htmlspecialchars($errors[$_GET['error']]) ?></span></div><?php endif; ?>
+<?php if(isset($_GET['error'])):
+    $errKey = $_GET['error'];
+    $errMsg = $errors[$errKey] ?? null;
+    $isLimit = is_string($errKey) && function_exists('str_starts_with') && str_starts_with($errKey, 'limit:');
+    if ($isLimit) { $errMsg = urldecode(substr($errKey, 6)); }
+?><div class="alert alert-error" role="alert"><?= render_icon('info',13) ?><span><?= htmlspecialchars($errMsg ?? 'Erro.') ?></span></div><?php endif; ?>
 
 <section class="metric-strip">
     <article class="metric-card"><div class="metric-card-icon" style="background:#ecfdf5;color:#059669"><?= render_icon('wallet',18) ?></div><div class="metric-card-body"><div class="metric-card-label">Orçamento total</div><div class="metric-card-value" style="color:#059669">R$ <?= number_format($totals['limit'],2,',','.') ?></div><div class="text-xs" style="color:#64748b">Definido para o período</div></div></article>

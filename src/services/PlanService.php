@@ -69,9 +69,9 @@ class PlanService
             self::SLUG_PREMIUM => 200,
         ],
         'orcamentos' => [
-            self::SLUG_FREE    => 3,
-            self::SLUG_PRO     => 15,
-            self::SLUG_PREMIUM => 50,
+            self::SLUG_FREE    => 5,
+            self::SLUG_PRO     => 20,
+            self::SLUG_PREMIUM => self::LIMIT_UNLIMITED, // ilimitado
         ],
         'metas' => [
             self::SLUG_FREE    => 3,

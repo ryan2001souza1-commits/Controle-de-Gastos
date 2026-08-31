@@ -10,6 +10,7 @@ class ExpenseController
     private BudgetService $budgetService;
     private LancamentoLimitService $limitService;
     private CategoriaLimitService $categoriaLimitService;
+    private OrcamentoLimitService $orcamentoLimitService;
 
     public function __construct(
         Expense $expenseModel,
@@ -19,7 +20,8 @@ class ExpenseController
         Budget $budgetModel,
         BudgetService $budgetService,
         LancamentoLimitService $limitService,
-        CategoriaLimitService $categoriaLimitService
+        CategoriaLimitService $categoriaLimitService,
+        OrcamentoLimitService $orcamentoLimitService
     ) {
         $this->expenseModel = $expenseModel;
         $this->incomeModel  = $incomeModel;
@@ -29,6 +31,7 @@ class ExpenseController
         $this->budgetService = $budgetService;
         $this->limitService = $limitService;
         $this->categoriaLimitService = $categoriaLimitService;
+        $this->orcamentoLimitService = $orcamentoLimitService;
     }
 
     public function dashboard(): void
@@ -323,6 +326,15 @@ class ExpenseController
         if ($year < 2000 || $year > 2100 || $month < 1 || $month > 12) {
             header("Location: /index.php?action=orcamentos&error=invalid_date");
             exit;
+        }
+
+        $isNew = !$this->budgetModel->exists($userId, $categoryId, $year, $month);
+        if ($isNew) {
+            $check = $this->orcamentoLimitService->check($userId);
+            if (!$check['allowed']) {
+                header("Location: /index.php?action=orcamentos&year=$year&month=$month&error=" . urlencode('limit:' . $check['message']));
+                exit;
+            }
         }
 
         $this->budgetModel->upsert($userId, $categoryId, $year, $month, $limit);
