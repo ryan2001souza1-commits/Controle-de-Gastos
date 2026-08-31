@@ -57,16 +57,16 @@ $planoLabel = strtoupper($user->plano ?? 'GRATUITO');
   </div>
 
   <div class="ai-typing" id="aiTyping" hidden>
-    <span class="ai-typing-dot"></span><span class="ai-typing-dot"></span><span class="ai-typing-dot"></span>
+    <div class="ai-typing-dots"><span class="ai-typing-dot"></span><span class="ai-typing-dot"></span><span class="ai-typing-dot"></span></div>
     <span class="ai-typing-text">Analisando suas finanças...</span>
   </div>
 
   <form class="ai-composer" id="aiForm" autocomplete="off">
     <div class="ai-input-wrap">
-      <textarea id="aiInput" name="message" rows="1" maxlength="2000" placeholder="Digite sua pergunta...  (Enter envia • Shift+Enter nova linha)" aria-label="Pergunta para o assistente"></textarea>
-      <div class="ai-input-meta"><span id="aiCount">0 / 2000</span></div>
+      <textarea id="aiInput" name="message" rows="1" maxlength="2000" placeholder="Digite sua pergunta...  (Enter envia, Shift+Enter nova linha)" aria-label="Digite sua pergunta para o assistente financeiro"></textarea>
+      <div class="ai-input-meta"><span id="aiCount" aria-live="polite" aria-label="Caracteres usados">0 / 2000</span></div>
     </div>
-    <button type="submit" class="ai-send" id="aiSend" aria-label="Enviar mensagem"><?= render_icon('send', 16) ?> Enviar</button>
+    <button type="submit" class="ai-send" id="aiSend" aria-label="Enviar mensagem"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2 15 22 11 13 2 9l20-7z"/></svg><span>Enviar</span></button>
   </form>
   <div class="ai-composer-foot">O assistente não substitui aconselhamento financeiro profissional. • <span id="aiRemaining"><?= (int)$limitInfo['remaining'] ?> mensagens restantes hoje</span></div>
 </section>
