@@ -214,7 +214,7 @@ PROMPT;
                 $headers[] = 'HTTP-Referer: ' . $ref;
                 $headers[] = 'X-Title: Controle de Gastos - Assistente IA';
             }
-            $ctx = stream_context_create(['http'=>['method'=>'POST','header'=>implode("\r\n",$headers)."\r\n",'content'=>$payload,'timeout'=>18,'ignore_errors'=>true]]);
+            $ctx = stream_context_create(['http'=>['method'=>'POST','header'=>implode("\r\n",$headers)."\r\n",'content'=>$payload,'timeout'=>9,'ignore_errors'=>true]]);
             $resp = @file_get_contents($cfg['url'], false, $ctx);
             $err = $resp===false ? (error_get_last()['message'] ?? 'conexão falhou') : '';
             $code = 0;
@@ -236,8 +236,8 @@ PROMPT;
                 CURLOPT_POST => true,
                 CURLOPT_POSTFIELDS => $payload,
                 CURLOPT_HTTPHEADER => $headersCurl,
-                CURLOPT_TIMEOUT => 18,
-                CURLOPT_CONNECTTIMEOUT => 8,
+                CURLOPT_TIMEOUT => 9,
+                CURLOPT_CONNECTTIMEOUT => 5,
             ]);
             $resp = curl_exec($ch);
             $err = curl_error($ch);

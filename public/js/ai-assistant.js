@@ -103,21 +103,20 @@
         body: JSON.stringify({message:text, history: history.slice(-8)}),
         credentials: 'same-origin'
       });
+      // Diagnóstico ponta-a-ponta: lê raw para detectar HTML/warnings antes do JSON
+      const raw = await res.text();
       let data = null;
-      const ct = res.headers.get('content-type') || '';
-      if (ct.includes('application/json')) {
-        data = await res.json().catch(()=> null);
-      } else {
-        const txt = await res.text().catch(()=> '');
-        try { data = JSON.parse(txt); } catch { data = null; }
-        if (!data) throw new Error(txt.slice(0,300) || `Erro ${res.status}: resposta não-JSON`);
+      try { data = JSON.parse(raw); } catch (e) {
+        console.error('[ai] raw response:', raw.slice(0,800));
+        throw new Error(raw.slice(0,300) || `Erro ${res.status}: resposta não-JSON`);
       }
       if (!data) throw new Error('Resposta vazia da IA.');
-      if (!res.ok) throw new Error(data.error || `Erro ${res.status}`);
-      if (!data.reply || typeof data.reply !== 'string' || !data.reply.trim()) {
+      if (!res.ok || data.success === false) throw new Error(data.error || `Erro ${res.status}`);
+      const replyRaw = data.reply || data.response;
+      if (!replyRaw || typeof replyRaw !== 'string' || !replyRaw.trim()) {
         throw new Error(data.error || 'Sem resposta da IA. Tente novamente em instantes.');
       }
-      const reply = data.reply;
+      const reply = replyRaw;
       addMessage('assistant', reply, data.source==='deterministic' ? 'Resposta rápida' : 'IA');
       history.push({role:'assistant', content: reply});
       if (data.limit) {
