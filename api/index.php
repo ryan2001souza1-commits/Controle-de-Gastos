@@ -115,7 +115,7 @@ if ($isStatic) {
 // 2. Servir views PHP existentes — whitelist restrita e sem expor testes
 //    Bloqueia test_db.php e qualquer arquivo fora de /public
 // =============================================================================
-$blocked = ['/test_db.php', '/test_db.php/', '/.env', '/.env.example'];
+$blocked = ['/test_db.php', '/test_db.php/', '/.env', '/.env.example', '/diag.php', '/diag.php/'];
 if (in_array($pathInfo, $blocked, true)) {
     http_response_code(404);
     echo '404 Not Found';

@@ -16,8 +16,7 @@ try {
 
     echo "CONEXÃO OK! Total de usuários: " . $total;
 } catch (PDOException $e) {
+    error_log('[test_db] ' . $e->getMessage());
     echo "<h2>Erro ao conectar ao banco de dados</h2>";
-    echo "<pre>";
-    echo htmlspecialchars($e->getMessage());
-    echo "</pre>";
+    echo "<p>Verifique DATABASE_URL e as credenciais no .env.</p>";
 }

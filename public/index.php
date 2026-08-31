@@ -199,6 +199,16 @@ if ($action === 'register') {
     $bugReportController->myReports();
 } elseif ($action === 'setup_first_admin') {
     // Endpoint one-time: cria primeiro admin em produção (só funciona se ainda não existir admin)
+    // Protegido por token secreto configurado via SETUP_SECRET no ambiente
+    if (getenv('SETUP_SECRET') !== false && getenv('SETUP_SECRET') !== '') {
+        $provided = $_REQUEST['secret'] ?? '';
+        if (!hash_equals(getenv('SETUP_SECRET'), $provided)) {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            echo json_encode(['ok'=>false,'error'=>'Token invalido']);
+            exit;
+        }
+    }
     try {
         $hasAdmin = (int)$db->query("SELECT COUNT(*) FROM usuarios WHERE is_admin = 1")->fetchColumn();
         if ($hasAdmin > 0) {
@@ -243,37 +253,25 @@ if ($action === 'register') {
         exit;
     }
 } elseif ($action === 'diag') {
-    // Diagnóstico: verifica conta admin no banco sem expor hash completo
+    requireLogin();
+    if (empty($_SESSION['is_admin'])) { http_response_code(403); exit; }
     header('Content-Type: application/json');
     try {
         $email = $_REQUEST['email'] ?? 'admin20264@gmail.com';
-        $stmt = $db->prepare("SELECT id, email, is_admin, plano, LEFT(senha,8) as hash_prefix, LENGTH(senha) as hash_len FROM usuarios WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) LIMIT 1");
+        $stmt = $db->prepare("SELECT id, email, is_admin, plano FROM usuarios WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) LIMIT 1");
         $stmt->execute([$email]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$row) {
-            echo json_encode(['exists'=>false,'email'=>$email,'db_host'=>parse_url(getenv('DATABASE_URL')?:'',PHP_URL_HOST)]);
-            exit;
-        }
-        $verify = null;
-        if (!empty($_REQUEST['test_password'])) {
-            $full = $db->prepare("SELECT senha FROM usuarios WHERE id=?");
-            $full->execute([$row['id']]);
-            $verify = password_verify($_REQUEST['test_password'], $full->fetchColumn()) ? 'OK' : 'FAIL';
-        }
         echo json_encode([
-            'exists'=>true,
-            'id'=>$row['id'],
-            'is_admin'=>(int)$row['is_admin'],
-            'plano'=>$row['plano'],
-            'hash_prefix'=>$row['hash_prefix'],
-            'hash_len'=>(int)$row['hash_len'],
-            'verify_test'=>$verify,
-            'db_host'=>parse_url(getenv('DATABASE_URL')?:'',PHP_URL_HOST),
+            'exists'=>(bool)$row,
+            'email'=>$email,
+            'is_admin'=>$row ? (int)$row['is_admin'] : null,
+            'plano'=>$row['plano'] ?? null,
         ]);
         exit;
     } catch (Throwable $e) {
+        error_log('[diag] ' . $e->getMessage());
         http_response_code(500);
-        echo json_encode(['error'=>$e->getMessage()]);
+        echo json_encode(['error'=>'Erro interno']);
         exit;
     }
 } elseif (isLoggedIn()) {
