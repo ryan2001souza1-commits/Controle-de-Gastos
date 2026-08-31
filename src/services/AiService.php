@@ -144,8 +144,8 @@ PROMPT;
             return "Em {$ctx['periodo']} você teve **{$fmt($ctx['receitas'])}** em receitas. Mês anterior foi {$fmt($ctx['comparativo_anterior']['receitas'])}. " .
                    ($ctx['receitas'] > $ctx['comparativo_anterior']['receitas'] ? "Houve aumento em relação ao mês anterior." : "Ficou estável ou abaixo do mês anterior.");
         }
-        // despesas / onde gasto mais
-        if (preg_match('/\b(despesa|despesas|gasto|gastos|gastei|onde.*gasto|mais gasto)\b/', $norm) && !str_contains($norm,'receita')) {
+        // despesas / onde gasto mais (inclui gastando/gast* variações)
+        if (preg_match('/\b(despesa|despesas|gasto|gastos|gastei|gastando|onde.*gast|mais.*gast)\b/', $norm) && !str_contains($norm,'receita')) {
             if (strpos($norm,'onde')!==false || strpos($norm,'mais')!==false || strpos($norm,'categoria')!==false) {
                 if (empty($ctx['categorias'])) return "Você ainda não registrou despesas por categoria em {$ctx['periodo']}. Registre lançamentos para eu detalhar onde está gastando mais.";
                 $top = $ctx['categorias'][0];
@@ -245,15 +245,45 @@ PROMPT;
             curl_close($ch);
         }
 
-        if ($err) throw new RuntimeException('Falha de conexão com a IA: ' . $err);
-        if ($resp === false) throw new RuntimeException('Resposta vazia da IA.');
-        $data = json_decode($resp, true);
-        if ($code < 200 || $code >= 300) {
-            $msg = $data['error']['message'] ?? $data['error'] ?? substr($resp,0,400);
-            throw new RuntimeException('Erro da IA ('.$code.'): ' . $msg);
+        // Log seguro apenas em caso de erro ou para debug mínimo
+        if ($err || $code >= 400) {
+            error_log('[ai] url='.$cfg['url'].' model='.$cfg['model'].' http='.$code.' err='.($err?substr($err,0,200):'none').' resp_len='.strlen($resp??''));
         }
-        $content = $data['choices'][0]['message']['content'] ?? $data['choices'][0]['text'] ?? null;
-        if (!$content) throw new RuntimeException('Resposta da IA vazia.');
+
+        if ($err) throw new RuntimeException('Falha de conexão com a IA: ' . $err);
+        if ($resp === false || $resp === '') throw new RuntimeException('Resposta vazia da IA.');
+        $data = json_decode($resp, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('[ai] json_error='.json_last_error_msg().' resp_snip='.substr($resp,0,600));
+            throw new RuntimeException('Resposta inválida da IA (JSON).');
+        }
+        if ($code < 200 || $code >= 300) {
+            $msg = $data['error']['message'] ?? (is_string($data['error'] ?? null) ? $data['error'] : null) ?? substr($resp,0,600);
+            if (is_array($msg)) $msg = json_encode($msg, JSON_UNESCAPED_UNICODE);
+            error_log('[ai] http_error code='.$code.' msg='.substr((string)$msg,0,400));
+            // Mensagens amigáveis por código
+            if ($code === 401) throw new RuntimeException('API Key inválida ou não autorizada.');
+            if ($code === 402) throw new RuntimeException('Créditos insuficientes no OpenRouter.');
+            if ($code === 429) throw new RuntimeException('Muitas requisições — aguarde alguns segundos.');
+            if ($code === 404) throw new RuntimeException('Modelo não encontrado: '.$cfg['model']);
+            throw new RuntimeException('Erro da IA ('.$code.'): ' . substr((string)$msg,0,300));
+        }
+        // OpenRouter / OpenAI — formatos possíveis (content, reasoning, text)
+        $choice = $data['choices'][0] ?? null;
+        $content = $choice['message']['content'] ?? null;
+        // fallback para reasoning (Qwen3 retorna reasoning separado)
+        if (($content === null || trim((string)$content) === '') && isset($choice['message']['reasoning'])) {
+            $content = $choice['message']['reasoning'];
+        }
+        if (($content === null || trim((string)$content) === '') && isset($choice['text'])) {
+            $content = $choice['text'];
+        }
+        if (($content === null || trim((string)$content) === '')) {
+            error_log('[ai] content vazio, resp_snip='.substr($resp,0,800));
+        }
+        if ($content === null || trim((string)$content) === '') {
+            throw new RuntimeException('Resposta da IA vazia.');
+        }
         return trim((string)$content);
     }
 }

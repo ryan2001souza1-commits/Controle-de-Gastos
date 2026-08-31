@@ -85,37 +85,37 @@ class AiController
             return;
         }
 
-        // Tenta resposta determinística primeiro (economia)
+        // Tenta resposta determinística primeiro (economia) — sem expor erros de contagem
         $deterministic = $this->ai->tryDeterministicAnswer($message, $context);
         if ($deterministic !== null) {
-            $dLen = function_exists('mb_strlen') ? mb_strlen($deterministic) : strlen($deterministic);
-            $this->ai->incrementUsage($userId, (int)($dLen/4));
-            echo json_encode(['reply'=>$deterministic, 'source'=>'deterministic', 'context'=>$context, 'limit'=>$this->ai->checkRateLimit($userId, $user->plano ?? 'gratuito')]);
+            try { $dLen = function_exists('mb_strlen') ? mb_strlen($deterministic) : strlen($deterministic); $this->ai->incrementUsage($userId, (int)($dLen/4)); } catch (Throwable $e) { error_log('[ai] increment deterministic failed: '.$e->getMessage()); }
+            $out = json_encode(['reply'=>$deterministic, 'source'=>'deterministic', 'limit'=>$this->ai->checkRateLimit($userId, $user->plano ?? 'gratuito')], JSON_UNESCAPED_UNICODE);
+            if ($out === false) { error_log('[ai] json_encode deterministic failed: '.json_last_error_msg()); $out = json_encode(['reply'=>$deterministic, 'source'=>'deterministic'], JSON_UNESCAPED_UNICODE); }
+            echo $out;
             return;
         }
 
         // Chama IA
         try {
             $reply = $this->ai->callAi($message, $context, $history);
-            $mLen = function_exists('mb_strlen') ? mb_strlen($message) : strlen($message);
-            $rLen = function_exists('mb_strlen') ? mb_strlen($reply) : strlen($reply);
-            $tokensApprox = (int)(($mLen+$rLen)/4);
-            $this->ai->incrementUsage($userId, $tokensApprox);
-            echo json_encode(['reply'=>$reply, 'source'=>'ai', 'limit'=>$this->ai->checkRateLimit($userId, $user->plano ?? 'gratuito')]);
+            try { $mLen = function_exists('mb_strlen') ? mb_strlen($message) : strlen($message); $rLen = function_exists('mb_strlen') ? mb_strlen($reply) : strlen($reply); $this->ai->incrementUsage($userId, (int)(($mLen+$rLen)/4)); } catch (Throwable $e) { error_log('[ai] increment ai failed: '.$e->getMessage()); }
+            $out = json_encode(['reply'=>$reply, 'source'=>'ai', 'limit'=>$this->ai->checkRateLimit($userId, $user->plano ?? 'gratuito')], JSON_UNESCAPED_UNICODE);
+            if ($out === false) { error_log('[ai] json_encode ai failed: '.json_last_error_msg()); $out = json_encode(['reply'=>$reply, 'source'=>'ai'], JSON_UNESCAPED_UNICODE); }
+            echo $out;
         } catch (Throwable $e) {
             error_log('[ai call] '.$e->getMessage());
-            // Não expõe stack, mensagem amigável
             $msg = $e->getMessage();
-            // Se não configurada, oferece fallback com contexto
             if (str_contains($msg, 'não configurada')) {
                 $fallback = "IA ainda não configurada no servidor. Mas com base nos seus dados de {$context['periodo']}: receitas ".number_format($context['receitas'],2,',','.').", despesas ".number_format($context['despesas'],2,',','.').", saldo ".number_format($context['saldo'],2,',','.').". Configure AI_API_KEY para respostas completas.";
                 http_response_code(200);
-                echo json_encode(['reply'=>$fallback, 'source'=>'fallback', 'warning'=>$msg]);
+                echo json_encode(['reply'=>$fallback, 'source'=>'fallback', 'warning'=>$msg], JSON_UNESCAPED_UNICODE);
                 return;
             }
             $eLen = function_exists('mb_strlen') ? mb_strlen($msg) : strlen($msg);
+            $friendly = 'Não foi possível obter uma resposta da IA. Tente novamente.';
+            if ($eLen < 200 && $msg !== '') $friendly .= ' ('.$msg.')';
             http_response_code(502);
-            echo json_encode(['error'=>'Não consegui responder agora. ' . ($eLen < 200 ? $msg : 'Tente novamente em instantes.')]);
+            echo json_encode(['error'=>$friendly], JSON_UNESCAPED_UNICODE);
         }
     }
 }
