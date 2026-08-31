@@ -54,6 +54,9 @@ require_once __DIR__ . '/../src/models/Feedback.php';
 require_once __DIR__ . '/../src/controllers/AdminController.php';
 require_once __DIR__ . '/../src/controllers/BugReportController.php';
 require_once __DIR__ . '/../src/controllers/FeedbackController.php';
+require_once __DIR__ . '/../src/services/AiFinanceContext.php';
+require_once __DIR__ . '/../src/services/AiService.php';
+require_once __DIR__ . '/../src/controllers/AiController.php';
 
 $db = getDBConnection();
 require_once __DIR__ . '/../src/db_bootstrap.php';
@@ -82,6 +85,7 @@ $feedbackModel = new Feedback($db);
 $adminController = new AdminController($userModel, $bugModel, $planModel, $feedbackModel, $db);
 $bugReportController = new BugReportController($bugModel, $db);
 $feedbackController = new FeedbackController($feedbackModel, $db);
+$aiController = new AiController($db);
 
 $action = $_GET['action'] ?? null;
 
@@ -136,6 +140,10 @@ if ($action === 'register') {
     $expenseController->storeBudget();
 } elseif ($action === 'delete_budget') {
     $expenseController->deleteBudget();
+} elseif ($action === 'assistente_ia') {
+    $aiController->page();
+} elseif ($action === 'ai_chat') {
+    $aiController->chat();
 } elseif ($action === 'sobre') {
     requireLogin();
     $pageTitle = 'Sobre Nós';

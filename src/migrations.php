@@ -139,6 +139,17 @@ function runMigrations(PDO $db): void
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )",
+        "CREATE TABLE IF NOT EXISTS ai_usage (
+            id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+            date DATE NOT NULL DEFAULT CURRENT_DATE,
+            requests INTEGER NOT NULL DEFAULT 0,
+            tokens_used INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT uq_ai_usage_user_date UNIQUE (user_id, date)
+        )",
+        "CREATE INDEX IF NOT EXISTS idx_ai_usage_user_date ON ai_usage(user_id, date)",
     ];
 
     foreach ($statements as $sql) {
