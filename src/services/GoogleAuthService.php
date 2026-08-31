@@ -211,7 +211,6 @@ class GoogleAuthService
         ]);
         $resp = curl_exec($ch);
         $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
         if ($resp === false || $code < 200 || $code >= 300) return null;
         $j = json_decode((string)$resp, true);
         return is_array($j) ? $j : null;
@@ -230,7 +229,6 @@ class GoogleAuthService
         ]);
         $resp = curl_exec($ch);
         $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
         if ($resp === false || $code < 200 || $code >= 300) {
             error_log('[GoogleAuth] token exchange HTTP ' . $code . ' resp_bytes=' . strlen((string)$resp));
             return null;
