@@ -24,13 +24,22 @@ if (!isset($csrfService) || !($csrfService instanceof CsrfService)) {
 }
 
 // Inicialização do token: gera se não existe ou se o usuário mudou (login/logout).
-if (session_status() === PHP_SESSION_ACTIVE) {
+// Persistência forçada: em ambientes serverless (Vercel), a sessão é gravada via
+// DbSessionHandler::write() apenas no shutdown. Se o request terminar antes disso
+// (timeout, cold start, output flush), o token gerado aqui seria perdido e a próxima
+// requisição (POST /index.php?action=login) falharia a validação com "Sessão expirada".
+$wasActive = session_status() === PHP_SESSION_ACTIVE;
+if ($wasActive) {
     $csrfUserId      = $_SESSION['user_id'] ?? null;
     $storedCsrfUid   = $_SESSION['csrf_user_id'] ?? null;
     $tokenExists     = isset($_SESSION['csrf_token']) && is_string($_SESSION['csrf_token']);
     $userIdChanged   = $csrfUserId !== $storedCsrfUid;
     if (!$tokenExists || $userIdChanged) {
         $csrfService->generateToken($csrfUserId);
+        // Fecha e reabre a sessão para forçar DbSessionHandler::write() a executar
+        // agora, garantindo que o token esteja persistido antes de qualquer output.
+        session_write_close();
+        if (session_status() === PHP_SESSION_NONE) { @session_start(); }
     }
 }
 

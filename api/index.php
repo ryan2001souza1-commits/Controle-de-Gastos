@@ -138,6 +138,11 @@ if ($pathInfo !== '/index.php' && $pathInfo !== '/' && !str_starts_with($pathInf
             if (file_exists($ROOT . '/src/config/config.php') && !function_exists('isLoggedIn')) {
                 require_once $ROOT . '/src/config/config.php';
             }
+            // Garante que a sessão esteja ativa antes do helper CSRF
+            // (o helper verifica session_status() === PHP_SESSION_ACTIVE para gerar o token)
+            if (session_status() === PHP_SESSION_NONE) {
+                @session_start();
+            }
             // Helper CSRF compartilhado — garante csrf_field() disponível
             // quando a view é servida diretamente (ex.: após logout → /login.php).
             if (!function_exists('csrf_field')) {
