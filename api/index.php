@@ -131,20 +131,30 @@ if ($pathInfo !== '/index.php' && $pathInfo !== '/' && !str_starts_with($pathInf
         // para que o controller prepare $data, senão renderizam vazias ou quebram.
         $allowed = ['/login.php','/register.php','/forgot.php','/reset.php','/termos.php','/privacidade.php'];
         if (in_array($pathInfo, $allowed, true)) {
-            // Carrega o ambiente mínimo antes de incluir a view diretamente.
-            // Garante que render_icon() e isLoggedIn() existam mesmo quando a view
-            // é acessada sem passar pelo router public/index.php.
             require_once $ROOT . '/public/partials/icons.php';
             if (file_exists($ROOT . '/src/config/config.php') && !function_exists('isLoggedIn')) {
                 require_once $ROOT . '/src/config/config.php';
             }
-            // Garante que a sessão esteja ativa antes do helper CSRF
-            // (o helper verifica session_status() === PHP_SESSION_ACTIVE para gerar o token)
+            // Registro do DbSessionHandler ANTES de session_start() — CRÍTICO.
+            // Se este bloco usar o handler padrão (arquivo), o token CSRF é escrito no
+            // sistema de arquivos. Mas public/index.php registra DbSessionHandler antes de
+            // session_start(). O POST do login leria do DB — onde o token não existe.
+            // Resultado: "Sessão expirada" após logout → login.
             if (session_status() === PHP_SESSION_NONE) {
+                $lifetime = 604800;
+                try {
+                    $db = getDBConnection();
+                    $db->exec("CREATE TABLE IF NOT EXISTS sessions (id VARCHAR(128) PRIMARY KEY, data TEXT NOT NULL, expires_at TIMESTAMP NOT NULL)");
+                    $db->exec("CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)");
+                    require_once $ROOT . '/src/config/session_handler.php';
+                    $handler = new DbSessionHandler($db, $lifetime);
+                    session_set_save_handler($handler, true);
+                } catch (Throwable $e) {
+                    error_log('[api/index.php session] ' . $e->getMessage());
+                    ini_set('session.gc_maxlifetime', (string)$lifetime);
+                }
                 @session_start();
             }
-            // Helper CSRF compartilhado — garante csrf_field() disponível
-            // quando a view é servida diretamente (ex.: após logout → /login.php).
             if (!function_exists('csrf_field')) {
                 require_once $ROOT . '/src/helpers/csrf.php';
             }
