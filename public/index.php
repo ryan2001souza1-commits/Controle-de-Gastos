@@ -29,6 +29,41 @@ if (session_status() === PHP_SESSION_NONE) {
     }
     session_start();
 }
+
+// --- Inicialização CSRF (após session_start) ---
+if (!function_exists('csrf_field')) {
+    require_once __DIR__ . '/../src/services/CsrfService.php';
+    $csrfService = new CsrfService();
+    // Define user_id: se já há usuário logado, usa o existente; se não, guarda null
+    $csrfUserId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+    $csrfToken = $csrfService->generateToken($csrfUserId);
+    // Armazena user_id no CSRF (inicial pode ser null se ainda não há login)
+    $_SESSION['csrf_user_id'] = $csrfUserId;
+    $_SESSION['csrf_token']  = $csrfToken;
+}
+// --- Fim inicialização CSRF ---
+
+// --- Função helper: renderiza campo CSRF oculto ---
+// Retorna string HTML com input hidden para inserção nos formulários
+if (!function_exists('csrf_field')) {
+    function csrf_field(): string
+    {
+        global $csrfService;
+        if (!isset($csrfService)) {
+            // Fallback: cria instância rápida se não injetada
+            require_once __DIR__ . '/../src/services/CsrfService.php';
+            $csrfService = new CsrfService();
+        }
+        $userId = $_SESSION['user_id'] ?? 0;
+        $token = $csrfService->getToken($userId);
+        if (!$token) {
+            return '';
+        }
+        return "<input type='hidden' name='csrf_token' value='{$token}'>";
+    }
+}
+// --- Fim função helper csrf_field ---
+
 require_once __DIR__ . '/../src/models/User.php';
 require_once __DIR__ . '/../src/models/Category.php';
 require_once __DIR__ . '/../src/models/Expense.php';
@@ -100,6 +135,31 @@ $feedbackController = new FeedbackController($feedbackModel, $db);
 $aiController = new AiController($db);
 
 $action = $_GET['action'] ?? null;
+
+// --- Validação CSRF para requisições POST ---
+// Lista de ações que exigem validação CSRF (todas que processam dados do formulário)
+$csrfProtectedActions = [
+    'register', 'login', 'store', 'update', 'delete', 'store_category',
+    'update_category', 'delete_category', 'store_budget', 'delete_budget',
+    'store_goal', 'update_goal', 'delete_goal', 'update_profile',
+    'update_password', 'feedback_create', 'reportar', 'reportar_create',
+    'admin_bug_update', 'admin_feedback_update', 'ai_chat',
+];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Valida apenas ações que precisam de CSRF
+    if (in_array($action, $csrfProtectedActions, true)) {
+        $csrfToken = $_POST['csrf_token'] ?? '';
+        $userId = $_SESSION['user_id'] ?? 0;
+        if (empty($csrfToken) || !$csrfService->validateToken($userId, $csrfToken)) {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            echo json_encode(['success'=>false, 'error'=>'Sessão expirada. Recarregue a página e tente novamente.']);
+            exit;
+        }
+    }
+}
+// --- Fim validação CSRF ---
 
 if ($action === 'register') {
     $authController->register();

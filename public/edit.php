@@ -99,6 +99,7 @@ window.addEventListener("DOMContentLoaded", () => {
                 <form action="/index.php?action=update" method="POST" id="editTxForm" novalidate
                       data-expense-categories='<?= htmlspecialchars(json_encode($expenseCategories, JSON_UNESCAPED_UNICODE), ENT_QUOTES, "UTF-8") ?>'
                       data-income-categories='<?= htmlspecialchars(json_encode($incomeCategories, JSON_UNESCAPED_UNICODE), ENT_QUOTES, "UTF-8") ?>'>
+                    <?= csrf_field() ?>
                     <input type="hidden" name="id" value="<?= (int)$transaction['id'] ?>">
                     <input type="hidden" name="type" value="<?= htmlspecialchars($txType) ?>" id="type">
                     <div class="form-stack">

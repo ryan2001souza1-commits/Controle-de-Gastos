@@ -169,7 +169,7 @@
                             <polyline points="12 5 19 12 12 19"/>
                         </svg>
                     </button>
-                </form>
+                <?= csrf_field() ?>\n                </form>
 
                 <p class="auth-foot-link-divider">
                     <span class="auth-foot-line"></span>

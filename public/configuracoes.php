@@ -155,7 +155,7 @@ if (isset($_GET['success']) && isset($msgs[$_GET['success']])): ?>
                             <a href="/index.php?action=configuracoes" class="btn btn-ghost">Descartar</a>
                         </div>
                     </div>
-                </form>
+                <?= csrf_field() ?>\n                </form>
             </div>
         </section>
 
@@ -194,7 +194,7 @@ if (isset($_GET['success']) && isset($msgs[$_GET['success']])): ?>
                             <button type="submit" class="btn btn-primary">Alterar senha</button>
                         </div>
                     </div>
-                </form>
+                <?= csrf_field() ?>\n                </form>
             </div>
         </section>
     </div>

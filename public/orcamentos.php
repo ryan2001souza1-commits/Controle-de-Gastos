@@ -77,6 +77,7 @@ $utilPct=$totals['percentage']??0;
             <header class="modal-header"><div class="modal-title">Novo orçamento</div><button type="button" class="modal-close" onclick="closeBudgetModal()"><?= render_icon('x',16) ?></button></header>
             <div class="modal-body">
                 <form id="budgetForm" action="/index.php?action=store_budget" method="POST">
+                    <?= csrf_field() ?>
                     <div class="form-stack">
                         <div class="form-group"><label>Categoria</label><div class="select-wrap"><select name="category_id" required><option value="">Selecione</option><?php foreach(($expenseCategories??[]) as $c): ?><option value="<?= (int)$c['id'] ?>"><?= htmlspecialchars($c['name']) ?></option><?php endforeach; ?></select></div></div>
                         <div class="form-row"><div class="form-group"><label>Ano</label><input type="number" name="year" value="<?= $year ?>" min="2000" max="2100" required></div><div class="form-group"><label>Mês</label><input type="number" name="month" value="<?= $month ?>" min="1" max="12" required></div></div>

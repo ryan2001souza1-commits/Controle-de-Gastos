@@ -14,6 +14,6 @@
     <div class="form-group"><label>Screenshot (opcional, PNG/JPG/WebP, máx 2MB)</label><input type="file" name="screenshot" accept=".png,.jpg,.jpeg,.webp"></div>
     <div class="form-actions"><button class="btn btn-primary" style="background:#059669">Enviar relato</button><a href="/index.php?action=meus_relatos" class="btn btn-ghost">Meus relatos</a></div>
 </div>
-</form>
+<?= csrf_field() ?>\n</form>
 </div></section>
 <?php include __DIR__.'/partials/layout_end.php'; ?>

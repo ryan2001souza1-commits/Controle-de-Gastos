@@ -62,6 +62,7 @@ $planoLabel = strtoupper($user->plano ?? 'GRATUITO');
   </div>
 
   <form class="ai-composer" id="aiForm" autocomplete="off">
+    <?= csrf_field() ?>
     <div class="ai-input-wrap">
       <textarea id="aiInput" name="message" rows="1" maxlength="2000" placeholder="Digite sua pergunta...  (Enter envia, Shift+Enter nova linha)" aria-label="Digite sua pergunta para o assistente financeiro"></textarea>
       <div class="ai-input-meta"><span id="aiCount" aria-live="polite" aria-label="Caracteres usados">0 / 2000</span></div>

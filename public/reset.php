@@ -119,7 +119,7 @@
                         </svg>
                         <span>Redefinir senha</span>
                     </button>
-                </form>
+                <?= csrf_field() ?>\n                </form>
 
                 <?php endif; ?>
 

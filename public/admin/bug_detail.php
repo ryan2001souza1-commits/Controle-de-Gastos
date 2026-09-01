@@ -118,6 +118,7 @@ include __DIR__ . '/../partials/admin_layout_start.php';
         </div>
         <div class="admin-card-body">
             <form method="POST" action="/index.php?action=admin_bug_update">
+                <?= csrf_field() ?>
                 <input type="hidden" name="id" value="<?= (int)$bug['id'] ?>">
                 <div style="display:flex;flex-direction:column;gap:14px">
                     <div>
@@ -140,7 +141,7 @@ include __DIR__ . '/../partials/admin_layout_start.php';
                         <?= render_icon('check', 14) ?> Salvar atualização
                     </button>
                 </div>
-            </form>
+            <?= csrf_field() ?>\n</form>
             <div style="margin-top:16px;display:flex;justify-content:flex-end">
                 <a href="/index.php?action=admin_bugs" class="admin-btn admin-btn-secondary admin-btn-sm">Voltar para lista</a>
             </div>

@@ -93,7 +93,7 @@ if (empty($recent)) {
                 <div class="fb-form-actions">
                     <button type="submit" class="fb-submit"><?= render_icon('send', 16) ?> Enviar Feedback</button>
                 </div>
-            </form>
+            <?= csrf_field() ?>\n            </form>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:16px">

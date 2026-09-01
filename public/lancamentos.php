@@ -157,7 +157,7 @@ foreach (($expenseCategories ?? []) as $i => $c) {
                         <td><span class="badge <?= $isDesp?'badge-danger':'badge-success' ?>" style="font-size:11px"><?= $isDesp?render_icon('arrow-down',10).' Despesa':render_icon('arrow-up',10).' Receita' ?></span></td>
                         <td class="td-numeric" style="font-weight:700;color:<?= $isDesp?'#dc2626':'#059669' ?>"><?= $isDesp?'- ':'' ?>R$ <?= number_format((float)($t['amount']??0),2,',','.') ?></td>
                         <td style="font-size:12px;color:#334155;display:flex;align-items:center;gap:6px"><?= render_icon('credit-card',14) ?> PIX</td>
-                        <td><div class="row-actions"><a href="/index.php?action=edit&id=<?= (int)($t['id']??0) ?>&type=<?= htmlspecialchars($tp) ?>" class="row-action-btn is-edit"><?= render_icon('edit',13) ?></a><form action="/index.php?action=delete" method="POST" style="display:inline"><input type="hidden" name="id" value="<?= (int)($t['id']??0) ?>"><input type="hidden" name="type" value="<?= htmlspecialchars($tp) ?>"><button class="row-action-btn is-danger"><?= render_icon('trash',13) ?></button></form></div></td>
+                        <td><div class="row-actions"><a href="/index.php?action=edit&id=<?= (int)($t['id']??0) ?>&type=<?= htmlspecialchars($tp) ?>" class="row-action-btn is-edit"><?= render_icon('edit',13) ?></a><form action="/index.php?action=delete" method="POST" style="display:inline"><input type="hidden" name="id" value="<?= (int)($t['id']??0) ?>"><input type="hidden" name="type" value="<?= htmlspecialchars($tp) ?>"><?= csrf_field() ?><button class="row-action-btn is-danger"><?= render_icon('trash',13) ?></button></form></div></td>
                     </tr>
                     <?php endforeach; endif; ?>
                 </tbody>
@@ -176,6 +176,7 @@ foreach (($expenseCategories ?? []) as $i => $c) {
             <header class="modal-header"><div class="modal-title">Novo lançamento</div><button type="button" class="modal-close" onclick="closeTxModal()"><?= render_icon('x',16) ?></button></header>
             <div class="modal-body">
                 <form id="txForm" action="/index.php?action=store" method="POST">
+                    <?= csrf_field() ?>
                     <div class="form-stack">
                         <div class="form-group"><label>Descrição</label><input type="text" name="description" required placeholder="Ex: Salário, Aluguel"></div>
                         <div class="form-row"><div class="form-group"><label>Valor (R$)</label><input type="number" name="amount" step="0.01" min="0.01" required placeholder="0,00"></div><div class="form-group"><label>Data</label><input type="date" name="date" value="<?= date('Y-m-d') ?>" required></div></div>

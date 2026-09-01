@@ -73,7 +73,7 @@
                         </svg>
                         <span>Enviar instruções</span>
                     </button>
-                </form>
+                <?= csrf_field() ?>\n                </form>
 
                 <div class="forgot-divider">
                     <span>ou</span>

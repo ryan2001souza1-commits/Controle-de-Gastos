@@ -85,7 +85,7 @@ include __DIR__ . '/../partials/admin_layout_start.php';
                 <input type="text" name="q" placeholder="Buscar por título, descrição ou usuário" value="<?= htmlspecialchars($q) ?>">
             </div>
             <button type="submit" class="admin-btn admin-btn-primary admin-btn-sm">Filtrar</button>
-        </form>
+        <?= csrf_field() ?>\n</form>
     </div>
     <div class="admin-table-wrap">
         <table class="admin-table">
@@ -136,6 +136,7 @@ include __DIR__ . '/../partials/admin_layout_start.php';
                                 <div style="font-size:13px;color:var(--admin-text);line-height:1.6;background:#fff;padding:12px;border:1px solid var(--admin-border);border-radius:6px"><?= nl2br(htmlspecialchars($f['descricao'])) ?></div>
                             </div>
                             <form method="POST" action="/index.php?action=admin_feedback_update">
+                                <?= csrf_field() ?>
                                 <input type="hidden" name="id" value="<?= (int)$f['id'] ?>">
                                 <div class="form-group" style="margin-bottom:10px">
                                     <label class="admin-label">Status</label>
@@ -151,7 +152,7 @@ include __DIR__ . '/../partials/admin_layout_start.php';
                                     <textarea name="resposta_admin" class="admin-input" rows="3" placeholder="Comentário interno ou resposta visível ao cliente..."><?= htmlspecialchars($f['resposta_admin'] ?? '') ?></textarea>
                                 </div>
                                 <button type="submit" class="admin-btn admin-btn-primary admin-btn-sm">Salvar</button>
-                            </form>
+                            <?= csrf_field() ?>\n</form>
                         </div>
                     </td>
                 </tr>
