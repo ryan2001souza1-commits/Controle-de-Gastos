@@ -129,7 +129,7 @@ if ($pathInfo !== '/index.php' && $pathInfo !== '/' && !str_starts_with($pathInf
         // Apenas views standalone (sem dependência de $data do controller) podem ser servidas diretamente.
         // Views com dados (dashboard, lancamentos etc.) DEVEM passar pelo router public/index.php
         // para que o controller prepare $data, senão renderizam vazias ou quebram.
-        $allowed = ['/login.php','/register.php','/forgot.php','/reset.php'];
+        $allowed = ['/login.php','/register.php','/forgot.php','/reset.php','/termos.php','/privacidade.php'];
         if (in_array($pathInfo, $allowed, true)) {
             // Carrega o ambiente mínimo antes de incluir a view diretamente.
             // Garante que render_icon() e isLoggedIn() existam mesmo quando a view

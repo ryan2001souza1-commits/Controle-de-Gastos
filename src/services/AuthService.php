@@ -100,6 +100,9 @@ class AuthService
         if (!preg_match('/[0-9]/', $password)) {
             return ['success' => false, 'message' => 'Senha deve conter pelo menos 1 número.'];
         }
+        if (!preg_match('/[^A-Za-z0-9]/', $password)) {
+            return ['success' => false, 'message' => 'A senha deve conter pelo menos 1 caractere especial.'];
+        }
 
         if ($password !== $passwordConfirm) {
             return ['success' => false, 'message' => 'A confirmação de senha não confere.'];
@@ -237,6 +240,10 @@ class AuthService
         if (!preg_match('/[0-9]/', $newPassword)) {
             $this->rateLimiter->recordAttempt(RateLimiter::PASSWORD_RESET, 'reset_' . $ipKey, true, self::RESET_MAX_ATTEMPTS, self::RESET_WINDOW_SECONDS);
             return ['success' => false, 'message' => 'A nova senha deve conter pelo menos 1 número.'];
+        }
+        if (!preg_match('/[^A-Za-z0-9]/', $newPassword)) {
+            $this->rateLimiter->recordAttempt(RateLimiter::PASSWORD_RESET, 'reset_' . $ipKey, true, self::RESET_MAX_ATTEMPTS, self::RESET_WINDOW_SECONDS);
+            return ['success' => false, 'message' => 'A nova senha deve conter pelo menos 1 caractere especial.'];
         }
         if ($newPassword !== $confirm) {
             $this->rateLimiter->recordAttempt(RateLimiter::PASSWORD_RESET, 'reset_' . $ipKey, true, self::RESET_MAX_ATTEMPTS, self::RESET_WINDOW_SECONDS);

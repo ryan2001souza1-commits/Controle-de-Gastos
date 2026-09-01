@@ -184,7 +184,7 @@ class ProfileController
         if (strlen($new) < 8) {
             header('Location: /index.php?action=configuracoes&error=weak_password'); exit;
         }
-        if (!preg_match('/[A-Z]/', $new) || !preg_match('/[0-9]/', $new)) {
+        if (!preg_match('/[A-Z]/', $new) || !preg_match('/[0-9]/', $new) || !preg_match('/[^A-Za-z0-9]/', $new)) {
             header('Location: /index.php?action=configuracoes&error=weak_password'); exit;
         }
         if ($new !== $confirm) {

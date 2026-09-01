@@ -159,7 +159,7 @@
                     <label class="auth-check auth-terms">
                         <input type="checkbox" name="terms" id="terms" required>
                         <span class="auth-check-box"></span>
-                        <span>Li e aceito os <a href="#">Termos de Uso</a> e a <a href="#">Política de Privacidade</a></span>
+                        <span>Li e aceito os <a href="/index.php?action=termos" target="_blank" rel="noopener">Termos de Uso</a> e a <a href="/index.php?action=privacy" target="_blank" rel="noopener">Política de Privacidade</a></span>
                     </label>
 
                     <button type="submit" class="auth-submit">
@@ -169,7 +169,8 @@
                             <polyline points="12 5 19 12 12 19"/>
                         </svg>
                     </button>
-                <?= csrf_field() ?>\n                </form>
+                <?= csrf_field() ?>
+                </form>
 
                 <p class="auth-foot-link-divider">
                     <span class="auth-foot-line"></span>

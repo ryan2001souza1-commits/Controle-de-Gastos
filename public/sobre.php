@@ -78,7 +78,7 @@ $userInitials = $userInitials ?? strtoupper(substr($userName, 0, 1));
   <div class="sobre-footer" role="contentinfo" aria-label="Informações de contato e acesso">
     <div class="sobre-footer-text">
       <span style="width:34px;height:34px;border-radius:10px;background:#fff;border:1px solid var(--color-primary-border);color:var(--color-primary);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0"><?= render_icon('shield', 16) ?></span>
-      <span>Seus dados são tratados com segurança e confidencialidade. <a href="#" style="color:var(--color-primary-active);font-weight:600;text-decoration:underline">Política de Privacidade</a></span>
+      <span>Seus dados são tratados com segurança e confidencialidade. <a href="/index.php?action=privacy" style="color:var(--color-primary-active);font-weight:600;text-decoration:underline">Política de Privacidade</a></span>
     </div>
     <div class="sobre-footer-actions">
       <a href="mailto:contato@controlegastos.com.br" class="sobre-btn-outline"><?= render_icon('mail', 14) ?> Falar conosco</a>

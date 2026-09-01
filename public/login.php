@@ -140,7 +140,8 @@
                             <polyline points="12 5 19 12 12 19"/>
                         </svg>
                     </button>
-                <?= csrf_field() ?>\n                </form>
+                <?= csrf_field() ?>
+                </form>
 
                 <div class="auth-divider"><span>ou continue com</span></div>
 

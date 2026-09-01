@@ -376,6 +376,10 @@ if ($action === 'register') {
         echo json_encode(['error'=>'Erro interno']);
         exit;
     }
+} elseif ($action === 'termos') {
+    require basePath('termos.php');
+} elseif ($action === 'privacy') {
+    require basePath('privacidade.php');
 } elseif (isLoggedIn()) {
     if (!empty($_SESSION['is_admin']) && (int)$_SESSION['is_admin'] === 1) {
         header('Location: /index.php?action=admin');
