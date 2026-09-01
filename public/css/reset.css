@@ -1,5 +1,5 @@
-/* =====================================================
-   RESET PASSWORD — extensions for auth.css
+﻿/* =====================================================
+   RESET PASSWORD â€” extensions for auth.css
    ===================================================== */
 
 .reset-strength {
@@ -10,7 +10,7 @@
 .reset-strength-bar {
     width: 100%;
     height: 4px;
-    background: #e5e7eb;
+    background: var(--color-border);
     border-radius: 9999px;
     overflow: hidden;
 }
@@ -19,7 +19,7 @@
     display: block;
     height: 100%;
     width: 0;
-    background: #e5e7eb;
+    background: var(--color-border);
     border-radius: 9999px;
     transition: width 250ms ease, background 250ms ease;
 }
@@ -27,10 +27,10 @@
 .reset-hint {
     display: block;
     font-size: 11px;
-    color: #9ca3af;
+    color: var(--color-text-3);
     margin-top: 4px;
     font-weight: 500;
 }
-.reset-hint.weak { color: #b91c1c; }
-.reset-hint.medium { color: #b45309; }
-.reset-hint.strong { color: #15803d; }
+.reset-hint.weak { color: var(--color-danger-text); }
+.reset-hint.medium { color: var(--color-warning-text); }
+.reset-hint.strong { color: var(--color-success-text); }

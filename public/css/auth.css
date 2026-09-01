@@ -1,6 +1,44 @@
-/* =====================================================
-   AUTH PAGES — Professional Fintech Design
+﻿/* =====================================================
+   AUTH PAGES â€” Professional Fintech Design
    ===================================================== */
+:root{
+    --color-primary:#0d9488;
+    --color-primary-hover:#0f766e;
+    --color-primary-active:#115e59;
+    --color-primary-soft:#f0fdfa;
+    --color-primary-border:#99f6e4;
+    --color-primary-text:#0f766e;
+    --color-success:#10b981;
+    --color-success-soft:#ecfdf5;
+    --color-success-border:#a7f3d0;
+    --color-success-text:#047857;
+    --color-danger:#ef4444;
+    --color-danger-soft:#fef2f2;
+    --color-danger-border:#fecaca;
+    --color-danger-text:#b91c1c;
+    --color-warning:#f59e0b;
+    --color-warning-soft:#fffbeb;
+    --color-warning-border:#fde68a;
+    --color-warning-text:#92400e;
+    --color-text-1:#111827;
+    --color-text-2:#374151;
+    --color-text-3:#6b7280;
+    --color-border:#e5e7eb;
+    --color-border-2:var(--color-border-2);
+    --color-surface:#fff;
+    --color-bg:var(--color-bg);
+    --shadow-sm:0 1px 3px rgba(15,23,42,.06),0 1px 2px rgba(15,23,42,.04);
+    --shadow-md:0 4px 8px rgba(15,23,42,.06),0 2px 4px rgba(15,23,42,.04);
+    --shadow-focus:0 0 0 3px rgba(13,148,136,.15);
+    --radius-sm:6px;
+    --radius-md:8px;
+    --radius-lg:12px;
+    --font-sans:"Plus Jakarta Sans","Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --font-mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+    --duration-fast:120ms;
+    --duration-base:200ms;
+    --ease-out:cubic-bezier(.16,1,.3,1);
+}
 
 * { box-sizing: border-box; }
 
@@ -13,7 +51,7 @@ html, body {
 
 body.auth-body {
     font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
-    background: #f9fafb;
+    background: var(--color-bg);
     color: #111827;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
@@ -154,7 +192,7 @@ body.auth-body {
     align-items: center;
     justify-content: center;
     padding: 32px 24px;
-    background: #f9fafb;
+    background: var(--color-bg);
 }
 
 .auth-card {
@@ -164,15 +202,15 @@ body.auth-body {
     border-radius: 10px;
     box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.05);
     padding: 32px;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--color-border);
 }
 
 .auth-icon {
     width: 44px;
     height: 44px;
     border-radius: 10px;
-    background: #ecfdf5;
-    color: #0f766e;
+    background: var(--color-success-soft);
+    color: var(--color-primary-text);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -208,14 +246,14 @@ body.auth-body {
 
 .auth-alert-success {
     background: #f0fdf4;
-    color: #15803d;
-    border-color: #bbf7d0;
+    color: var(--color-success-text);
+    border-color: var(--color-success-border);
 }
 
 .auth-alert-error {
-    background: #fef2f2;
-    color: #b91c1c;
-    border-color: #fecaca;
+    background: var(--color-danger-soft);
+    color: var(--color-danger-text);
+    border-color: var(--color-danger-border);
 }
 
 .auth-form {
@@ -269,7 +307,7 @@ body.auth-body {
     font-size: 14px;
     color: #111827;
     background: #ffffff;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--color-border-2);
     border-radius: 8px;
     outline: none;
     transition: border-color 180ms ease, box-shadow 180ms ease;
@@ -288,12 +326,12 @@ body.auth-body {
 }
 
 .auth-input-wrap input:focus {
-    border-color: #0f766e;
+    border-color: var(--color-primary-text);
     box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
 }
 
 .auth-input-wrap:focus-within .auth-input-icon {
-    color: #0f766e;
+    color: var(--color-primary-text);
 }
 
 .auth-toggle-pw {
@@ -320,7 +358,7 @@ body.auth-body {
 }
 
 .auth-input-wrap:focus-within .auth-toggle-pw {
-    color: #0f766e;
+    color: var(--color-primary-text);
 }
 
 .auth-hint {
@@ -331,8 +369,8 @@ body.auth-body {
     min-height: 1em;
 }
 
-.auth-hint.match { color: #15803d; }
-.auth-hint.no-match { color: #b91c1c; }
+.auth-hint.match { color: var(--color-success-text); }
+.auth-hint.no-match { color: var(--color-danger-text); }
 
 .auth-row {
     display: flex;
@@ -365,7 +403,7 @@ body.auth-body {
 .auth-check-box {
     width: 16px;
     height: 16px;
-    border: 1.5px solid #d1d5db;
+    border: 1.5px solid var(--color-border-2);
     border-radius: 4px;
     background: #ffffff;
     display: flex;
@@ -377,8 +415,8 @@ body.auth-body {
 }
 
 .auth-check input:checked ~ .auth-check-box {
-    background: #0f766e;
-    border-color: #0f766e;
+    background: var(--color-primary-text);
+    border-color: var(--color-primary-text);
 }
 
 .auth-check input:checked ~ .auth-check-box::after {
@@ -393,7 +431,7 @@ body.auth-body {
 }
 
 .auth-check a {
-    color: #0f766e;
+    color: var(--color-primary-text);
     font-weight: 500;
     text-decoration: none;
 }
@@ -413,14 +451,14 @@ body.auth-body {
 }
 
 .auth-terms a {
-    color: #0f766e;
+    color: var(--color-primary-text);
     font-weight: 500;
     text-decoration: none;
 }
 .auth-terms a:hover { text-decoration: underline; }
 
 .auth-link-text {
-    color: #0f766e;
+    color: var(--color-primary-text);
     font-size: 13px;
     font-weight: 500;
     text-decoration: none;
@@ -429,7 +467,7 @@ body.auth-body {
 }
 
 .auth-link-text:hover {
-    color: #0d6b63;
+    color: var(--color-primary-hover);
     text-decoration: underline;
 }
 
@@ -441,7 +479,7 @@ body.auth-body {
     border-radius: 8px;
     border: none;
     color: #ffffff;
-    background: #0f766e;
+    background: var(--color-primary-text);
     box-shadow: 0 1px 2px rgba(15, 118, 110, 0.18);
     cursor: pointer;
     display: flex;
@@ -454,7 +492,7 @@ body.auth-body {
 }
 
 .auth-submit:hover {
-    background: #0d6b63;
+    background: var(--color-primary-hover);
 }
 
 .auth-submit:active {
@@ -482,7 +520,7 @@ body.auth-body {
     content: "";
     flex: 1;
     height: 1px;
-    background: #e5e7eb;
+    background: var(--color-border);
 }
 .auth-divider span {
     background: #ffffff;
@@ -501,7 +539,7 @@ body.auth-body {
 .auth-social-btn {
     height: 42px;
     background: #ffffff;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--color-border-2);
     border-radius: 8px;
     display: flex;
     align-items: center;
@@ -512,7 +550,7 @@ body.auth-body {
 }
 .auth-social-btn:hover {
     border-color: #9ca3af;
-    background: #f9fafb;
+    background: var(--color-bg);
 }
 .auth-social-btn:active { transform: translateY(0.5px); }
 
@@ -521,8 +559,8 @@ body.auth-body {
     display: flex;
     align-items: flex-start;
     gap: 12px;
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
     padding: 12px;
     color: #111827;
@@ -568,13 +606,13 @@ body.auth-body {
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: #d1d5db;
+    background: var(--color-border-2);
     flex-shrink: 0;
     position: relative;
     transition: background 180ms ease;
 }
 .auth-pwd-rules li.ok .auth-pwd-check {
-    background: #15803d;
+    background: var(--color-success-text);
 }
 .auth-pwd-rules li.ok .auth-pwd-check::after {
     content: "";
@@ -587,7 +625,7 @@ body.auth-body {
     border-width: 0 2px 2px 0;
     transform: rotate(45deg);
 }
-.auth-pwd-rules li.ok { color: #15803d; font-weight: 500; }
+.auth-pwd-rules li.ok { color: var(--color-success-text); font-weight: 500; }
 
 /* === FOOT ====================================== */
 .auth-foot-link {
@@ -598,12 +636,12 @@ body.auth-body {
     line-height: 1.5;
 }
 .auth-foot-link a {
-    color: #0f766e;
+    color: var(--color-primary-text);
     font-weight: 600;
     text-decoration: none;
     transition: color 180ms ease;
 }
-.auth-foot-link a:hover { color: #0d6b63; text-decoration: underline; }
+.auth-foot-link a:hover { color: var(--color-primary-hover); text-decoration: underline; }
 
 .auth-footer {
     color: #9ca3af;
@@ -626,17 +664,17 @@ body.auth-body {
 .auth-foot-line {
     flex: 1;
     height: 1px;
-    background: #e5e7eb;
+    background: var(--color-border);
     min-width: 20px;
 }
 .auth-foot-link-divider a {
-    color: #0f766e;
+    color: var(--color-primary-text);
     font-weight: 600;
     text-decoration: none;
     transition: color 180ms ease;
 }
 .auth-foot-link-divider a:hover {
-    color: #0d6b63;
+    color: var(--color-primary-hover);
     text-decoration: underline;
 }
 

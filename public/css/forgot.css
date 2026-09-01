@@ -1,5 +1,5 @@
-/* =====================================================
-   FORGOT PASSWORD — extensions for auth.css
+﻿/* =====================================================
+   FORGOT PASSWORD â€” extensions for auth.css
    ===================================================== */
 
 .forgot-hero {
@@ -12,25 +12,19 @@
     margin-top: 32px;
     display: flex;
     justify-content: flex-start;
-    animation: forgotFloat 6s ease-in-out infinite;
-}
-
-@keyframes forgotFloat {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-6px); }
 }
 
 .forgot-back {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    color: #0f766e;
+    color: var(--color-primary-text);
     font-size: 13px;
     font-weight: 600;
     text-decoration: none;
     transition: color 180ms ease;
 }
-.forgot-back:hover { color: #0d6b63; }
+.forgot-back:hover { color: var(--color-primary-hover); }
 .forgot-back svg { transition: transform 180ms ease; }
 .forgot-back:hover svg { transform: translateX(-2px); }
 
@@ -38,8 +32,8 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    background: #ffffff;
-    border: 1px solid #e5e7eb;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
     padding: 10px 12px;
     max-width: 420px;
@@ -50,8 +44,8 @@
     width: 28px;
     height: 28px;
     border-radius: 6px;
-    background: #ecfdf5;
-    color: #0f766e;
+    background: var(--color-success-soft);
+    color: var(--color-primary-text);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -60,14 +54,14 @@
 .forgot-security p {
     margin: 0;
     font-size: 12px;
-    color: #4b5563;
+    color: var(--color-text-2);
     line-height: 1.45;
 }
 
 .auth-alert-info {
-    background: #f0fdfa;
-    color: #0f766e;
-    border: 1px solid #99f6e4;
+    background: var(--color-primary-soft);
+    color: var(--color-primary-text);
+    border: 1px solid var(--color-primary-border);
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -76,7 +70,7 @@
     word-break: break-all;
 }
 .auth-alert-info strong {
-    color: #134e4a;
+    color: var(--color-primary-active);
     font-weight: 700;
     font-size: 13px;
 }
@@ -84,10 +78,10 @@
 .forgot-token-link {
     display: block;
     padding: 6px 8px;
-    background: #ffffff;
-    border: 1px dashed #99f6e4;
+    background: var(--color-surface);
+    border: 1px dashed var(--color-primary-border);
     border-radius: 6px;
-    color: #0f766e;
+    color: var(--color-primary-text);
     text-decoration: none;
     font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
     font-size: 11px;
@@ -95,7 +89,7 @@
     transition: background 180ms ease;
 }
 .forgot-token-link:hover {
-    background: #ecfdf5;
+    background: var(--color-success-soft);
     text-decoration: underline;
 }
 
