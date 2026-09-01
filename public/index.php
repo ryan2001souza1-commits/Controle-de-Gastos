@@ -30,47 +30,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// --- Inicialização CSRF (após session_start) ---
-// Detecta mudanças de estado de autenticação para regenerar o token:
-// 1) Não existe token     → gerar
-// 2) user_id mudou        → gerar (login ou logout)
-// 3) user_id agora é null mas storedCsrfUserId é int (após logout) → gerar
-// Usa int|null para cobrir todos os casos (incluindo logout).
-if (!function_exists('csrf_field')) {
-    require_once __DIR__ . '/../src/services/CsrfService.php';
-    $csrfService = new CsrfService();
-    $csrfUserId = $_SESSION['user_id'] ?? null;
-    $storedCsrfUserId = $_SESSION['csrf_user_id'] ?? null;
-    $tokenExists = isset($_SESSION['csrf_token']) && is_string($_SESSION['csrf_token']);
-    $userIdChanged = $csrfUserId !== $storedCsrfUserId;
-    if (!$tokenExists || $userIdChanged) {
-        $csrfService->generateToken($csrfUserId);
-    }
-}
-// --- Fim inicialização CSRF ---
-
-// --- Função helper: renderiza campo CSRF oculto ---
-// Retorna string HTML com input hidden para inserção nos formulários
-if (!function_exists('csrf_field')) {
-    function csrf_field(): string
-    {
-        global $csrfService;
-        if (!isset($csrfService)) {
-            require_once __DIR__ . '/../src/services/CsrfService.php';
-            $csrfService = new CsrfService();
-        }
-        $userId = $_SESSION['user_id'] ?? null;
-        $token = $csrfService->getToken($userId);
-        if ($token === null && isset($_SESSION['csrf_token']) && is_string($_SESSION['csrf_token'])) {
-            $token = $_SESSION['csrf_token'];
-        }
-        if (!$token) {
-            return '';
-        }
-        return "<input type='hidden' name='csrf_token' value='{$token}'>";
-    }
-}
-// --- Fim função helper csrf_field ---
+require_once __DIR__ . '/../src/helpers/csrf.php';
 
 require_once __DIR__ . '/../src/models/User.php';
 require_once __DIR__ . '/../src/models/Category.php';

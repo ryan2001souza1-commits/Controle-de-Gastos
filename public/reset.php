@@ -1,4 +1,11 @@
-<?php $pageTitle = 'Nova Senha - Controle de Gastos'; ?>
+<?php
+require_once __DIR__ . '/../src/config/config.php';
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+require_once __DIR__ . '/../src/helpers/csrf.php';
+$pageTitle = 'Nova Senha - Controle de Gastos';
+?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
