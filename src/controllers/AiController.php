@@ -26,9 +26,12 @@ class AiController
         requireLogin();
         $userId = (int)$_SESSION['user_id'];
 
+        $limit = $this->aiLimitService->getLimit($userId);
+        $used = $this->aiLimitService->countToday($userId);
         $limitInfo = [
-            'used' => $this->aiLimitService->countToday($userId),
-            'limit' => $this->aiLimitService->getLimit($userId) ?? PHP_INT_MAX,
+            'used' => $used,
+            'limit' => $limit ?? PHP_INT_MAX,
+            'remaining' => $limit === null ? PHP_INT_MAX : max(0, $limit - $used),
         ];
 
         $isConfigured = AiService::isConfigured();
