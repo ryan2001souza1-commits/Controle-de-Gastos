@@ -145,9 +145,7 @@ function getDBConnection(): PDO
         $endpointId = '';
         $isPooler = str_contains($cfg['host'], '-pooler.');
         $isNeon = $isPooler || (str_contains($cfg['host'], '.neon.tech') || str_contains($cfg['host'], '.neon.'));
-        if ($isPooler) {
-            $endpointId = explode('-pooler.', $cfg['host'], 2)[0];
-        } elseif ($isNeon) {
+        if ($isNeon) {
             $endpointId = explode('.', $cfg['host'], 2)[0];
         }
 
