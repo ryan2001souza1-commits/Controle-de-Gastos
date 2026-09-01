@@ -95,7 +95,7 @@
                         <path d="M8 11V8a4 4 0 0 1 8 0v3"/>
                     </svg>
                 </span>
-                <p>Para sua segurança, o link de recuperação irá expirar em 1 minuto.</p>
+                <p>Para sua segurança, o link de recuperação irá expirar em 15 minutos.</p>
             </div>
 
             <p class="auth-footer">&copy; <?= date('Y') ?> Controle de Gastos · Desenvolvido por Ryan Souza</p>

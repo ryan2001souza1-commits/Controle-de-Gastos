@@ -141,7 +141,7 @@ include __DIR__ . '/../partials/admin_layout_start.php';
                         <?= render_icon('check', 14) ?> Salvar atualização
                     </button>
                 </div>
-            <?= csrf_field() ?>\n</form>
+            </form>
             <div style="margin-top:16px;display:flex;justify-content:flex-end">
                 <a href="/index.php?action=admin_bugs" class="admin-btn admin-btn-secondary admin-btn-sm">Voltar para lista</a>
             </div>

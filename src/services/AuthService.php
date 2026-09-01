@@ -81,6 +81,11 @@ class AuthService
             return ['success' => false, 'message' => 'Todos os campos são obrigatórios.'];
         }
 
+        $name = trim($name);
+        if (mb_strlen($name) < 2 || mb_strlen($name) > 100) {
+            return ['success' => false, 'message' => 'Nome deve ter entre 2 e 100 caracteres.'];
+        }
+
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return ['success' => false, 'message' => 'E-mail inválido.'];
         }
@@ -215,16 +220,26 @@ class AuthService
             return ['success' => false, 'message' => 'Token inválido ou expirado. Solicite um novo link.'];
         }
 
+        $ipKey = $this->clientIpKey();
+        $ipCheck = $this->rateLimiter->check(RateLimiter::PASSWORD_RESET, 'reset_' . $ipKey, self::RESET_MAX_ATTEMPTS, self::RESET_WINDOW_SECONDS);
+        if (!$ipCheck['allowed']) {
+            return ['success' => false, 'message' => 'Muitas tentativas. Tente novamente mais tarde.'];
+        }
+
         if (strlen($newPassword) < 8) {
+            $this->rateLimiter->recordAttempt(RateLimiter::PASSWORD_RESET, 'reset_' . $ipKey, true, self::RESET_MAX_ATTEMPTS, self::RESET_WINDOW_SECONDS);
             return ['success' => false, 'message' => 'A nova senha deve ter no mínimo 8 caracteres.'];
         }
         if (!preg_match('/[A-Z]/', $newPassword)) {
+            $this->rateLimiter->recordAttempt(RateLimiter::PASSWORD_RESET, 'reset_' . $ipKey, true, self::RESET_MAX_ATTEMPTS, self::RESET_WINDOW_SECONDS);
             return ['success' => false, 'message' => 'A nova senha deve conter pelo menos 1 letra maiúscula.'];
         }
         if (!preg_match('/[0-9]/', $newPassword)) {
+            $this->rateLimiter->recordAttempt(RateLimiter::PASSWORD_RESET, 'reset_' . $ipKey, true, self::RESET_MAX_ATTEMPTS, self::RESET_WINDOW_SECONDS);
             return ['success' => false, 'message' => 'A nova senha deve conter pelo menos 1 número.'];
         }
         if ($newPassword !== $confirm) {
+            $this->rateLimiter->recordAttempt(RateLimiter::PASSWORD_RESET, 'reset_' . $ipKey, true, self::RESET_MAX_ATTEMPTS, self::RESET_WINDOW_SECONDS);
             return ['success' => false, 'message' => 'A confirmação de senha não confere.'];
         }
 
@@ -232,6 +247,7 @@ class AuthService
         $reset = $this->resetModel->findValid($tokenHash);
 
         if (!$reset) {
+            $this->rateLimiter->recordAttempt(RateLimiter::PASSWORD_RESET, 'reset_' . $ipKey, true, self::RESET_MAX_ATTEMPTS, self::RESET_WINDOW_SECONDS);
             return ['success' => false, 'message' => 'Token inválido, expirado ou já utilizado. Solicite um novo link.'];
         }
 

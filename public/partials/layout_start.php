@@ -97,10 +97,13 @@ $bellIcon = '<svg width="16" height="16" fill="none" stroke="currentColor" strok
         <?php endif; ?>
     </nav>
     <div class="sidebar-footer">
-        <a href="/index.php?action=logout" class="sidebar-link">
-            <?= $logoutIcon ?>
-            Sair
-        </a>
+        <form method="POST" action="/index.php?action=logout" style="margin:0">
+            <?= csrf_field() ?>
+            <button type="submit" class="sidebar-link" style="width:100%;background:none;border:none;text-align:left;cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 12px;font-size:13px;font-weight:500;color:rgba(255,255,255,.6);border-radius:8px">
+                <?= $logoutIcon ?>
+                Sair
+            </button>
+        </form>
     </div>
 </aside>
 

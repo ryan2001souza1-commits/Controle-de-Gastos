@@ -140,11 +140,11 @@ $action = $_GET['action'] ?? null;
 // --- Validação CSRF para requisições POST ---
 // Lista de ações que exigem validação CSRF (todas que processam dados do formulário)
 $csrfProtectedActions = [
-    'register', 'login', 'store', 'update', 'delete', 'store_category',
+    'register', 'login', 'forgot', 'reset', 'store', 'update', 'delete', 'store_category',
     'update_category', 'delete_category', 'store_budget', 'delete_budget',
     'store_goal', 'update_goal', 'delete_goal', 'update_profile',
     'update_password', 'feedback_create', 'reportar', 'reportar_create',
-    'admin_bug_update', 'admin_feedback_update', 'ai_chat',
+    'admin_bug_update', 'admin_feedback_update', 'ai_chat', 'logout',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

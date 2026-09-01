@@ -61,6 +61,12 @@ class AuthController
 
     public function logout(): void
     {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'error' => 'Metodo nao permitido.']);
+            exit;
+        }
         $this->authService->logout();
     }
 

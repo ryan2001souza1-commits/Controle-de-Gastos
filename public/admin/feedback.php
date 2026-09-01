@@ -85,7 +85,7 @@ include __DIR__ . '/../partials/admin_layout_start.php';
                 <input type="text" name="q" placeholder="Buscar por título, descrição ou usuário" value="<?= htmlspecialchars($q) ?>">
             </div>
             <button type="submit" class="admin-btn admin-btn-primary admin-btn-sm">Filtrar</button>
-        <?= csrf_field() ?>\n</form>
+        </form>
     </div>
     <div class="admin-table-wrap">
         <table class="admin-table">
@@ -152,7 +152,7 @@ include __DIR__ . '/../partials/admin_layout_start.php';
                                     <textarea name="resposta_admin" class="admin-input" rows="3" placeholder="Comentário interno ou resposta visível ao cliente..."><?= htmlspecialchars($f['resposta_admin'] ?? '') ?></textarea>
                                 </div>
                                 <button type="submit" class="admin-btn admin-btn-primary admin-btn-sm">Salvar</button>
-                            <?= csrf_field() ?>\n</form>
+                            </form>
                         </div>
                     </td>
                 </tr>

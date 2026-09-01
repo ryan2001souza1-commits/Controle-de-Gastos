@@ -62,10 +62,13 @@ $adminIcons = [
             <span class="admin-sidebar-icon"><?= $adminIcons['back'] ?></span>
             <span class="admin-sidebar-label">Voltar ao site</span>
         </a>
-        <a href="/index.php?action=logout" class="admin-sidebar-link admin-sidebar-link-soft">
-            <span class="admin-sidebar-icon"><?= $adminIcons['logout'] ?></span>
-            <span class="admin-sidebar-label">Sair</span>
-        </a>
+        <form method="POST" action="/index.php?action=logout" style="margin:0">
+            <?= csrf_field() ?>
+            <button type="submit" class="admin-sidebar-link admin-sidebar-link-soft" style="width:100%;background:none;border:none;text-align:left;cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px">
+                <span class="admin-sidebar-icon"><?= $adminIcons['logout'] ?></span>
+                <span class="admin-sidebar-label">Sair</span>
+            </button>
+        </form>
     </div>
 </aside>
 

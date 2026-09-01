@@ -209,7 +209,10 @@ if (isset($_GET['success']) && isset($msgs[$_GET['success']])): ?>
                 <div style="display:flex;justify-content:space-between"><span style="font-size:12px;color:var(--color-text-3)">Moeda</span><span style="font-size:12px;font-weight:600"><?= htmlspecialchars($user->moeda ?? 'BRL') ?></span></div>
                 <div style="display:flex;justify-content:space-between"><span style="font-size:12px;color:var(--color-text-3)">Notificações</span><span style="font-size:12px;font-weight:600"><?= ($user->notificacoes ?? 1) ? 'Ativas' : 'Inativas' ?></span></div>
                 <hr style="border:none;border-top:1px solid var(--color-border);margin:4px 0">
-                <a href="/index.php?action=logout" class="btn btn-ghost btn-sm" style="width:100%">Sair da conta</a>
+                <form method="POST" action="/index.php?action=logout" style="margin:0">
+                    <?= csrf_field() ?>
+                    <button type="submit" class="btn btn-ghost btn-sm" style="width:100%">Sair da conta</button>
+                </form>
             </div>
         </section>
 
