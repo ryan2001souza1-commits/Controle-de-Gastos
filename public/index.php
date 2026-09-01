@@ -31,16 +31,20 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 // --- Inicialização CSRF (após session_start) ---
+// Detecta mudanças de estado de autenticação para regenerar o token:
+// 1) Não existe token     → gerar
+// 2) user_id mudou        → gerar (login ou logout)
+// 3) user_id agora é null mas storedCsrfUserId é int (após logout) → gerar
+// Usa int|null para cobrir todos os casos (incluindo logout).
 if (!function_exists('csrf_field')) {
     require_once __DIR__ . '/../src/services/CsrfService.php';
     $csrfService = new CsrfService();
-    $csrfUserId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+    $csrfUserId = $_SESSION['user_id'] ?? null;
     $storedCsrfUserId = $_SESSION['csrf_user_id'] ?? null;
-    // Se o user_id mudou (ex: após login) ou ainda não há token, gera um novo
-    if (!isset($_SESSION['csrf_token']) || ($csrfUserId !== null && (int)$storedCsrfUserId !== $csrfUserId)) {
-        $csrfToken = $csrfService->generateToken($csrfUserId);
-        $_SESSION['csrf_user_id'] = $csrfUserId;
-        $_SESSION['csrf_token']   = $csrfToken;
+    $tokenExists = isset($_SESSION['csrf_token']) && is_string($_SESSION['csrf_token']);
+    $userIdChanged = $csrfUserId !== $storedCsrfUserId;
+    if (!$tokenExists || $userIdChanged) {
+        $csrfService->generateToken($csrfUserId);
     }
 }
 // --- Fim inicialização CSRF ---
@@ -52,15 +56,12 @@ if (!function_exists('csrf_field')) {
     {
         global $csrfService;
         if (!isset($csrfService)) {
-            // Fallback: cria instância rápida se não injetada
             require_once __DIR__ . '/../src/services/CsrfService.php';
             $csrfService = new CsrfService();
         }
-        $userId = $_SESSION['user_id'] ?? 0;
+        $userId = $_SESSION['user_id'] ?? null;
         $token = $csrfService->getToken($userId);
         if ($token === null && isset($_SESSION['csrf_token']) && is_string($_SESSION['csrf_token'])) {
-            // Fallback de compatibilidade: aceita token armazenado na sessão
-            // (caso o user_id armazenado não coincida exatamente, mas token ainda válido)
             $token = $_SESSION['csrf_token'];
         }
         if (!$token) {

@@ -19,16 +19,11 @@ class CsrfService
      * - Token é armazenado na sessão do usuário (userid + token)
      * - Se já existe, retorna o mesmo (reusável por sessão)
      */
-    public function generateToken(int $userId): string
+    public function generateToken(int|null $userId): string
     {
-        // Gera token seguro de 32 bytes → 43 chars base64
         $token = base64_encode(random_bytes(32));
-
-        // Armazena na sessão do usuário para este request
-        // O session handler em DB (configureSession) sobrevive entre instâncias serverless
         $_SESSION['csrf_token'] = $token;
         $_SESSION['csrf_user_id'] = $userId;
-
         return $token;
     }
 
@@ -41,19 +36,14 @@ class CsrfService
      * 3. Usa hash_equals para timing-safe comparison (evita timing attacks)
      * 4. Retorna true/false (sem exposição de debug)
      */
-    public function validateToken(int $userId, string $token): bool
+    public function validateToken(int|null $userId, string $token): bool
     {
-        // Requisitos mínimos
         if (!$token || !is_string($token)) {
             return false;
         }
-
-        // Deve haver token armazenado na sessão
         if (!isset($_SESSION['csrf_token']) || !is_string($_SESSION['csrf_token'])) {
             return false;
         }
-
-        // Comparação segura (evita timing attacks)
         return hash_equals($_SESSION['csrf_token'], $token);
     }
 
@@ -65,11 +55,9 @@ class CsrfService
      * - Após mudança de senha/admin
      * - Período periódico (opcional)
      */
-    public function regenerateToken(int $userId): string
+    public function regenerateToken(int|null $userId): string
     {
-        $token = $this->generateToken($userId);
-        // session já atualizada no generateToken
-        return $token;
+        return $this->generateToken($userId);
     }
 
     /**
@@ -78,14 +66,15 @@ class CsrfService
      * Segurança: frontend só precisa do token para o formulário,
      * não expõe o backend state.
      */
-    public function getToken(int $userId): ?string
+    public function getToken(int|null $userId): ?string
     {
-        if (!isset($_SESSION['csrf_user_id'], $_SESSION['csrf_token'])) {
+        if (!array_key_exists('csrf_user_id', $_SESSION) || !array_key_exists('csrf_token', $_SESSION)) {
             return null;
         }
-        if ((int)$_SESSION['csrf_user_id'] !== $userId) {
+        if ($_SESSION['csrf_user_id'] !== $userId) {
             return null;
         }
-        return $_SESSION['csrf_token'];
+        $tok = $_SESSION['csrf_token'];
+        return is_string($tok) ? $tok : null;
     }
 }
