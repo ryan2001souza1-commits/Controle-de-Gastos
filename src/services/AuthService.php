@@ -6,25 +6,48 @@ class AuthService
     private PasswordReset $resetModel;
     private Mailer $mailer;
     private PDO $db;
+    private RateLimiter $rateLimiter;
 
-    public function __construct(User $userModel, PasswordReset $resetModel, Mailer $mailer, PDO $db)
+    private const LOGIN_MAX_ATTEMPTS = 5;
+    private const LOGIN_WINDOW_SECONDS = 900;
+    private const RESET_MAX_ATTEMPTS = 3;
+    private const RESET_WINDOW_SECONDS = 3600;
+    private const RESET_TOKEN_TTL_SECONDS = 900;
+
+    public function __construct(User $userModel, PasswordReset $resetModel, Mailer $mailer, PDO $db, ?RateLimiter $rateLimiter = null)
     {
         $this->userModel  = $userModel;
         $this->resetModel = $resetModel;
         $this->mailer     = $mailer;
         $this->db         = $db;
+        $this->rateLimiter = $rateLimiter ?? new RateLimiter($db);
     }
 
     public function login(string $email, string $password): bool
     {
+        $emailLower = strtolower(trim($email));
+        $ipKey = $this->clientIpKey();
+
+        $ipCheck = $this->rateLimiter->check(RateLimiter::LOGIN, $ipKey, self::LOGIN_MAX_ATTEMPTS, self::LOGIN_WINDOW_SECONDS);
+        if (!$ipCheck['allowed']) {
+            return false;
+        }
+        $emailCheck = $this->rateLimiter->check(RateLimiter::LOGIN, $emailLower, self::LOGIN_MAX_ATTEMPTS, self::LOGIN_WINDOW_SECONDS);
+        if (!$emailCheck['allowed']) {
+            return false;
+        }
+
         $user = $this->userModel->findByEmail($email);
 
-        // Mitiga enumeração por timing: sempre verifica dummy hash quando usuário não existe
         if (!$user) {
             password_verify($password, '$2y$10$usesomesillystringfore2uDLvp1Ii2e./U9C8sBjqp8I90dH6hi');
+            $this->rateLimiter->recordAttempt(RateLimiter::LOGIN, $ipKey, true, self::LOGIN_MAX_ATTEMPTS, self::LOGIN_WINDOW_SECONDS);
+            $this->rateLimiter->recordAttempt(RateLimiter::LOGIN, $emailLower, true, self::LOGIN_MAX_ATTEMPTS, self::LOGIN_WINDOW_SECONDS);
             return false;
         }
         if (!$user->verifyPassword($password)) {
+            $this->rateLimiter->recordAttempt(RateLimiter::LOGIN, $ipKey, true, self::LOGIN_MAX_ATTEMPTS, self::LOGIN_WINDOW_SECONDS);
+            $this->rateLimiter->recordAttempt(RateLimiter::LOGIN, $emailLower, true, self::LOGIN_MAX_ATTEMPTS, self::LOGIN_WINDOW_SECONDS);
             return false;
         }
 
@@ -33,8 +56,20 @@ class AuthService
         $_SESSION['user_email'] = $user->email;
         $_SESSION['is_admin'] = (int)($user->is_admin ?? 0);
 
-        if (session_status() === PHP_SESSION_ACTIVE) {
-            session_regenerate_id(true);
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            @session_start();
+        }
+        session_regenerate_id(true);
+
+        $this->rateLimiter->clearAttempts(RateLimiter::LOGIN, $ipKey);
+        $this->rateLimiter->clearAttempts(RateLimiter::LOGIN, $emailLower);
+
+        if (class_exists('CsrfService')) {
+            try {
+                (new CsrfService())->regenerateToken((int)$user->id);
+            } catch (Throwable $e) {
+                error_log('[AuthService] csrf regenerate on login failed: ' . $e->getMessage());
+            }
         }
 
         return true;
@@ -52,6 +87,13 @@ class AuthService
 
         if (strlen($password) < 8) {
             return ['success' => false, 'message' => 'Senha deve ter no mínimo 8 caracteres.'];
+        }
+
+        if (!preg_match('/[A-Z]/', $password)) {
+            return ['success' => false, 'message' => 'Senha deve conter pelo menos 1 letra maiúscula.'];
+        }
+        if (!preg_match('/[0-9]/', $password)) {
+            return ['success' => false, 'message' => 'Senha deve conter pelo menos 1 número.'];
         }
 
         if ($password !== $passwordConfirm) {
@@ -106,23 +148,30 @@ class AuthService
             return ['success' => false, 'message' => 'Informe um e-mail válido.'];
         }
 
+        $ipKey = $this->clientIpKey();
+        $ipCheck = $this->rateLimiter->check(RateLimiter::PASSWORD_RESET, $ipKey, self::RESET_MAX_ATTEMPTS, self::RESET_WINDOW_SECONDS);
+        if (!$ipCheck['allowed']) {
+            $generic = 'Se o e-mail estiver cadastrado, você receberá as instruções para recuperar sua senha.';
+            return ['success' => true, 'message' => $generic, 'resetUrl' => null, 'mailSent' => false];
+        }
+
         $user = $this->userModel->findByEmail($email);
         $generic = 'Se o e-mail estiver cadastrado, você receberá as instruções para recuperar sua senha.';
 
         if (!$user) {
-            // E-mail não existe no banco — interrompe aqui.
-            // Não gera token, não salva recuperação, não envia e-mail.
-            // Retorna sucesso genérico para não revelar se o e-mail existe.
+            $this->rateLimiter->recordAttempt(RateLimiter::PASSWORD_RESET, $ipKey, true, self::RESET_MAX_ATTEMPTS, self::RESET_WINDOW_SECONDS);
             return ['success' => true, 'message' => $generic, 'resetUrl' => null, 'mailSent' => false];
         }
 
-        // E-mail existe — prossegue com geração de token e envio.
+        $this->rateLimiter->recordAttempt(RateLimiter::PASSWORD_RESET, $ipKey, false, self::RESET_MAX_ATTEMPTS, self::RESET_WINDOW_SECONDS);
+
         $tokenPlain = bin2hex(random_bytes(32));
         $tokenHash  = hash('sha256', $tokenPlain);
-
-        // Invalida tokens anteriores válidos do mesmo usuário
         $this->resetModel->invalidateForUser($user->id);
-        $this->resetModel->create($user->id, $tokenHash); // expira em 1 min via DB NOW()
+
+        $ttlSeconds = self::RESET_TOKEN_TTL_SECONDS;
+        $expiresAt = date('Y-m-d H:i:s', time() + $ttlSeconds);
+        $this->resetModel->create($user->id, $tokenHash, $expiresAt);
 
         $baseUrl = $this->getBaseUrl();
         $resetUrl = $baseUrl . '/index.php?action=reset&token=' . $tokenPlain;
@@ -130,19 +179,14 @@ class AuthService
         $mailSent = $this->mailer->send(
             $user->email,
             'Recuperação de senha - Controle de Gastos',
-            $this->buildResetEmail($user->name, $resetUrl),
-            "Abra este link para redefinir sua senha (válido por 1 minuto): {$resetUrl}"
+            $this->buildResetEmail($user->name, $resetUrl, $ttlSeconds),
+            "Abra este link para redefinir sua senha (válido por {$ttlSeconds}s): {$resetUrl}"
         );
 
         if (!$mailSent) {
             error_log("[AuthService] Falha ao enviar e-mail de recuperação para {$user->email} — verifique BREVO_API_KEY e MAIL_FROM na Vercel");
-            if ($this->envAny('APP_DEBUG') === 'true' || $this->envAny('APP_ENV') === 'development') {
-                error_log("[AuthService:DEV] Link de recuperação (válido 1 min): {$resetUrl}");
-            }
         }
 
-        // NUNCA expõe resetUrl na resposta — usuário recebe exclusivamente por e-mail.
-        // Em produção o fallback anterior exibia o link na tela; agora retorna null sempre.
         return [
             'success'  => true,
             'message'  => $generic,
@@ -167,12 +211,18 @@ class AuthService
     public function resetPasswordWithToken(string $token, string $newPassword, string $confirm): array
     {
         $token = trim($token);
-        if ($token === '') {
+        if ($token === '' || strlen($token) > 256) {
             return ['success' => false, 'message' => 'Token inválido ou expirado. Solicite um novo link.'];
         }
 
         if (strlen($newPassword) < 8) {
             return ['success' => false, 'message' => 'A nova senha deve ter no mínimo 8 caracteres.'];
+        }
+        if (!preg_match('/[A-Z]/', $newPassword)) {
+            return ['success' => false, 'message' => 'A nova senha deve conter pelo menos 1 letra maiúscula.'];
+        }
+        if (!preg_match('/[0-9]/', $newPassword)) {
+            return ['success' => false, 'message' => 'A nova senha deve conter pelo menos 1 número.'];
         }
         if ($newPassword !== $confirm) {
             return ['success' => false, 'message' => 'A confirmação de senha não confere.'];
@@ -187,7 +237,6 @@ class AuthService
 
         $userId = (int)$reset['user_id'];
 
-        // Transação atômica: senha + invalidação do token
         $db = $this->db;
         try {
             $db->beginTransaction();
@@ -197,6 +246,10 @@ class AuthService
             }
             $this->resetModel->markUsed((int)$reset['id']);
             $this->resetModel->invalidateForUser($userId);
+
+            $stmt = $db->prepare("DELETE FROM sessions WHERE user_id = ?");
+            $stmt->execute([$userId]);
+
             $db->commit();
         } catch (Throwable $e) {
             if ($db->inTransaction()) $db->rollBack();
@@ -205,6 +258,23 @@ class AuthService
         }
 
         return ['success' => true, 'message' => 'Senha redefinida com sucesso. Você já pode fazer login.'];
+    }
+
+    private function clientIpKey(): string
+    {
+        $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+        $forwarded = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '';
+        if (is_string($forwarded) && $forwarded !== '') {
+            $parts = explode(',', $forwarded);
+            $first = trim($parts[0] ?? '');
+            if (filter_var($first, FILTER_VALIDATE_IP)) {
+                $ip = $first;
+            }
+        }
+        if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+            $ip = 'unknown';
+        }
+        return substr($ip, 0, 64);
     }
 
     private function getBaseUrl(): string
@@ -242,8 +312,9 @@ class AuthService
         return false;
     }
 
-    private function buildResetEmail(string $name, string $url): string
+    private function buildResetEmail(string $name, string $url, int $ttlSeconds = 900): string
     {
+        $minutes = (int)ceil($ttlSeconds / 60);
         $safeName = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
         return <<<HTML
 <!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
@@ -257,7 +328,7 @@ class AuthService
 Recebemos uma solicitação para redefinir a senha da sua conta no <strong>Controle de Gastos</strong>.
 </p>
 <p style="margin:0 0 24px;line-height:1.5;color:#475569;">
-Clique no botão abaixo para definir uma nova senha. <strong>Este link expira em 1 minuto</strong> e pode ser usado apenas uma vez.
+Clique no botão abaixo para definir uma nova senha. <strong>Este link expira em {$minutes} minutos</strong> e pode ser usado apenas uma vez.
 </p>
 <p style="margin:0 0 24px;">
 <a href="{$url}" style="display:inline-block;background:linear-gradient(135deg,#4f46e5,#6366f1);color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:600;">

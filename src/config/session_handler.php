@@ -35,11 +35,15 @@ class DbSessionHandler implements SessionHandlerInterface
     {
         try {
             $expires = date('Y-m-d H:i:s', time() + $this->lifetime);
+            $userId = null;
+            if (session_status() === PHP_SESSION_ACTIVE && isset($_SESSION['user_id'])) {
+                $userId = (int)$_SESSION['user_id'];
+            }
             $stmt = $this->db->prepare("
-                INSERT INTO sessions (id, data, expires_at) VALUES (?, ?, ?::timestamp)
-                ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, expires_at = EXCLUDED.expires_at
+                INSERT INTO sessions (id, data, expires_at, user_id) VALUES (?, ?, ?::timestamp, ?)
+                ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, expires_at = EXCLUDED.expires_at, user_id = EXCLUDED.user_id
             ");
-            return $stmt->execute([$id, $data, $expires]);
+            return $stmt->execute([$id, $data, $expires, $userId]);
         } catch (Throwable $e) {
             error_log('[session write] ' . $e->getMessage());
             return false;
@@ -50,9 +54,11 @@ class DbSessionHandler implements SessionHandlerInterface
     {
         try {
             $stmt = $this->db->prepare("DELETE FROM sessions WHERE id = ?");
-            $stmt->execute([$id]);
-        } catch (Throwable $e) {}
-        return true;
+            return $stmt->execute([$id]);
+        } catch (Throwable $e) {
+            error_log('[session destroy] ' . $e->getMessage());
+            return false;
+        }
     }
 
     public function gc(int $max_lifetime): int|false
@@ -62,6 +68,7 @@ class DbSessionHandler implements SessionHandlerInterface
             $stmt->execute();
             return $stmt->rowCount();
         } catch (Throwable $e) {
+            error_log('[session gc] ' . $e->getMessage());
             return 0;
         }
     }

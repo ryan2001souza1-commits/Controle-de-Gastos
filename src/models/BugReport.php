@@ -27,14 +27,17 @@ class BugReport
         return (int)$stmt->fetchColumn();
     }
 
-    public function findById(int $id): ?array
+    public function findById(int $id, ?int $forUserId = null): ?array
     {
         $stmt = $this->db->prepare("
             SELECT b.*, u.nome as usuario_nome, u.email as usuario_email
             FROM bug_reports b LEFT JOIN usuarios u ON u.id = b.usuario_id
-            WHERE b.id = ?
-        ");
-        $stmt->execute([$id]);
+            WHERE b.id = ?"
+            . ($forUserId !== null ? " AND b.usuario_id = ?" : "")
+            . " LIMIT 1"
+        );
+        $params = $forUserId !== null ? [$id, $forUserId] : [$id];
+        $stmt->execute($params);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
     }
@@ -56,9 +59,14 @@ class BugReport
         $sql = "SELECT b.*, u.nome as usuario_nome, u.email as usuario_email FROM bug_reports b LEFT JOIN usuarios u ON u.id = b.usuario_id";
         if ($where) $sql .= " WHERE " . implode(' AND ', $where);
         $sql .= " ORDER BY b.created_at DESC LIMIT ? OFFSET ?";
-        $params[] = $limit; $params[] = $offset;
         $stmt = $this->db->prepare($sql);
-        $stmt->execute($params);
+        $i = 1;
+        foreach ($params as $val) {
+            $stmt->bindValue($i++, $val);
+        }
+        $stmt->bindValue($i++, (int)$limit, PDO::PARAM_INT);
+        $stmt->bindValue($i++, (int)$offset, PDO::PARAM_INT);
+        $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 

@@ -23,15 +23,18 @@ class Feedback
         return (int)$this->db->lastInsertId();
     }
 
-    public function findById(int $id): ?array
+    public function findById(int $id, ?int $forUserId = null): ?array
     {
         $stmt = $this->db->prepare(
             "SELECT f.*, u.nome AS usuario_nome, u.email AS usuario_email
              FROM feedback f
              LEFT JOIN usuarios u ON u.id = f.usuario_id
-             WHERE f.id = ? LIMIT 1"
+             WHERE f.id = ?"
+             . ($forUserId !== null ? " AND f.usuario_id = ?" : "")
+             . " LIMIT 1"
         );
-        $stmt->execute([$id]);
+        $params = $forUserId !== null ? [$id, $forUserId] : [$id];
+        $stmt->execute($params);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
     }
@@ -65,9 +68,15 @@ class Feedback
                 LEFT JOIN usuarios u ON u.id = f.usuario_id
                 $whereSql
                 ORDER BY f.created_at DESC
-                LIMIT $limit OFFSET $offset";
+                LIMIT ? OFFSET ?";
         $stmt = $this->db->prepare($sql);
-        $stmt->execute($params);
+        $i = count($params);
+        foreach ($params as $idx => $val) {
+            $stmt->bindValue($idx + 1, $val, is_int($val) ? PDO::PARAM_INT : PDO::PARAM_STR);
+        }
+        $stmt->bindValue(++$i, $limit, PDO::PARAM_INT);
+        $stmt->bindValue(++$i, $offset, PDO::PARAM_INT);
+        $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 

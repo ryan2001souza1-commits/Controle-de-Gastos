@@ -89,14 +89,11 @@ class User
 
     public function updatePassword(int $userId, string $newPassword): bool
     {
+        $hash = password_hash($newPassword, PASSWORD_DEFAULT);
         $stmt = $this->db->prepare(
-            'UPDATE usuarios SET senha = ? WHERE id = ?'
+            'UPDATE usuarios SET senha = ?, updated_at = NOW() WHERE id = ?'
         );
-
-        return $stmt->execute([
-            password_hash($newPassword, PASSWORD_DEFAULT),
-            $userId
-        ]);
+        return $stmt->execute([$hash, $userId]);
     }
 
     public function findById(int $id): ?User
@@ -162,10 +159,23 @@ class User
         if ($this->password_hash === null || $this->password_hash === '') {
             return false;
         }
-        return password_verify(
+        $valid = password_verify(
             $password,
             $this->password_hash
         );
+
+        if ($valid && $this->id !== null && password_needs_rehash($this->password_hash, PASSWORD_DEFAULT)) {
+            $newHash = password_hash($password, PASSWORD_DEFAULT);
+            try {
+                $upd = $this->db->prepare('UPDATE usuarios SET senha = ?, updated_at = NOW() WHERE id = ?');
+                $upd->execute([$newHash, $this->id]);
+                $this->password_hash = $newHash;
+            } catch (Throwable $e) {
+                error_log('[User] rehash failed for user ' . $this->id . ': ' . $e->getMessage());
+            }
+        }
+
+        return $valid;
     }
 
     private function hydrate(array $data): User

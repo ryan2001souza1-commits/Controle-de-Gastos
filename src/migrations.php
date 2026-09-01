@@ -153,6 +153,28 @@ function runMigrations(PDO $db): void
             CONSTRAINT uq_ai_usage_user_date UNIQUE (user_id, date)
         )",
         "CREATE INDEX IF NOT EXISTS idx_ai_usage_user_date ON ai_usage(user_id, date)",
+
+        "CREATE TABLE IF NOT EXISTS rate_limit_attempts (
+            id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            action VARCHAR(30) NOT NULL,
+            identifier VARCHAR(255) NOT NULL,
+            failed BOOLEAN NOT NULL DEFAULT TRUE,
+            blocked_until TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )",
+        "CREATE INDEX IF NOT EXISTS idx_rate_limit_action_id ON rate_limit_attempts(action, identifier, created_at DESC)",
+
+        "CREATE TABLE IF NOT EXISTS user_sessions (
+            id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            session_id VARCHAR(128) NOT NULL UNIQUE,
+            user_id INTEGER NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL
+        )",
+        "CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id, expires_at)",
+
+        "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS user_id INTEGER",
+        "CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id) WHERE user_id IS NOT NULL",
     ];
 
     foreach ($statements as $sql) {

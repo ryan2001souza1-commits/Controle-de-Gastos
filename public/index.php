@@ -72,6 +72,7 @@ require_once __DIR__ . '/../src/models/Goal.php';
 require_once __DIR__ . '/../src/models/Budget.php';
 require_once __DIR__ . '/../src/models/PasswordReset.php';
 require_once __DIR__ . '/../src/services/Mailer.php';
+require_once __DIR__ . '/../src/services/RateLimiter.php';
 require_once __DIR__ . '/../src/services/AuthService.php';
 require_once __DIR__ . '/../src/services/GoogleAuthService.php';
 require_once __DIR__ . '/../src/services/ExpenseService.php';
@@ -262,14 +263,24 @@ if ($action === 'register') {
 } elseif ($action === 'setup_first_admin') {
     // Endpoint one-time: cria primeiro admin em produção (só funciona se ainda não existir admin)
     // Protegido por token secreto configurado via SETUP_SECRET no ambiente
-    if (getenv('SETUP_SECRET') !== false && getenv('SETUP_SECRET') !== '') {
-        $provided = $_REQUEST['secret'] ?? '';
-        if (!hash_equals(getenv('SETUP_SECRET'), $provided)) {
-            http_response_code(403);
-            header('Content-Type: application/json');
-            echo json_encode(['ok'=>false,'error'=>'Token invalido']);
-            exit;
-        }
+    if (getenv('SETUP_SECRET') === false || getenv('SETUP_SECRET') === '') {
+        http_response_code(404);
+        header('Content-Type: application/json');
+        echo json_encode(['ok'=>false,'error'=>'Endpoint nao disponivel']);
+        exit;
+    }
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        header('Content-Type: application/json');
+        echo json_encode(['ok'=>false,'error'=>'Metodo nao permitido']);
+        exit;
+    }
+    $provided = $_REQUEST['secret'] ?? '';
+    if (!is_string($provided) || !hash_equals(getenv('SETUP_SECRET'), $provided)) {
+        http_response_code(403);
+        header('Content-Type: application/json');
+        echo json_encode(['ok'=>false,'error'=>'Token invalido']);
+        exit;
     }
     try {
         $hasAdmin = (int)$db->query("SELECT COUNT(*) FROM usuarios WHERE is_admin = 1")->fetchColumn();
@@ -315,19 +326,41 @@ if ($action === 'register') {
         exit;
     }
 } elseif ($action === 'diag') {
+    // Endpoint de diagnóstico — SOMENTE development/local.
+    // Bloqueia em produção (VERCEL_ENV) a menos que DIAG_SECRET esteja configurado.
     requireLogin();
     if (empty($_SESSION['is_admin'])) { http_response_code(403); exit; }
+    $isProduction = getenv('VERCEL_ENV') !== false;
+    $diagSecret = getenv('DIAG_SECRET');
+    if ($isProduction && (!$diagSecret || $diagSecret === '')) {
+        http_response_code(404);
+        header('Content-Type: application/json');
+        echo json_encode(['error'=>'Endpoint nao disponivel']);
+        exit;
+    }
+    if ($diagSecret && $diagSecret !== '') {
+        $provided = $_REQUEST['diag_secret'] ?? '';
+        if (!is_string($provided) || !hash_equals($diagSecret, $provided)) {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            echo json_encode(['error'=>'Acesso negado']);
+            exit;
+        }
+    }
     header('Content-Type: application/json');
     try {
-        $email = $_REQUEST['email'] ?? 'admin20264@gmail.com';
-        $stmt = $db->prepare("SELECT id, email, is_admin, plano FROM usuarios WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) LIMIT 1");
+        $email = is_string($_REQUEST['email'] ?? null) ? trim((string)$_REQUEST['email']) : '';
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            http_response_code(400);
+            echo json_encode(['error'=>'E-mail invalido']);
+            exit;
+        }
+        $stmt = $db->prepare("SELECT id, is_admin FROM usuarios WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) LIMIT 1");
         $stmt->execute([$email]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         echo json_encode([
-            'exists'=>(bool)$row,
-            'email'=>$email,
-            'is_admin'=>$row ? (int)$row['is_admin'] : null,
-            'plano'=>$row['plano'] ?? null,
+            'exists' => (bool)$row,
+            'is_admin' => $row ? (int)$row['is_admin'] : null,
         ]);
         exit;
     } catch (Throwable $e) {

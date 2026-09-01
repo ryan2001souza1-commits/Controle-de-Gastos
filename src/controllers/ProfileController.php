@@ -174,27 +174,38 @@ class ProfileController
     {
         requireLogin();
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') { header('Location: /index.php?action=configuracoes'); exit; }
-        $userId = $_SESSION['user_id'];
+        $userId = (int)$_SESSION['user_id'];
         $user = $this->userModel->findById($userId);
         if (!$user) { header('Location: /?action=login'); exit; }
-        // OAuth users without password cannot change this way
-        $current = $_POST['current_password'] ?? '';
-        $new = $_POST['new_password'] ?? '';
-        $confirm = $_POST['confirm_password'] ?? '';
-        if ($new === '' || strlen($new) < 8) {
+        $current = (string)($_POST['current_password'] ?? '');
+        $new = (string)($_POST['new_password'] ?? '');
+        $confirm = (string)($_POST['confirm_password'] ?? '');
+
+        if (strlen($new) < 8) {
+            header('Location: /index.php?action=configuracoes&error=weak_password'); exit;
+        }
+        if (!preg_match('/[A-Z]/', $new) || !preg_match('/[0-9]/', $new)) {
             header('Location: /index.php?action=configuracoes&error=weak_password'); exit;
         }
         if ($new !== $confirm) {
             header('Location: /index.php?action=configuracoes&error=password_mismatch'); exit;
         }
-        if ($user->password_hash && !$user->verifyPassword($current)) {
-            header('Location: /index.php?action=configuracoes&error=wrong_password'); exit;
-        }
-        // If user has no password (OAuth), allow set without current
         if ($user->password_hash && $current === '') {
             header('Location: /index.php?action=configuracoes&error=wrong_password'); exit;
         }
+        if ($user->password_hash && !$user->verifyPassword($current)) {
+            header('Location: /index.php?action=configuracoes&error=wrong_password'); exit;
+        }
+
         $this->userModel->updatePassword($userId, $new);
+
+        try {
+            $stmt = $this->db->prepare("DELETE FROM sessions WHERE user_id = ?");
+            $stmt->execute([$userId]);
+        } catch (Throwable $e) {
+            error_log('[ProfileController] session invalidation failed: ' . $e->getMessage());
+        }
+
         header('Location: /index.php?action=configuracoes&success=password_updated'); exit;
     }
 }
