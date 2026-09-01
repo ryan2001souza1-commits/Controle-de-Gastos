@@ -34,12 +34,14 @@ if (session_status() === PHP_SESSION_NONE) {
 if (!function_exists('csrf_field')) {
     require_once __DIR__ . '/../src/services/CsrfService.php';
     $csrfService = new CsrfService();
-    // Define user_id: se já há usuário logado, usa o existente; se não, guarda null
     $csrfUserId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
-    $csrfToken = $csrfService->generateToken($csrfUserId);
-    // Armazena user_id no CSRF (inicial pode ser null se ainda não há login)
-    $_SESSION['csrf_user_id'] = $csrfUserId;
-    $_SESSION['csrf_token']  = $csrfToken;
+    $storedCsrfUserId = $_SESSION['csrf_user_id'] ?? null;
+    // Se o user_id mudou (ex: após login) ou ainda não há token, gera um novo
+    if (!isset($_SESSION['csrf_token']) || ($csrfUserId !== null && (int)$storedCsrfUserId !== $csrfUserId)) {
+        $csrfToken = $csrfService->generateToken($csrfUserId);
+        $_SESSION['csrf_user_id'] = $csrfUserId;
+        $_SESSION['csrf_token']   = $csrfToken;
+    }
 }
 // --- Fim inicialização CSRF ---
 
@@ -56,6 +58,11 @@ if (!function_exists('csrf_field')) {
         }
         $userId = $_SESSION['user_id'] ?? 0;
         $token = $csrfService->getToken($userId);
+        if ($token === null && isset($_SESSION['csrf_token']) && is_string($_SESSION['csrf_token'])) {
+            // Fallback de compatibilidade: aceita token armazenado na sessão
+            // (caso o user_id armazenado não coincida exatamente, mas token ainda válido)
+            $token = $_SESSION['csrf_token'];
+        }
         if (!$token) {
             return '';
         }

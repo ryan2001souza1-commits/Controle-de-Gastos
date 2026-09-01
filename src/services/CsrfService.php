@@ -48,13 +48,8 @@ class CsrfService
             return false;
         }
 
-        // Deve haver uma sessão
-        if (!isset($_SESSION['csrf_user_id'], $_SESSION['csrf_token'])) {
-            return false;
-        }
-
-        // Token deve pertencer ao mesmo usuário (segurança!)
-        if ((int)$_SESSION['csrf_user_id'] !== $userId) {
+        // Deve haver token armazenado na sessão
+        if (!isset($_SESSION['csrf_token']) || !is_string($_SESSION['csrf_token'])) {
             return false;
         }
 
