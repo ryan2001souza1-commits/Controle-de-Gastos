@@ -51,7 +51,24 @@ $planBadgeLabel = [
 $planIsAtivo = $planData['is_ativo'] ?? true;
 $statusLabel = $planIsAtivo ? 'Ativo' : 'Inativo';
 $statusBadgeClass = $planIsAtivo ? 'badge-success' : 'badge-warning';
+
+$flashSuccess = (($_GET['subscribed'] ?? '') === '1');
+$flashMpError = (($_GET['error'] ?? '') === 'mp_create_failed');
 ?>
+
+<?php if ($flashSuccess): ?>
+    <div class="alert alert-success" role="status" style="margin-bottom:var(--space-4)">
+        <?= render_icon('check', 13) ?>
+        <span>Assinatura criada com sucesso.</span>
+    </div>
+<?php endif; ?>
+
+<?php if ($flashMpError): ?>
+    <div class="alert alert-error" role="alert" style="margin-bottom:var(--space-4)">
+        <?= render_icon('info', 13) ?>
+        <span>Não foi possível validar o cartão para a assinatura. Verifique os dados e tente novamente.</span>
+    </div>
+<?php endif; ?>
 
 <!-- Card do plano atual -->
 <section class="panel" style="margin-bottom:var(--space-5)">
