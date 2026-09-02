@@ -140,6 +140,7 @@ class ProfileController
                 'slug'    => $slug,
                 'nome'    => $planSvc->getPlanDisplayName($slug),
                 'preco'   => $planSvc->getPlanPrice($slug),
+                'numeric_price' => $planSvc->getPlanNumericPrice($slug),
                 'features' => $planSvc->getAllFeatures($slug),
                 'limits'   => $planSvc->getAllLimits($slug),
             ];

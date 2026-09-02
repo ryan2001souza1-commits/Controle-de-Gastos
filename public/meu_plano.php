@@ -171,7 +171,7 @@ $statusBadgeClass = $planIsAtivo ? 'badge-success' : 'badge-warning';
             $planName = $upgrade['nome'];
             $planPrice = $upgrade['preco'];
             $planFeatures = $upgrade['features'] ?? [];
-            $planAmount = (float)str_replace(['R$', ' ', ',', '.'], ['', '', '.', ''], $planPrice);
+            $planAmount = $upgrade['numeric_price']; // float em reais (ex: 9.90) — fonte: DB, nao string formatada
             ?>
             <div style="border-radius:16px;border:<?= $style['border'] ?>;background:<?= $style['bg'] ?>;overflow:hidden">
                 <div style="padding:var(--space-4) var(--space-5);background:<?= $style['header_bg'] ?>;border-bottom:1px solid <?= $style['border'] ?>">
@@ -216,7 +216,7 @@ $statusBadgeClass = $planIsAtivo ? 'badge-success' : 'badge-warning';
                             data-plan-slug="<?= htmlspecialchars($slug) ?>"
                             data-plan-name="<?= htmlspecialchars($planName) ?>"
                             data-plan-price="<?= htmlspecialchars($planPrice) ?>"
-                            data-plan-amount="<?= (int)round($planAmount * 100) ?>"
+                            data-plan-amount="<?= htmlspecialchars(number_format($planAmount, 2, '.', '')) ?>"
                             data-user-email="<?= htmlspecialchars($userEmail) ?>"
                             data-csrf-token="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>"
                             style="width:100%;justify-content:center"
@@ -394,7 +394,7 @@ $statusBadgeClass = $planIsAtivo ? 'badge-success' : 'badge-warning';
             const slug = btn.dataset.planSlug;
             const name = btn.dataset.planName;
             const price = btn.dataset.planPrice;
-            const amount = parseInt(btn.dataset.planAmount, 10);
+            const amount = parseFloat(btn.dataset.planAmount);
             const email = btn.dataset.userEmail;
             openBrick(slug, name, price, amount, email);
         });

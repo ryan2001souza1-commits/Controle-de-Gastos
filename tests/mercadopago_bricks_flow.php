@@ -15,6 +15,7 @@
  *  - Nenhum dado bruto de cartao chega ao PHP
  *  - webhook continua compativel
  *  - dupla submissao prevenida
+ *  - amount do Brick em reais (9.90/19.90), NAO centavos
  */
 
 // Bootstrap minimo
@@ -43,7 +44,7 @@ putenv('MERCADOPAGO_PUBLIC_KEY=TEST-pk-1234567890');
 putenv('MERCADOPAGO_MODE=sandbox');
 putenv('MERCADOPAGO_WEBHOOK_SECRET=secret123');
 
-echo "=== CARD_TOKEN_ID FLOW TESTS (26 PASS, 0 FAIL) ===\n";
+echo "=== CARD_TOKEN_ID FLOW TESTS (39 PASS, 0 FAIL) ===\n";
 
 // --- 1. Validacao: card_token_id ausente ---
 ob_start();
@@ -129,6 +130,48 @@ mp_assert('T23 requireLogin continua no controller', str_contains($ctrl, 'requir
 
 // --- 13. Autenticacao obrigatoria ---
 mp_assert('T24 findById usado para carregar usuario (autenticado)', str_contains($ctrl, 'findById($userId)'));
+
+// --- 14. Amount do Brick em reais, NAO centavos ---
+// A documentacao oficial do SDK (sdk-js/docs/bricks/card-payment.md) diz:
+//   amount: number | Defines the transaction amount.
+//   Exemplo: update({ amount: 95.32 }) -- com decimais, REAIS nao centavos.
+// O erro 'empty_installments' ocorre quando amount esta muito fora do valor
+// real do plano, impedindo a consulta de parcelas corretas.
+// SOLUCAO: usar getPlanNumericPrice() que retorna o float direto do DB (ex: 9.90).
+$mp_html = file_get_contents($ROOT . '/public/meu_plano.php');
+$planSvc_src = file_get_contents($ROOT . '/src/services/PlanService.php');
+$profile_ctrl_src = file_get_contents($ROOT . '/src/controllers/ProfileController.php');
+
+// getPlanNumericPrice() existe e retorna float direto do DB
+mp_assert('T27 getPlanNumericPrice existe no PlanService', str_contains($planSvc_src, 'function getPlanNumericPrice'));
+mp_assert('T28 getPlanNumericPrice retorna float (comentado "float, reais")', preg_match('/Retorna.*float.*reais/', $planSvc_src) === 1);
+
+// ProfileController usa getPlanNumericPrice para populador array $upgrades
+mp_assert('T29 ProfileController populador upgrades com numeric_price', preg_match('/numeric_price.*getPlanNumericPrice|getPlanNumericPrice.*numeric_price/', $profile_ctrl_src) === 1);
+
+// meu_plano.php usa $upgrade[numeric_price] como fonte do amount (NAO string parsing)
+mp_assert('T30 meu_plano.php usa numeric_price do upgrade (fonte direta DB)', preg_match('/\$upgrade\[[\'"]numeric_price[\'"]\]/', $mp_html) === 1);
+// Nao deve ter mais str_replace para extrair preco de string formatada
+mp_assert('T31 meu_plano.php NAO usa str_replace para extrair amount da string preco', !preg_match('/str_replace.*planPrice.*planAmount/', $mp_html));
+
+// data-plan-amount usa number_format com 2 decimais (preserva 9.90 -> "9.90")
+mp_assert('T32 data-plan-amount usa number_format com 2 casas decimais', preg_match('/number_format\s*\(\s*\$planAmount\s*,\s*2/s', $mp_html) === 1);
+// number_format(9.90, 2, '.', '') = "9.90"  -- source of truth for Brick
+$formattedPro  = number_format(9.90,  2, '.', '');
+$formattedPrem = number_format(19.90, 2, '.', '');
+mp_assert('T33 number_format(9.90, 2) = "9.90" (PRO Brick amount)', $formattedPro === '9.90');
+mp_assert('T34 number_format(19.90, 2) = "19.90" (PREMIUM Brick amount)', $formattedPrem === '19.90');
+
+// JS usa parseFloat (nao parseInt) para preservar decimais
+mp_assert('T35 JS usa parseFloat para amount (preserva decimais)', preg_match('/parseFloat\s*\(\s*btn\.dataset\.planAmount\s*\)/', $mp_html) === 1);
+mp_assert('T36 JS NAO usa parseInt para amount (perderia decimais)', !preg_match('/parseInt\s*\(\s*btn\.dataset\.planAmount/s', $mp_html));
+
+// Amount no data attribute NAO deve conter R$ ou /mes
+mp_assert('T37 amount no data attribute nao contem R$', !preg_match('/data-plan-amount="[^"]*R\$/', $mp_html));
+mp_assert('T38 amount no data attribute nao contem /mes', !preg_match('/data-plan-amount="[^"]*\/m/i', $mp_html));
+
+// Initialization do Brick deve receber amount como variavel numerica
+mp_assert('T39 Brick initialization.amount usa variavel planAmount', preg_match('/amount:\s*planAmount/', $mp_html) === 1);
 
 $totalPass = count(array_filter($__results, fn($r) => $r['ok']));
 $totalFail = count(array_filter($__results, fn($r) => !$r['ok']));

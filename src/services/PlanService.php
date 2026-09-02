@@ -341,6 +341,22 @@ class PlanService
     }
 
     /**
+     * Retorna o preco numerico de um plano (float, reais, sem formatacao).
+     * Usado para passar valores ao Mercado Pago Brick, que espera amount em reais.
+     * Ex: 9.90 para R$ 9,90/mês.
+     * Retorna null se o plano nao existe ou nao tem preco definido.
+     */
+    public function getPlanNumericPrice(string $slug): ?float
+    {
+        $plano = $this->getPlanoBySlug($slug);
+        if ($plano === null) return null;
+        $preco = $plano['preco'] ?? null;
+        if ($preco === null) return null;
+        $preco = (float)$preco;
+        return $preco > 0 ? $preco : null;
+    }
+
+    /**
      * Verifica se o plano tem uma feature.
      *
      * Features disponiveis:
