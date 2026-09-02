@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../services/MercadoPagoService.php';
 require_once __DIR__ . '/../services/AsaasService.php';
+require_once __DIR__ . '/../services/CpfValidator.php';
 
 class ProfileController
 {
@@ -41,6 +42,7 @@ class ProfileController
         $nome = trim($_POST['nome'] ?? '');
         $email = trim($_POST['email'] ?? '');
         $telefone = trim($_POST['telefone'] ?? '');
+        $cpf_raw = trim($_POST['cpf'] ?? '');
         $data_nascimento = trim($_POST['data_nascimento'] ?? '');
         $renda = trim($_POST['renda_mensal'] ?? '');
         $dia = trim($_POST['dia_recebimento'] ?? '');
@@ -59,6 +61,14 @@ class ProfileController
         }
         if ($telefone !== '' && !preg_match('/^[0-9 \(\)\-\+]{8,20}$/', $telefone)) {
             header('Location: /index.php?action=configuracoes&error=invalid_phone'); exit;
+        }
+        $cpfNorm = null;
+        if ($cpf_raw !== '') {
+            $digits = CpfValidator::digits($cpf_raw);
+            if ($digits === null || !CpfValidator::isValid($digits)) {
+                header('Location: /index.php?action=configuracoes&error=invalid_cpf'); exit;
+            }
+            $cpfNorm = $digits;
         }
         $dataNascNorm = null;
         if ($data_nascimento !== '') {
@@ -92,6 +102,7 @@ class ProfileController
             'nome' => $nome,
             'email' => $email,
             'telefone' => $telefone !== '' ? $telefone : null,
+            'cpf' => $cpfNorm,
             'data_nascimento' => $dataNascNorm,
             'renda_mensal' => $rendaNorm,
             'dia_recebimento' => $diaNorm,

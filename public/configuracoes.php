@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/../src/services/CpfValidator.php';
+
 $activeMenu = 'configuracoes';
 $showPeriodPicker = false;
 $topbarActions = '';
@@ -9,6 +11,7 @@ if (strpos($user->name ?? '', ' ') !== false) {
     $parts = explode(' ', trim($user->name));
     $initials = strtoupper(substr($parts[0],0,1) . substr(end($parts),0,1));
 }
+$cpfFormatted = CpfValidator::format($user->cpf ?? null) ?? '';
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -35,6 +38,7 @@ $errs = [
     'invalid_email' => 'E-mail em formato inválido.',
     'email_taken' => 'Este e-mail já está em uso por outra conta.',
     'invalid_phone' => 'Telefone inválido.',
+    'invalid_cpf' => 'CPF inválido. Verifique o número e tente novamente.',
     'invalid_date' => 'Data de nascimento inválida.',
     'invalid_income' => 'Renda mensal inválida.',
     'invalid_payday' => 'Dia de recebimento deve ser entre 1 e 31.',
@@ -95,9 +99,17 @@ if (isset($_GET['success']) && isset($msgs[$_GET['success']])): ?>
                                 <span class="form-hint">Opcional — usado para contato e recuperação</span>
                             </div>
                             <div class="form-group">
+                                <label for="cpf">CPF</label>
+                                <input type="text" id="cpf" name="cpf" inputmode="numeric" maxlength="14" value="<?= htmlspecialchars($cpfFormatted) ?>" placeholder="000.000.000-00" autocomplete="off">
+                                <span class="form-hint">Obrigatório para assinar PRO ou PREMIUM. Será usado apenas para identificar você no Asaas.</span>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
                                 <label for="data_nascimento">Data de nascimento</label>
                                 <input type="date" id="data_nascimento" name="data_nascimento" value="<?= htmlspecialchars($user->data_nascimento ?? '') ?>">
                             </div>
+                            <div class="form-group"></div>
                         </div>
 
                         <hr style="border:none;border-top:1px solid var(--color-border);margin:4px 0">
@@ -226,3 +238,19 @@ if (isset($_GET['success']) && isset($msgs[$_GET['success']])): ?>
 </div>
 
 <?php include __DIR__ . '/partials/layout_end.php'; ?>
+
+<script>
+(function () {
+    var cpf = document.getElementById('cpf');
+    if (!cpf) return;
+    cpf.addEventListener('input', function () {
+        var d = cpf.value.replace(/\D/g, '').slice(0, 11);
+        var f = '';
+        if (d.length > 0)  f = d.slice(0, 3);
+        if (d.length > 3)  f += '.' + d.slice(3, 6);
+        if (d.length > 6)  f += '.' + d.slice(6, 9);
+        if (d.length > 9)  f += '-' + d.slice(9, 11);
+        cpf.value = f;
+    });
+})();
+</script>

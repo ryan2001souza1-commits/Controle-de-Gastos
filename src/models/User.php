@@ -216,7 +216,7 @@ class User
 
     public function updateProfile(int $id, array $fields): bool
     {
-        $allowed = ['nome','email','telefone','data_nascimento','renda_mensal','dia_recebimento','objetivo','moeda','notificacoes'];
+        $allowed = ['nome','email','telefone','cpf','data_nascimento','renda_mensal','dia_recebimento','objetivo','moeda','notificacoes'];
         $sets = []; $params = [];
         foreach ($fields as $k => $v) {
             if (!in_array($k, $allowed, true)) continue;

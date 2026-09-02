@@ -11,6 +11,8 @@
  *   - Dados de cartao transitam no body apenas durante a chamada
  *     e sao descartados imediatamente apos a resposta do Asaas
  */
+require_once __DIR__ . '/../services/CpfValidator.php';
+
 class AsaasSubscriptionController
 {
     private const PLAN_PRICES = [
@@ -80,9 +82,9 @@ class AsaasSubscriptionController
             return;
         }
 
-        $cpf = preg_replace('/\D/', '', (string)($user->cpf ?? ''));
-        if ($cpf === '') {
-            header('Location: /?action=meu_plano&error=missing_cpf');
+        $cpf = CpfValidator::digits((string)($user->cpf ?? ''));
+        if ($cpf === null || !CpfValidator::isValid($cpf)) {
+            header('Location: /?action=meu_plano&error=invalid_cpf');
             return;
         }
 

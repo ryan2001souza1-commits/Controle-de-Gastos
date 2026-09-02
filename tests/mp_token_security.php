@@ -353,6 +353,94 @@ echo ($hasSandboxUrl && $hasProdUrl) ? "OK" : "FAIL";
 ');
 ok("25. AsaasService seleciona sandbox/production baseado em ASAAS_ENV", $out === 'OK', $pass, $fail, $log);
 
+// =====================================================================
+// Teste 26: CpfValidator.php existe e valida DV
+// =====================================================================
+$out = runIsolated('
+$file = "' . $root . '/src/services/CpfValidator.php";
+$content = @file_get_contents($file);
+require_once $file;
+if (!class_exists("CpfValidator")) { echo "NOMISS"; exit; }
+if (!CpfValidator::isValid("52998224725")) { echo "BADVAL"; exit; }
+if (CpfValidator::isValid("00000000000")) { echo "BADREJ"; exit; }
+if (CpfValidator::isValid("11111111111")) { echo "BADREJ"; exit; }
+echo "OK";
+');
+ok("26. CpfValidator existe e valida DV corretamente", $out === 'OK', $pass, $fail, $log);
+
+// =====================================================================
+// Teste 27: AsaasSubscriptionController NAO loga CPF
+// =====================================================================
+$out = runIsolated('
+$file = "' . $root . '/src/controllers/AsaasSubscriptionController.php";
+$content = @file_get_contents($file);
+$leaks = [
+    "error_log" . ".*" . "\$cpf",
+    "error_log" . ".*" . "cpfCnpj",
+    "error_log" . ".*" . "\$cpf_raw",
+];
+$found = false;
+foreach ($leaks as $p) {
+    if (strpos($content, $p) !== false) { $found = true; break; }
+}
+echo $found ? "LEAK" : "OK";
+');
+ok("27. AsaasSubController NAO loga CPF", $out === 'OK', $pass, $fail, $log);
+
+// =====================================================================
+// Teste 28: AsaasSubscriptionController valida CPF antes de Asaas call
+// =====================================================================
+$out = runIsolated('
+$file = "' . $root . '/src/controllers/AsaasSubscriptionController.php";
+$content = @file_get_contents($file);
+if (strpos($content, "CpfValidator::isValid") === false) { echo "NOVAL"; exit; }
+if (strpos($content, "error=invalid_cpf") === false) { echo "NOERR"; exit; }
+preg_match_all("/(CpfValidator::isValid|createSubscription|createCustomer|findOrCreateCustomer)/", $content, $m, PREG_OFFSET_CAPTURE);
+$pos = array_column($m[0], 1);
+sort($pos);
+$firstValidator = $pos[0] ?? PHP_INT_MAX;
+$firstAsaas    = $pos[count($pos) > 1 ? 1 : 0] ?? PHP_INT_MAX;
+echo ($firstValidator < $firstAsaas) ? "OK" : "FAIL";
+');
+ok("28. CpfValidator validado ANTES de qualquer chamada Asaas", $out === 'OK', $pass, $fail, $log);
+
+// =====================================================================
+// Teste 29: ProfileController NAO loga CPF
+// =====================================================================
+$out = runIsolated('
+$file = "' . $root . '/src/controllers/ProfileController.php";
+$content = @file_get_contents($file);
+$leaks = [
+    "error_log" . ".*" . "\$cpf",
+    "error_log" . ".*" . "\$cpf_raw",
+    "error_log" . ".*" . "cpf",
+];
+$found = false;
+foreach ($leaks as $p) {
+    if (strpos($content, $p) !== false) { $found = true; break; }
+}
+echo $found ? "LEAK" : "OK";
+');
+ok("29. ProfileController NAO loga CPF", $out === 'OK', $pass, $fail, $log);
+
+// =====================================================================
+// Teste 30: AsaasWebhookService NAO loga CPF
+// =====================================================================
+$out = runIsolated('
+$file = "' . $root . '/src/services/AsaasWebhookService.php";
+$content = @file_get_contents($file);
+$leaks = [
+    "error_log" . ".*" . "\$cpf",
+    "error_log" . ".*" . "cpf",
+];
+$found = false;
+foreach ($leaks as $p) {
+    if (strpos($content, $p) !== false) { $found = true; break; }
+}
+echo $found ? "LEAK" : "OK";
+');
+ok("30. AsaasWebhookService NAO loga CPF", $out === 'OK', $pass, $fail, $log);
+
 echo "\n=== SUBSCRIPTION SECURITY TESTS ($pass PASS, $fail FAIL) ===\n";
 echo $log;
 exit($fail === 0 ? 0 : 1);

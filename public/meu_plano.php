@@ -59,7 +59,7 @@ $errMessages = [
     'plan_not_configured'   => 'Plano não configurado no servidor.',
     'missing_card_data'     => 'Preencha todos os dados do cartão.',
     'missing_holder_data'   => 'Preencha todos os dados do titular.',
-    'missing_cpf'           => 'CPF do titular não cadastrado no perfil.',
+    'invalid_cpf'          => 'CPF inválido ou não cadastrado. Cadastre um CPF válido em Configurações antes de assinar um plano.',
     'asaas_customer_failed' => 'Não foi possível criar o cadastro no Asaas.',
     'asaas_create_failed'   => 'Não foi possível processar a assinatura. Verifique os dados do cartão e tente novamente.',
     'asaas_no_id'           => 'Resposta incompleta do serviço de pagamento.',
@@ -89,6 +89,9 @@ $errText = $errMessages[$errKey] ?? null;
     <div class="alert alert-error" role="alert" style="margin-bottom:var(--space-4)">
         <?= render_icon('info', 13) ?>
         <span><?= htmlspecialchars($errText) ?></span>
+        <?php if ($errKey === 'invalid_cpf'): ?>
+            &nbsp;<a href="/index.php?action=configuracoes" class="alert-link" style="font-weight:600;text-decoration:underline">Ir para Configurações</a>
+        <?php endif; ?>
     </div>
 <?php endif; ?>
 
