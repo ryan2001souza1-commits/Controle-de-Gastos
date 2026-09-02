@@ -328,12 +328,15 @@ $statusBadgeClass = $planIsAtivo ? 'badge-success' : 'badge-warning';
         LOADING.style.display = 'block';
 
         try {
+            console.log('[MP] creating MercadoPago instance, public key length:', <?= json_encode(strlen($mpPublicKey)) ?>);
             if (!mpInstance) {
                 mpInstance = new MercadoPago(<?= json_encode($mpPublicKey) ?>, {
                     locale: 'pt-BR',
                     advancedFraudPrevention: true,
                 });
             }
+            console.log('[MP] MercadoPago instance created, calling bricks().create()...');
+            console.log('[MP] init amount:', planAmount, '| email:', payerEmail);
 
             const settings = {
                 initialization: {
@@ -344,9 +347,18 @@ $statusBadgeClass = $planIsAtivo ? 'badge-success' : 'badge-warning';
                 },
                 callbacks: {
                     onReady: function() {
+                        console.log('[MercadoPago Brick] onReady fired - Brick initialized successfully');
                         LOADING.style.display = 'none';
                     },
                     onError: function(error) {
+                        var mpErrType = (error && error.constructor && error.constructor.name) ? error.constructor.name : (typeof error);
+                        var mpErrMsg = (error && error.message) ? error.message : String(error);
+                        var mpErrCode = (error && error.error) ? error.error : '';
+                        console.error('[MercadoPago Brick onError]', {
+                            type: mpErrType,
+                            message: mpErrMsg,
+                            code: mpErrCode
+                        });
                         clearError();
                         showError('Erro ao processar cartão. Tente novamente.');
                     },
@@ -365,6 +377,12 @@ $statusBadgeClass = $planIsAtivo ? 'badge-success' : 'badge-warning';
 
             brickController = await mpInstance.bricks().create('cardPayment', 'mp-card-payment-brick-container', settings);
         } catch (err) {
+            var catchErrType = (err && err.constructor && err.constructor.name) ? err.constructor.name : (typeof err);
+            var catchErrMsg = (err && err.message) ? err.message : String(err);
+            console.error('[MercadoPago Brick outer catch]', {
+                type: catchErrType,
+                message: catchErrMsg
+            });
             LOADING.style.display = 'none';
             clearError();
             showError('Não foi possível iniciar o pagamento. Recarregue a página e tente novamente.');
