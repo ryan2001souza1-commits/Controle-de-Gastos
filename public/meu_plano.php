@@ -1,4 +1,15 @@
 <?php
+if (getenv('CSRF_DIAG') === '1') {
+    $tokInSess = $_SESSION['csrf_token'] ?? null;
+    error_log('[CSRF_DIAG-meu_plano] session_active=' . (session_status() === PHP_SESSION_ACTIVE ? '1' : '0')
+        . ' session_id=' . (session_id() !== '' ? substr(session_id(), 0, 6) . '...' : 'none')
+        . ' has_user_id=' . (isset($_SESSION['user_id']) ? '1' : '0')
+        . ' has_csrf=' . ($tokInSess !== null ? '1' : '0')
+        . ' csrf_len=' . ($tokInSess !== null ? strlen($tokInSess) : '0')
+        . ' has_csrf_uid=' . (isset($_SESSION['csrf_user_id']) ? '1' : '0')
+        . ' csrf_uid=' . (isset($_SESSION['csrf_user_id']) ? (string)$_SESSION['csrf_user_id'] : 'unset')
+    );
+}
 $pageTitle = $pageTitle ?? 'Meu Plano';
 $pageSubtitle = $pageSubtitle ?? 'Gerencie seu plano e veja os recursos disponíveis para você.';
 $activeMenu = $activeMenu ?? 'meu_plano';
@@ -207,7 +218,7 @@ $statusBadgeClass = $planIsAtivo ? 'badge-success' : 'badge-warning';
                     <!-- Botão upgrade -->
                     <form method="POST" action="/index.php?action=subscription_create" style="width:100%">
                         <input type="hidden" name="plan_slug" value="<?= htmlspecialchars($slug) ?>">
-                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_field()) ?>">
+                        <?= csrf_field() ?>
                         <button
                             type="submit"
                             class="btn"
