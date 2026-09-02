@@ -327,6 +327,9 @@ $flashMpError = (($_GET['error'] ?? '') === 'mp_create_failed');
             try { brickController.unmount(); } catch (e) {}
             brickController = null;
         }
+        CARD_TOKEN_INPUT.value = '';
+        CSRF_INPUT.value = '';
+        PLAN_SLUG_INPUT.value = '';
     }
 
     CLOSE_BTN.addEventListener('click', closeModal);
