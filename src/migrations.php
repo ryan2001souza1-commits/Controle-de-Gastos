@@ -324,17 +324,17 @@ function runMigrations(PDO $db): void
 
     // Seed planos basicos (idempotente).
     // Precos sao a fonte oficial para o backend e o frontend.
-    // GRATUITO: 0.00 | PRO: 29.90 | PREMIUM: 59.90
+    // GRATUITO: 0.00 | PRO: 9.90 | PREMIUM: 19.90
     // Para ajustar valores, atualize aqui e reexecute as migrations.
     try {
         $db->exec("INSERT INTO planos (nome, slug, preco, descricao, status)
             VALUES ('Gratuito','gratuito',0.00,'Plano gratuito com recursos essenciais.','ativo')
             ON CONFLICT (slug) DO NOTHING");
         $db->exec("INSERT INTO planos (nome, slug, preco, descricao, status)
-            VALUES ('Pro','pro',29.90,'Plano Pro com recursos avancados.','ativo')
+            VALUES ('Pro','pro',9.90,'Plano Pro com recursos avancados.','ativo')
             ON CONFLICT (slug) DO NOTHING");
         $db->exec("INSERT INTO planos (nome, slug, preco, descricao, status)
-            VALUES ('Premium','premium',59.90,'Plano Premium completo.','ativo')
+            VALUES ('Premium','premium',19.90,'Plano Premium completo.','ativo')
             ON CONFLICT (slug) DO NOTHING");
     } catch (Throwable $e) {}
 
@@ -354,14 +354,14 @@ function runMigrations(PDO $db): void
         $db->exec("ALTER TABLE planos ALTER COLUMN preco SET DEFAULT 0");
     } catch (Throwable $e) {}
 
-    // Aplica precos oficiais a PRO e PREMIUM (somente se estiverem NULL).
-    // Idempotente: se ja tiverem preco, nao sobrescreve.
+    // Aplica precos oficiais a PRO e PREMIUM (sempre, para refletir ajustes).
+    // Idempotente: a cada deploy sincroniza preco com o valor definido aqui.
     // Se precisar ajustar valores, altere aqui e reexecute as migrations.
     try {
-        $db->exec("UPDATE planos SET preco = 29.90, updated_at = NOW()
-            WHERE slug = 'pro' AND preco IS NULL");
-        $db->exec("UPDATE planos SET preco = 59.90, updated_at = NOW()
-            WHERE slug = 'premium' AND preco IS NULL");
+        $db->exec("UPDATE planos SET preco = 9.90, updated_at = NOW()
+            WHERE slug = 'pro'");
+        $db->exec("UPDATE planos SET preco = 19.90, updated_at = NOW()
+            WHERE slug = 'premium'");
     } catch (Throwable $e) {}
 
     // Criação/promotion do admin via variáveis de ambiente (sem credencial no código)
