@@ -401,6 +401,52 @@ if ($action === 'register') {
         echo json_encode(['error'=>'Erro interno']);
         exit;
     }
+} elseif ($action === 'mp_env_diag') {
+    requireLogin();
+    if (empty($_SESSION['is_admin'])) {
+        http_response_code(403);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Admin required']);
+        exit;
+    }
+    $token = (string)(getenv('MERCADOPAGO_ACCESS_TOKEN') ?: '');
+    $pubKey = (string)(getenv('MERCADOPAGO_PUBLIC_KEY') ?: '');
+    $mode = strtolower((string)(getenv('MERCADOPAGO_MODE') ?: ''));
+    $webhookSecret = (string)(getenv('MERCADOPAGO_WEBHOOK_SECRET') ?: '');
+    $planPro = (string)(getenv('MERCADOPAGO_PLAN_ID_PRO') ?: '');
+    $planPrem = (string)(getenv('MERCADOPAGO_PLAN_ID_PREMIUM') ?: '');
+
+    $tokenType = 'missing';
+    if ($token !== '') {
+        $tokenType = str_starts_with($token, 'TEST-') ? 'test' :
+            (str_starts_with($token, 'APP_USR-') || str_starts_with($token, 'APP PRD-') ? 'production' : 'unknown');
+    }
+
+    $pubKeyType = 'missing';
+    if ($pubKey !== '') {
+        $pubKeyType = str_starts_with($pubKey, 'TEST-') ? 'test' :
+            (str_starts_with($pubKey, 'APP_USR-') || str_starts_with($pubKey, 'APP PRD-') ? 'production' : 'unknown');
+    }
+
+    $modeType = 'production';
+    if ($mode === 'sandbox') {
+        $modeType = 'sandbox';
+    } elseif ($mode !== 'production' && $mode !== '') {
+        $modeType = 'other';
+    }
+
+    $diag = [
+        'mode' => $modeType,
+        'public_key_type' => $pubKeyType,
+        'access_token_type' => $tokenType,
+        'plan_pro_configured' => ($planPro !== '' ? 'yes' : 'no'),
+        'plan_premium_configured' => ($planPrem !== '' ? 'yes' : 'no'),
+        'webhook_secret_configured' => ($webhookSecret !== '' ? 'yes' : 'no'),
+    ];
+
+    header('Content-Type: application/json');
+    echo json_encode($diag);
+    exit;
 } elseif ($action === 'termos') {
     require basePath('termos.php');
 } elseif ($action === 'privacy') {

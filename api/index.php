@@ -18,50 +18,6 @@ declare(strict_types=1);
 
 $ROOT = dirname(__DIR__);
 
-function mp_diagnose_env(): array {
-    static $cached = null;
-    if ($cached !== null) {
-        return $cached;
-    }
-    $token = (string)(getenv('MERCADOPAGO_ACCESS_TOKEN') ?: '');
-    $pubKey = (string)(getenv('MERCADOPAGO_PUBLIC_KEY') ?: '');
-    $mode = strtolower((string)(getenv('MERCADOPAGO_MODE') ?: ''));
-    $webhookSecret = (string)(getenv('MERCADOPAGO_WEBHOOK_SECRET') ?: '');
-    $planPro = (string)(getenv('MERCADOPAGO_PLAN_ID_PRO') ?: '');
-    $planPrem = (string)(getenv('MERCADOPAGO_PLAN_ID_PREMIUM') ?: '');
-
-    $tokenType = 'missing';
-    if ($token !== '') {
-        $tokenType = str_starts_with($token, 'TEST-') ? 'test' : 'production';
-    }
-
-    $pubKeyType = 'missing';
-    if ($pubKey !== '') {
-        $pubKeyType = str_starts_with($pubKey, 'TEST-') ? 'test' : 'production';
-    }
-
-    $modeType = 'production';
-    if ($mode === 'sandbox') {
-        $modeType = 'sandbox';
-    } elseif ($mode !== 'production' && $mode !== '') {
-        $modeType = 'other';
-    }
-
-    $diag = [
-        'mode' => $modeType,
-        'public_key_type' => $pubKeyType,
-        'access_token_type' => $tokenType,
-        'plan_pro_configured' => ($planPro !== '' ? 'yes' : 'no'),
-        'plan_premium_configured' => ($planPrem !== '' ? 'yes' : 'no'),
-        'webhook_secret_configured' => ($webhookSecret !== '' ? 'yes' : 'no'),
-    ];
-
-    error_log('[MP Environment Diagnostic]' . http_build_query($diag, '', ' '));
-    $cached = $diag;
-    return $diag;
-}
-mp_diagnose_env();
-
 // =============================================================================
 // 0. Carregar .env automaticamente em dev local (em produção/Vercel o .env
 //    não existe — variáveis vêm de env real configurado no painel)
