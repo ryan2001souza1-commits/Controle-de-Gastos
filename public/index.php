@@ -132,40 +132,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (in_array($action, $csrfProtectedActions, true)) {
         $csrfToken = $_POST['csrf_token'] ?? '';
         $userId = $_SESSION['user_id'] ?? 0;
-        if (getenv('CSRF_DIAG') === '1') {
-            $sid = session_id();
-            $sidMasked = $sid !== '' ? substr($sid, 0, 6) . '...' : 'none';
-            $sessionHasToken = isset($_SESSION['csrf_token']) && is_string($_SESSION['csrf_token']);
-            $sessionTokenLen = $sessionHasToken ? strlen($_SESSION['csrf_token']) : 0;
-            $postTokenLen = strlen($csrfToken);
-            $tokensMatch = false;
-            if ($csrfToken !== '' && $sessionHasToken) {
-                $tokensMatch = hash_equals($_SESSION['csrf_token'], $csrfToken);
-            }
-            $csrfServiceDiag = null;
-            if (isset($csrfService) && $csrfService instanceof CsrfService) {
-                $csrfServiceDiag = 'instance_ok';
-            } else {
-                $csrfServiceDiag = 'not_found';
-            }
-            $diag = [
-                'action'              => $action,
-                'method'              => $_SERVER['REQUEST_METHOD'],
-                'session_id_masked'  => $sidMasked,
-                'session_active'      => session_status() === PHP_SESSION_ACTIVE,
-                'session_has_user_id'=> isset($_SESSION['user_id']),
-                'session_user_id'     => $_SESSION['user_id'] ?? null,
-                'csrf_service'        => $csrfServiceDiag,
-                'session_has_csrf'    => $sessionHasToken,
-                'session_csrf_len'   => $sessionTokenLen,
-                'session_has_csrf_uid' => isset($_SESSION['csrf_user_id']),
-                'session_csrf_uid'   => $_SESSION['csrf_user_id'] ?? null,
-                'post_has_csrf'      => $csrfToken !== '',
-                'post_csrf_len'      => $postTokenLen,
-                'tokens_match'       => $tokensMatch,
-            ];
-            error_log('[CSRF_DIAG] ' . json_encode($diag));
-        }
         if (empty($csrfToken) || !$csrfService->validateToken($userId, $csrfToken)) {
             http_response_code(403);
             header('Content-Type: application/json');

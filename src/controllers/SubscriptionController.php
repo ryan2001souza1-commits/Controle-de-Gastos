@@ -30,8 +30,8 @@ class SubscriptionController
 
     /**
      * POST /index.php?action=subscription_create
-     * Body: plan_slug (pro|premium), csrf_token
-     * Resposta: redirect 302 para init_point do MP.
+     * Body: plan_slug, card_token_id, csrf_token
+     * Resposta: redirect 302 para meu_plano (com status).
      */
     public function create(): void
     {
@@ -70,6 +70,12 @@ class SubscriptionController
             return;
         }
 
+        $cardTokenId = trim((string)($_POST['card_token_id'] ?? ''));
+        if ($cardTokenId === '') {
+            header('Location: /?action=meu_plano&error=missing_card_token');
+            return;
+        }
+
         $planIdEnvKey = 'MERCADOPAGO_PLAN_ID_' . strtoupper($planSlug);
         $planId = (string)(getenv($planIdEnvKey) ?: '');
         if ($planId === '') {
@@ -82,54 +88,51 @@ class SubscriptionController
         $appUrl = rtrim((string)(getenv('APP_URL') ?: 'https://example.com'), '/');
         $backUrl = $appUrl . '/mercadopago_return.php?ref=' . urlencode($extRef);
 
-        if (getenv('CSRF_DIAG') === '1') {
-            error_log('[CSRF_DIAG-sub_create] planSlug=' . $planSlug
-                . ' planId=' . substr($planId, 0, 8) . '...'
-                . ' planIdEnvKey=' . $planIdEnvKey
-                . ' extRef=' . $extRef
-            );
-        }
+        $resp = $this->mp->createPreapproval(
+            $planId,
+            $user->email,
+            $cardTokenId,
+            $extRef,
+            $backUrl,
+            'Assinatura ' . $plan['nome'] . ' - Controle de Gastos'
+        );
 
-        $planResp = $this->mp->getPreapprovalPlan($planId);
-        $checkoutUrl = '';
-        if ($planResp['ok']) {
-            $baseUrl = (string)($planResp['data']['init_point']
-                ?? $planResp['data']['sandbox_init_point']
-                ?? '');
-            if ($baseUrl !== '') {
-                $separator = (str_contains($baseUrl, '?')) ? '&' : '?';
-                $checkoutUrl = $baseUrl
-                    . $separator . 'external_reference=' . urlencode($extRef)
-                    . '&back_url=' . urlencode($backUrl);
-            }
-        }
-
-        if (getenv('CSRF_DIAG') === '1') {
-            $hasInit = !empty($planResp['data']['init_point']);
-            $hasSand = !empty($planResp['data']['sandbox_init_point']);
-            error_log('[CSRF_DIAG-sub_create] API GET /preapproval_plan/' . substr($planId, 0, 8) . '...: http='
-                . ($planResp['status'] ?? 0) . ' ok=' . ($planResp['ok'] ? '1' : '0')
-                . ' has_init_point=' . ($hasInit ? '1' : '0')
-                . ' has_sandbox=' . ($hasSand ? '1' : '0')
-                . ' checkout_url=' . ($checkoutUrl !== '' ? substr($checkoutUrl, 0, 80) . '...' : 'EMPTY')
-                . ' error=' . ($planResp['error'] ?? 'none')
-            );
-        }
-
-        if ($checkoutUrl === '') {
-            error_log('[SubscriptionController] getPreapprovalPlan falhou para planId=' . substr($planId, 0, 8)
-                . ' http=' . ($planResp['status'] ?? 0)
-                . ' error=' . ($planResp['error'] ?? 'unknown')
+        if (!$resp['ok']) {
+            $mpId  = (string)($resp['data']['id'] ?? '');
+            $err   = (string)($resp['error'] ?? 'unknown');
+            $tokenSig = substr($cardTokenId, 0, 4) . '...' . substr($cardTokenId, -4);
+            error_log('[SubscriptionController] createPreapproval falhou para user=' . $userId
+                . ' slug=' . $planSlug
+                . ' http=' . $resp['status']
+                . ' mp_id=' . ($mpId !== '' ? $mpId : 'none')
+                . ' token_sig=' . $tokenSig
+                . ' error=' . $err
             );
             header('Location: /?action=meu_plano&error=mp_create_failed');
             return;
         }
 
-        if (getenv('CSRF_DIAG') === '1') {
-            error_log('[CSRF_DIAG-sub_create] REDIRECT to checkout: ' . substr($checkoutUrl, 0, 80) . '...');
+        $mpId = (string)($resp['data']['id'] ?? '');
+        $mpStatus = (string)($resp['data']['status'] ?? 'pending');
+        if ($mpId === '') {
+            error_log('[SubscriptionController] createPreapproval OK sem id retornado');
+            header('Location: /?action=meu_plano&error=mp_no_id');
+            return;
         }
 
-        header('Location: ' . $checkoutUrl);
+        $resp['data']['external_reference'] = $extRef;
+        $resp['data']['_user_id_local']    = $userId;
+        $resp['data']['_plan_id_local']    = (int)($plan['id'] ?? 0);
+        $resp['data']['_plan_slug_local']  = $planSlug;
+
+        $this->subscriptions->createFromPreapproval($resp['data']);
+
+        $row = $this->subscriptions->findByMpPreapprovalId($mpId);
+        if ($row !== null) {
+            $this->subscriptions->applyStatusToUser($row);
+        }
+
+        header('Location: /?action=meu_plano&subscribed=1');
         return;
     }
 

@@ -82,16 +82,19 @@ class MercadoPagoService
     /**
      * Cria uma assinatura (preapproval) vinculada a um preapproval_plan_id.
      *
-     * @deprecated desde 2025-09: o endpoint /preapproval passou a exigir
-     *   card_token_id para pagamento imediato. Para planos ja criados
-     *   via /preapproval_plan, o fluxo correto e redirecionar para a
-     *   init_point do proprio plano (ver getPlanCheckoutUrl()).
+     * Fluxo usado em producao: o cartao e tokenizado no frontend via MercadoPago.js
+     * (Card Payment Brick) e o `card_token_id` chega aqui pelo POST do
+     * SubscriptionController. O token e one-shot (uso unico) e nunca e
+     * persistido em log/banco.
+     *
+     * Endpoint MP: POST /preapproval
      *
      * @return array{ok:bool, status:int, data:array, error:?string}
      */
     public function createPreapproval(
         string $preapprovalPlanId,
         string $payerEmail,
+        string $cardTokenId,
         string $externalReference,
         string $backUrl,
         ?string $reason = null
@@ -99,9 +102,10 @@ class MercadoPagoService
         $payload = [
             'preapproval_plan_id' => $preapprovalPlanId,
             'payer_email' => $payerEmail,
+            'card_token_id' => $cardTokenId,
             'external_reference' => $externalReference,
             'back_url' => $backUrl,
-            'status' => 'pending',
+            'status' => 'authorized',
         ];
         if ($reason !== null && $reason !== '') {
             $payload['reason'] = $reason;

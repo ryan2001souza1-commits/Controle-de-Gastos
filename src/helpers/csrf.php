@@ -34,14 +34,6 @@ if ($wasActive) {
     $storedCsrfUid = $_SESSION['csrf_user_id'] ?? null;
     $tokenExists   = isset($_SESSION['csrf_token']) && is_string($_SESSION['csrf_token']);
     $userIdChanged = $csrfUserId !== $storedCsrfUid;
-    if (getenv('CSRF_DIAG') === '1') {
-        error_log('[CSRF_DIAG-helper] session_active=1'
-            . ' csrf_uid=' . (isset($_SESSION['csrf_user_id']) ? (string)$_SESSION['csrf_user_id'] : 'unset')
-            . ' csrf_token_present=' . ($tokenExists ? '1' : '0')
-            . ' userIdChanged=' . ($userIdChanged ? '1' : '0')
-            . ' will_regenerate=' . ((!$tokenExists || $userIdChanged) ? '1' : '0')
-        );
-    }
     if (!$tokenExists || $userIdChanged) {
         $csrfService->generateToken($csrfUserId);
         session_write_close();
@@ -62,9 +54,6 @@ if (!function_exists('csrf_field')) {
         }
         $sessActive = session_status() === PHP_SESSION_ACTIVE;
         if (!$sessActive) {
-            if (getenv('CSRF_DIAG') === '1') {
-                error_log('[CSRF_DIAG-csrf_field] session_not_active - returning empty');
-            }
             return '';
         }
         $userId = $_SESSION['user_id'] ?? null;
@@ -73,9 +62,6 @@ if (!function_exists('csrf_field')) {
             $token = $_SESSION['csrf_token'];
         }
         if (!$token) {
-            if (getenv('CSRF_DIAG') === '1') {
-                error_log('[CSRF_DIAG-csrf_field] no_token - returning empty. csrf_token in session: ' . (isset($_SESSION['csrf_token']) ? '1' : '0'));
-            }
             return '';
         }
         return "<input type='hidden' name='csrf_token' value='" . htmlspecialchars($token, ENT_QUOTES) . "'>";

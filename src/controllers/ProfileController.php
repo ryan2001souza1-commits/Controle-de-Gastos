@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/../services/MercadoPagoService.php';
+
 class ProfileController
 {
     private User $userModel;
@@ -109,6 +111,15 @@ class ProfileController
         $user = $this->userModel->findById($userId);
         if (!$user) { header('Location: /?action=login'); exit; }
 
+        $mpPublicKey = '';
+        if (MercadoPagoService::isConfigured()) {
+            try {
+                $mpPublicKey = (new MercadoPagoService())->getPublicKey();
+            } catch (Throwable) {
+                $mpPublicKey = '';
+            }
+        }
+
         $planSvc = new PlanService($this->db);
         $currentPlanSlug = $planSvc->getUserPlanSlug($userId);
         $planData = $planSvc->getUserPlanData($user);
@@ -167,6 +178,7 @@ class ProfileController
         $activeMenu = 'meu_plano';
         $showPeriodPicker = false;
         $userName = $_SESSION['user_name'] ?? $user->name;
+        $userEmail = $user->email;
         require basePath('meu_plano.php');
     }
 
