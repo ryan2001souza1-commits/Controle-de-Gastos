@@ -22,6 +22,8 @@ class MercadoPagoService
 
     private string $accessToken;
     private ?string $webhookSecret;
+    private string $publicKey;
+    private string $mode;
 
     public function __construct()
     {
@@ -31,6 +33,8 @@ class MercadoPagoService
         }
         $this->accessToken = $token;
         $this->webhookSecret = getenv('MERCADOPAGO_WEBHOOK_SECRET') ?: null;
+        $this->publicKey = (string)(getenv('MERCADOPAGO_PUBLIC_KEY') ?: '');
+        $this->mode = strtolower((string)(getenv('MERCADOPAGO_MODE') ?: 'production'));
     }
 
     public static function isConfigured(): bool
@@ -39,9 +43,30 @@ class MercadoPagoService
         return is_string($t) && $t !== '';
     }
 
+    public static function isSandboxConfigured(): bool
+    {
+        $t = getenv('MERCADOPAGO_ACCESS_TOKEN');
+        return is_string($t) && str_starts_with($t, 'TEST-');
+    }
+
     public function getWebhookSecret(): ?string
     {
         return $this->webhookSecret;
+    }
+
+    public function getPublicKey(): string
+    {
+        return $this->publicKey;
+    }
+
+    public function getMode(): string
+    {
+        return $this->mode;
+    }
+
+    public function isSandbox(): bool
+    {
+        return $this->mode === 'sandbox' || str_starts_with($this->accessToken, 'TEST-');
     }
 
     /**
