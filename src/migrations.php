@@ -301,6 +301,7 @@ function runMigrations(PDO $db): void
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS reset_expires TIMESTAMP",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS provider VARCHAR(20) DEFAULT NULL",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS provider_sub VARCHAR(255) DEFAULT NULL",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cpf VARCHAR(14) DEFAULT NULL",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telefone VARCHAR(20)",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS data_nascimento DATE",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS renda_mensal NUMERIC(12,2)",
@@ -317,7 +318,36 @@ function runMigrations(PDO $db): void
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS active_subscription_id
             INTEGER REFERENCES subscriptions(id) ON DELETE SET NULL",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS mercadopago_payer_id VARCHAR(60)",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS asaas_customer_id VARCHAR(60)",
+
+        // Asaas - relacionamento com assinatura e cliente Asaas
+        // - asaas_customer_id mapeia o usuario local para o customer do Asaas (cus_...)
+        // - provider indica qual provedor originou a assinatura (mercadopago|asaas)
+        // - provider_status guarda o status cru do provider (ex: ACTIVE, INACTIVE)
+        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS asaas_customer_id VARCHAR(60)",
+        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS asaas_subscription_id VARCHAR(60)",
+        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS provider VARCHAR(20) DEFAULT NULL",
+        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS provider_status VARCHAR(30) DEFAULT NULL",
     ];
+    foreach ($addColumnIfMissing as $sql) {
+        $db->exec($sql);
+    }
+
+    // Indices idempotentes para colunas Asaas.
+    // - idx_subscriptions_asaas_sub: UNIQUE em asaas_subscription_id
+    //   para impedir 2 subscriptions locais com mesmo id Asaas.
+    // - idx_subscriptions_provider: pesquisa por provider.
+    $asaasIndexes = [
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_asaas_subscription
+            ON subscriptions(asaas_subscription_id) WHERE asaas_subscription_id IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_subscriptions_provider
+            ON subscriptions(provider) WHERE provider IS NOT NULL",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_asaas_customer
+            ON usuarios(asaas_customer_id) WHERE asaas_customer_id IS NOT NULL",
+    ];
+    foreach ($asaasIndexes as $sql) {
+        try { $db->exec($sql); } catch (Throwable $e) {}
+    }
     foreach ($addColumnIfMissing as $sql) {
         $db->exec($sql);
     }

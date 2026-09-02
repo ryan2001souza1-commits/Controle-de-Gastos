@@ -12,6 +12,7 @@ class User
     public ?string $provider = null;
     public ?string $provider_sub = null;
     public ?string $telefone = null;
+    public ?string $cpf = null;
     public ?string $data_nascimento = null;
     public ?float $renda_mensal = null;
     public ?int $dia_recebimento = null;
@@ -190,6 +191,7 @@ class User
         $this->provider = $data['provider'] ?? null;
         $this->provider_sub = $data['provider_sub'] ?? null;
         $this->telefone = $data['telefone'] ?? null;
+        $this->cpf = $data['cpf'] ?? null;
         $this->data_nascimento = $data['data_nascimento'] ?? null;
         $this->renda_mensal = isset($data['renda_mensal']) && $data['renda_mensal'] !== null ? (float)$data['renda_mensal'] : null;
         $this->dia_recebimento = isset($data['dia_recebimento']) && $data['dia_recebimento'] !== null ? (int)$data['dia_recebimento'] : null;

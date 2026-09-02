@@ -128,6 +128,13 @@ if (in_array($pathInfo, $publicWebhookPaths, true)) {
     require_once $ROOT . '/public/mercadopago_webhook.php';
     return;
 }
+// Webhook do Asaas e um endpoint publico (servidor-servidor)
+// SEM sessao e SEM CSRF. Ele se valida por "asaas-access-token" header.
+$publicAsaasWebhookPaths = ['/asaas_webhook.php', '/asaas_webhook', '/?action=asaas_webhook'];
+if (in_array($pathInfo, $publicAsaasWebhookPaths, true)) {
+    require_once $ROOT . '/public/asaas_webhook.php';
+    return;
+}
 // Pagina de retorno do Mercado Pago (apenas UX, nao ativa plano)
 $publicReturnPaths = ['/mercadopago_return.php', '/mercadopago_return'];
 if (in_array($pathInfo, $publicReturnPaths, true)) {

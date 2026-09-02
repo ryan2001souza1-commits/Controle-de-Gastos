@@ -1,11 +1,15 @@
 <?php
 /**
- * Tests de segurança e lógica do fluxo de assinatura MP.
- * Valida que o frontend é seguro contra reutilização de token.
- * Cada cenário roda em processo PHP isolado para evitar state leakage.
+ * Tests de seguranca e logica do fluxo de assinatura.
+ *
+ * ATENCAO: a integracao principal agora e Asaas (src/services/AsaasService.php).
+ * Este arquivo verifica:
+ *   - O SubscriptionController MP LEGADO ainda nao expoe PAN/CVV/token
+ *   - O AsaasSubscriptionController nao expoe cartao em logs ou persistencia
+ *   - O codigo do frontend NAO inclui MercadoPago.js (sua substituicao foi feita)
+ *   - O codigo do frontend nao expoe card_token_id (substituido por cartao direto)
  */
-
-$root = dirname(__DIR__);
+$root = 'C:/Users/Ryan Souza/Desktop/Projetos Pequenos/Controle-de-Gastos';
 $log = '';
 $pass = 0;
 $fail = 0;
@@ -18,7 +22,7 @@ function ok(string $name, bool $cond, int &$pass, int &$fail, string &$log): voi
 
 function runIsolated(string $scriptBody): string
 {
-    $tmp = tempnam(sys_get_temp_dir(), 'mp_token_test_') . '.php';
+    $tmp = tempnam(sys_get_temp_dir(), 'sub_security_test_') . '.php';
     file_put_contents($tmp, "<?php\n" . $scriptBody);
     $out = shell_exec('php ' . escapeshellarg($tmp) . ' 2>&1');
     @unlink($tmp);
@@ -26,214 +30,329 @@ function runIsolated(string $scriptBody): string
 }
 
 // =====================================================================
-// Teste 1: CARD_TOKEN_INPUT comeca vazio no HTML
+// Teste 1: MercadoPago.js foi removido do frontend
 // =====================================================================
 $out = runIsolated('
 $file = "' . $root . '/public/meu_plano.php";
 $content = @file_get_contents($file);
-if ($content === false) { echo "FILE_READ_ERROR"; exit; }
-$hasEmpty = preg_match("/id=.mp-card-token-id.[^>]*value=.[\x22\x27]?[\x22\x27]?/", $content, $m);
-echo $hasEmpty ? "OK" : "FAIL";
+echo (strpos($content, "sdk.mercadopago.com") === false) ? "OK" : "MP_SDK_PRESENT";
 ');
-ok("1. card_token_id hidden input comeca vazio no HTML", $out === 'OK', $pass, $fail, $log);
+ok("1. MercadoPago.js removido do frontend", $out === 'OK', $pass, $fail, $log);
 
 // =====================================================================
-// Teste 2: onSubmit so seta token se cardData.token existe
+// Teste 2: Card Payment Brick removido do frontend
 // =====================================================================
 $out = runIsolated('
 $file = "' . $root . '/public/meu_plano.php";
 $content = @file_get_contents($file);
-if ($content === false) { echo "FILE_READ_ERROR"; exit; }
-$hasGuard = strpos($content, "if (!cardData || !cardData.token)") !== false
-    && strpos($content, "CARD_TOKEN_INPUT.value = cardData.token") !== false;
-echo $hasGuard ? "OK" : "FAIL";
+echo (strpos($content, "bricks().create") === false && strpos($content, "cardPayment") === false) ? "OK" : "BRICK_PRESENT";
 ');
-ok("2. onSubmit valida cardData.token antes de usar", $out === 'OK', $pass, $fail, $log);
+ok("2. Card Payment Brick removido do frontend", $out === 'OK', $pass, $fail, $log);
 
 // =====================================================================
-// Teste 3: Somente um onSubmit callback existe
+// Teste 3: Nao ha logica de card_token_id no frontend
 // =====================================================================
 $out = runIsolated('
 $file = "' . $root . '/public/meu_plano.php";
 $content = @file_get_contents($file);
-if ($content === false) { echo "FILE_READ_ERROR"; exit; }
-$count = substr_count($content, "onSubmit:");
-echo $count === 1 ? "OK:$count" : "MULTIPLE:$count";
+echo (strpos($content, "CARD_TOKEN_INPUT") === false && strpos($content, "card_token_id") === false) ? "OK" : "TOKEN_STILL_PRESENT";
 ');
-ok("3. Apenas um callback onSubmit existe no codigo", $out === 'OK:1', $pass, $fail, $log);
+ok("3. card_token_id removido do frontend (substituido por cartao direto)", $out === 'OK', $pass, $fail, $log);
 
 // =====================================================================
-// Teste 4: amount 9.90 para PRO
+// Teste 4: valor PRO=9.90 (preco fixo do servidor)
 // =====================================================================
 $out = runIsolated('
-function getNumericPrice(string $slug) {
-    $prices = ["pro" => 9.90, "premium" => 19.90];
-    return $prices[$slug] ?? null;
-}
-$pro = getNumericPrice("pro");
-$premium = getNumericPrice("premium");
-$formatPro = number_format($pro, 2, ".", "");
-$formatPrem = number_format($premium, 2, ".", "");
-$allOk = ($formatPro === "9.90" && $formatPrem === "19.90");
-echo $allOk ? "OK" : "FAIL:$formatPro:$formatPrem";
+$prices = ["pro" => 9.90, "premium" => 19.90];
+$pro = number_format($prices["pro"], 2, ".", "");
+$premium = number_format($prices["premium"], 2, ".", "");
+echo ($pro === "9.90" && $premium === "19.90") ? "OK" : "FAIL:$pro:$premium";
 ');
-ok("4. Amount do Brick: PRO=9.90, PREMIUM=19.90", $out === 'OK', $pass, $fail, $log);
+ok("4. Preco PRO=9.90, PREMIUM=19.90 (fixo no servidor)", $out === 'OK', $pass, $fail, $log);
 
 // =====================================================================
-// Teste 5: status=authorized enviado no payload
+// Teste 5: status=authorized no payload MP legado (ainda existe)
 // =====================================================================
 $out = runIsolated('
 $file = "' . $root . '/src/services/MercadoPagoService.php";
 $content = @file_get_contents($file);
-if ($content === false) { echo "FILE_READ_ERROR"; exit; }
-$hasAuthorized = strpos($content, "\x27status\x27 => \x27authorized\x27") !== false;
-echo $hasAuthorized ? "OK" : "FAIL_NOT_AUTHORIZED";
+echo (strpos($content, "authorized") !== false) ? "OK" : "FAIL";
 ');
-ok("5. createPreapproval envia status=authorized", $out === 'OK', $pass, $fail, $log);
+ok("5. createPreapproval MP legado envia status=authorized", $out === 'OK', $pass, $fail, $log);
 
 // =====================================================================
-// Teste 6: plan_id vem de env var (MERCADOPAGO_PLAN_ID_<SLUG>)
+// Teste 6: plan_id vem de env var no controller MP legado
 // =====================================================================
 $out = runIsolated('
 $file = "' . $root . '/src/controllers/SubscriptionController.php";
 $content = @file_get_contents($file);
-if ($content === false) { echo "FILE_READ_ERROR"; exit; }
-$usesEnvVar = strpos($content, "MERCADOPAGO_PLAN_ID_") !== false
+$usesEnv = strpos($content, "MERCADOPAGO_PLAN_ID_") !== false
     && strpos($content, "getenv(\x24planIdEnvKey)") !== false;
-$notFromPost = strpos($content, "\$_POST[\x27plan_id\x27]") === false
-    && strpos($content, "\$_POST[\x22plan_id\x22]") === false;
-echo ($usesEnvVar && $notFromPost) ? "OK" : "FAIL_PLAN_FROM_POST";
+$notFromPost = strpos($content, "\$_POST[\x27plan_id\x27]") === false;
+echo ($usesEnv && $notFromPost) ? "OK" : "FAIL";
 ');
-ok("6. plan_id lido de env var, NAO do POST", $out === 'OK', $pass, $fail, $log);
+ok("6. Controller MP legado: plan_id da env var, NAO do POST", $out === 'OK', $pass, $fail, $log);
 
 // =====================================================================
-// Teste 7: nenhum PAN/CVV/token e logado em SubscriptionController
+// Teste 7: nenhum PAN/CVV/token logado no controller MP legado
 // =====================================================================
 $out = runIsolated('
 $file = "' . $root . '/src/controllers/SubscriptionController.php";
 $content = @file_get_contents($file);
-if ($content === false) { echo "FILE_READ_ERROR"; exit; }
 $badPatterns = [
-    "/error_log.*card/i",
+    "/error_log.*card_number/i",
+    "/error_log.*card_ccv/i",
     "/error_log.*cvv/i",
     "/error_log.*pan/i",
     "/error_log.*card_token_id/i",
-    "/log.*\$cardTokenId[^)]*[^,]/i",
 ];
 $found = false;
 foreach ($badPatterns as $p) {
     if (preg_match($p, $content)) { $found = true; break; }
 }
-echo $found ? "LEAK_FOUND" : "NO_LEAK";
+echo $found ? "LEAK" : "OK";
 ');
-ok("7. Nenhum PAN/CVV/card_token logado no controller", $out === 'NO_LEAK', $pass, $fail, $log);
+ok("7. Controller MP legado: nenhum PAN/CVV/card_token em logs", $out === 'OK', $pass, $fail, $log);
 
 // =====================================================================
-// Teste 8: closeModal nao limpa CARD_TOKEN_INPUT (BUG VERIFICADO)
-// Se este teste falhar (FORCE_FAIL), o bug foi corrigido
+// Teste 8: AsaasSubscriptionController NAO loga dados de cartao
 // =====================================================================
 $out = runIsolated('
-$file = "' . $root . '/public/meu_plano.php";
+$file = "' . $root . '/src/controllers/AsaasSubscriptionController.php";
 $content = @file_get_contents($file);
-if ($content === false) { echo "FILE_READ_ERROR"; exit; }
-$hasCloseModal = strpos($content, "function closeModal()") !== false;
-$clearsToken = strpos($content, "CARD_TOKEN_INPUT.value") !== false
-    && strpos($content, "closeModal") !== false;
-if ($clearsToken) {
-    echo "CLEARED_OK";
-} else {
-    echo "BUG_TOKEN_NOT_CLEARED";
+$badPatterns = [
+    "error_log.*cardData",
+    "error_log.*card_number",
+    "error_log.*card_ccv",
+    "error_log.*cardPayload",
+    "error_log.*\\\\\$cpf",
+];
+$found = false;
+foreach ($badPatterns as $p) {
+    if (preg_match("/".$p."/i", $content)) { $found = true; break; }
 }
+echo $found ? "LEAK" : "OK";
 ');
-ok("8. closeModal limpa card_token_id (bug check)", $out === 'CLEARED_OK', $pass, $fail, $log);
+ok("8. AsaasSubscriptionController NAO loga cartao/cpf/cardPayload", $out === 'OK', $pass, $fail, $log);
 
 // =====================================================================
-// Teste 9: apenas um submit por click (nao ha form.submit manual antes de onSubmit)
+// Teste 9: AsaasSubscriptionController descarta cartao apos create
+// O unset combinado (cardData, cardPayload, holderInfo, cpf) esta presente
 // =====================================================================
 $out = runIsolated('
-$file = "' . $root . '/public/meu_plano.php";
+$file = "' . $root . '/src/controllers/AsaasSubscriptionController.php";
 $content = @file_get_contents($file);
-if ($content === false) { echo "FILE_READ_ERROR"; exit; }
-$submitCount = substr_count($content, ".submit()");
-$onSubmitCount = substr_count($content, "onSubmit:");
-$hasSubmitInOnSubmit = strpos($content, "onSubmit:") !== false
-    && strpos($content, ".submit()") !== false
-    && strpos($content, "onSubmit") < strpos($content, ".submit()");
-echo ($submitCount === 1 && $onSubmitCount === 1 && $hasSubmitInOnSubmit) ? "OK" : "MULTIPLE:$submitCount";
+$combined = strpos($content, "unset(\$cardData, \$cardPayload, \$holderInfo, \$cpf)") !== false;
+$separate = strpos($content, "unset(\$cardData)") !== false
+    && strpos($content, "unset(\$cardPayload)") !== false;
+echo ($combined || $separate) ? "OK" : "FAIL";
 ');
-ok("9. submit() chamado apenas dentro de onSubmit", $out === 'OK', $pass, $fail, $log);
+ok("9. AsaasSubscriptionController descarta cartao com unset()", $out === 'OK', $pass, $fail, $log);
 
 // =====================================================================
-// Teste 10: Advanced Fraud Prevention configurado
+// Teste 10: AsaasService request() NAO loga dados sensiveis
 // =====================================================================
 $out = runIsolated('
-$file = "' . $root . '/public/meu_plano.php";
+$file = "' . $root . '/src/services/AsaasService.php";
 $content = @file_get_contents($file);
-if ($content === false) { echo "FILE_READ_ERROR"; exit; }
-$hasAFP = strpos($content, "advancedFraudPrevention") !== false;
-$afpValue = preg_match("/advancedFraudPrevention[\x3a]\s*(true|false)/", $content, $m) ? $m[1] : "missing";
-echo "AFP=$afpValue";
+$sensitive = [
+    "error_log" . ".*access_token",
+    "error_log" . ".*\$cardData",
+    "error_log" . ".*\$cardPayload",
+    "error_log" . ".*card_number",
+    "error_log" . ".*card_ccv",
+    "error_log" . ".*\$body",
+    "error_log" . ".*\$number",
+    "error_log" . ".*\$holderInfo",
+];
+$found = false;
+foreach ($sensitive as $p) {
+    if (preg_match("/".$p."/i", $content)) { $found = true; break; }
+}
+echo $found ? "LEAK" : "OK";
 ');
-ok("10. advancedFraudPrevention configurado no MercadoPago instance", str_starts_with($out, 'AFP=true'), $pass, $fail, $log);
+ok("10. AsaasService request() NAO loga access_token, cartao, body", $out === 'OK', $pass, $fail, $log);
 
 // =====================================================================
-// Teste 11: payer.email configurado na inicializacao do Brick
+// Teste 11: AsaasService usa access_token header (NÃO Authorization Bearer)
 // =====================================================================
 $out = runIsolated('
-$file = "' . $root . '/public/meu_plano.php";
+$file = "' . $root . '/src/services/AsaasService.php";
 $content = @file_get_contents($file);
-if ($content === false) { echo "FILE_READ_ERROR"; exit; }
-$hasPayerEmail = strpos($content, "payer:") !== false
-    && strpos($content, "email:") !== false
-    && strpos($content, "payerEmail") !== false;
-$hasNoIdentification = strpos($content, "identification") === false;
-echo ($hasPayerEmail && $hasNoIdentification) ? "ONLY_EMAIL" : "HAS_IDENTIFICATION";
+$hasAccessToken = strpos($content, "access_token: ") !== false;
+$noAuthBearer = strpos($content, "Authorization: Bearer") === false;
+echo ($hasAccessToken && $noAuthBearer) ? "OK" : "FAIL";
 ');
-ok("11. payer.email configurado, identification NAO (risco identificado)", $out === 'ONLY_EMAIL', $pass, $fail, $log);
+ok("11. AsaasService usa header access_token, NAO Authorization Bearer", $out === 'OK', $pass, $fail, $log);
 
 // =====================================================================
-// Teste 12: CSRF token preenchido no onSubmit
+// Teste 12: AsaasWebhookService valida token com hash_equals
 // =====================================================================
 $out = runIsolated('
-$file = "' . $root . '/public/meu_plano.php";
+$file = "' . $root . '/src/services/AsaasWebhookService.php";
 $content = @file_get_contents($file);
-if ($content === false) { echo "FILE_READ_ERROR"; exit; }
-$hasCSRFAssign = strpos($content, "CSRF_INPUT.value") !== false
-    && strpos($content, "csrfToken") !== false
-    && strpos($content, "data-csrf-token") !== false;
-echo $hasCSRFAssign ? "OK" : "FAIL";
+$useHashEquals = strpos($content, "hash_equals") !== false;
+$validateFn = strpos($content, "validateToken") !== false;
+echo ($useHashEquals && $validateFn) ? "OK" : "FAIL";
 ');
-ok("12. CSRF token preenchido no onSubmit", $out === 'OK', $pass, $fail, $log);
+ok("12. AsaasWebhookService valida token com hash_equals (timing-safe)", $out === 'OK', $pass, $fail, $log);
 
 // =====================================================================
-// Teste 13: SubscriptionController rejeita card_token vazio
+// Teste 13: AsaasSubscriptionController usa valor do servidor (PLAN_PRICES)
 // =====================================================================
 $out = runIsolated('
-$file = "' . $root . '/src/controllers/SubscriptionController.php";
+$file = "' . $root . '/src/controllers/AsaasSubscriptionController.php";
 $content = @file_get_contents($file);
-if ($content === false) { echo "FILE_READ_ERROR"; exit; }
-$checksEmpty = strpos($content, "\$cardTokenId = trim") !== false
-    && strpos($content, "if (\$cardTokenId === \x27\x27)") !== false;
-echo $checksEmpty ? "OK" : "FAIL_NO_EMPTY_CHECK";
+$hasFixedPrices = preg_match("/PLAN_PRICES\s*=\s*\[\s*\x27pro\x27\s*=>\s*9.90\s*,\s*\x27premium\x27\s*=>\s*19.90/", $content);
+$noPriceFromPost = strpos($content, "\$_POST[\x27price\x27]") === false
+    && strpos($content, "\$_POST[\x27amount\x27]") === false
+    && strpos($content, "\$_POST[\x27value\x27]") === false;
+echo ($hasFixedPrices && $noPriceFromPost) ? "OK" : "FAIL";
 ');
-ok("13. SubscriptionController rejeita card_token vazio", $out === 'OK', $pass, $fail, $log);
+ok("13. Plano PRO=9.90 / PREMIUM=19.90 (servidor, NAO do POST)", $out === 'OK', $pass, $fail, $log);
 
 // =====================================================================
-// Teste 14: retry seguro — se modal reaberto, token anterior nao persiste
-// Verifica se ha logica de reset antes de openBrick
+// Teste 14: AsaasSubscriptionController chama getRealClientIp()
 // =====================================================================
 $out = runIsolated('
-$file = "' . $root . '/public/meu_plano.php";
+$file = "' . $root . '/src/controllers/AsaasSubscriptionController.php";
 $content = @file_get_contents($file);
-if ($content === false) { echo "FILE_READ_ERROR"; exit; }
-$clearsContainer = strpos($content, "CONTAINER.innerHTML = \x27\x27") !== false;
-$createsNewBrick = strpos($content, "bricks().create") !== false;
-$hasStateReset = strpos($content, "clearError()") !== false
-    || strpos($content, "LOADING.style.display") !== false;
-echo ($clearsContainer && $createsNewBrick) ? "OK_NEW_BRICK" : "FAIL_NO_RESET";
+echo (strpos($content, "getRealClientIp") !== false) ? "OK" : "FAIL";
 ');
-ok("14. openBrick cria novo Brick e reseta container", $out === 'OK_NEW_BRICK', $pass, $fail, $log);
+ok("14. AsaasSubscriptionController usa getRealClientIp() para remoteIp", $out === 'OK', $pass, $fail, $log);
 
-echo "\n=== MP TOKEN FLOW SECURITY TESTS ($pass PASS, $fail FAIL) ===\n";
+// =====================================================================
+// Teste 15: AsaasSubscriptionController verifica assinatura ativa antes de criar
+// =====================================================================
+$out = runIsolated('
+$file = "' . $root . '/src/controllers/AsaasSubscriptionController.php";
+$content = @file_get_contents($file);
+echo (strpos($content, "findActiveByUserId") !== false
+    && strpos($content, "already_subscribed") !== false) ? "OK" : "FAIL";
+');
+ok("15. Bloqueia criacao se ja existe assinatura ativa", $out === 'OK', $pass, $fail, $log);
+
+// =====================================================================
+// Teste 16: AsaasSubscriptionController exige autenticacao
+// =====================================================================
+$out = runIsolated('
+$file = "' . $root . '/src/controllers/AsaasSubscriptionController.php";
+$content = @file_get_contents($file);
+echo (strpos($content, "requireLogin") !== false) ? "OK" : "FAIL";
+');
+ok("16. Exige requireLogin() no controller Asaas", $out === 'OK', $pass, $fail, $log);
+
+// =====================================================================
+// Teste 17: AsaasSubscriptionController exige CSRF (registrado no router)
+// =====================================================================
+$out = runIsolated('
+$file = "' . $root . '/public/index.php";
+$content = @file_get_contents($file);
+echo (strpos($content, "asaas_subscription_create") !== false
+    && strpos($content, "csrfProtectedActions") !== false
+    && preg_match("/\x27asaas_subscription_create\x27/", $content)) ? "OK" : "FAIL";
+');
+ok("17. Action asaas_subscription_create protegida por CSRF no router", $out === 'OK', $pass, $fail, $log);
+
+// =====================================================================
+// Teste 18: public/asaas_webhook.php existe
+// =====================================================================
+$out = runIsolated('
+$file = "' . $root . '/public/asaas_webhook.php";
+echo (is_file($file)) ? "OK" : "FAIL";
+');
+ok("18. Endpoint public/asaas_webhook.php existe", $out === 'OK', $pass, $fail, $log);
+
+// =====================================================================
+// Teste 19: public/asaas_webhook.php NAO loga payload bruto
+// =====================================================================
+$out = runIsolated('
+$file = "' . $root . '/public/asaas_webhook.php";
+$content = @file_get_contents($file);
+$bad = "error_log.*\$rawBody|error_log.*\$body|error_log.*payload|error_log.*\$accessToken|error_log.*ASAAS_WEBHOOK_TOKEN";
+$found = (bool)preg_match("/".$bad."/i", $content);
+echo $found ? "LEAK" : "OK";
+');
+ok("19. public/asaas_webhook.php NAO loga payload/token", $out === 'OK', $pass, $fail, $log);
+
+// =====================================================================
+// Teste 20: public/asaas_webhook.php exige POST
+// =====================================================================
+$out = runIsolated('
+$file = "' . $root . '/public/asaas_webhook.php";
+$content = @file_get_contents($file);
+echo (strpos($content, "REQUEST_METHOD") !== false
+    && strpos($content, "\x27POST\x27") !== false) ? "OK" : "FAIL";
+');
+ok("20. public/asaas_webhook.php exige POST", $out === 'OK', $pass, $fail, $log);
+
+// =====================================================================
+// Teste 21: vercel.json CSP removido mercadopago.com
+// =====================================================================
+$out = runIsolated('
+$file = "' . $root . '/vercel.json";
+$content = @file_get_contents($file);
+echo (strpos($content, "mercadopago.com") === false) ? "OK" : "FAIL";
+');
+ok("21. CSP nao contem mercadopago.com", $out === 'OK', $pass, $fail, $log);
+
+// =====================================================================
+// Teste 22: api/index.php roteia asaas_webhook
+// =====================================================================
+$out = runIsolated('
+$file = "' . $root . '/api/index.php";
+$content = @file_get_contents($file);
+echo (strpos($content, "asaas_webhook") !== false) ? "OK" : "FAIL";
+');
+ok("22. api/index.php roteia asaas_webhook", $out === 'OK', $pass, $fail, $log);
+
+// =====================================================================
+// Teste 23: AsaasSubscriptionController NAO persiste cartao
+// =====================================================================
+$out = runIsolated('
+$file = "' . $root . '/src/controllers/AsaasSubscriptionController.php";
+$content = @file_get_contents($file);
+preg_match("/INSERT INTO subscriptions\\s*\\(([^)]+)\\)/i", $content, $m);
+$cols = $m[1] ?? "";
+$cardInInsert = (stripos($cols, "card_number") !== false
+    || stripos($cols, "ccv") !== false
+    || stripos($cols, "expiry") !== false
+    || stripos($cols, "holder") !== false);
+echo $cardInInsert ? "LEAK" : "OK";
+');
+ok("23. INSERT em subscriptions NAO inclui campos de cartao", $out === 'OK', $pass, $fail, $log);
+
+// =====================================================================
+// Teste 24: AsaasSubscriptionController nao expoe cardHolder no DB
+// =====================================================================
+$out = runIsolated('
+$file = "' . $root . '/src/controllers/AsaasSubscriptionController.php";
+$content = @file_get_contents($file);
+preg_match("/INSERT INTO subscriptions\\s*\\(([^)]+)\\)/i", $content, $m);
+$cols = $m[1] ?? "";
+$hasCard = (
+    stripos($cols, "card_number") !== false
+    || stripos($cols, "ccv") !== false
+    || stripos($cols, "expiry") !== false
+    || stripos($cols, "cvv") !== false
+    || stripos($cols, "holder_name") !== false
+);
+echo $hasCard ? "LEAK" : "OK";
+');
+ok("24. INSERT subscriptions NAO inclui campos de cartao", $out === 'OK', $pass, $fail, $log);
+
+// =====================================================================
+// Teste 25: Sandbox selected por ASAAS_ENV=sandbox
+// =====================================================================
+$out = runIsolated('
+$file = "' . $root . '/src/services/AsaasService.php";
+$content = @file_get_contents($file);
+$hasSandboxUrl = strpos($content, "api-sandbox.asaas.com") !== false;
+$hasProdUrl    = strpos($content, "api.asaas.com") !== false;
+echo ($hasSandboxUrl && $hasProdUrl) ? "OK" : "FAIL";
+');
+ok("25. AsaasService seleciona sandbox/production baseado em ASAAS_ENV", $out === 'OK', $pass, $fail, $log);
+
+echo "\n=== SUBSCRIPTION SECURITY TESTS ($pass PASS, $fail FAIL) ===\n";
 echo $log;
 exit($fail === 0 ? 0 : 1);

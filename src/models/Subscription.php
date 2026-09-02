@@ -157,6 +157,68 @@ class Subscription
     }
 
     /**
+     * Busca assinatura por id local (PK).
+     */
+    public function findById(int $id): ?array
+    {
+        $stmt = $this->db->prepare('SELECT * FROM subscriptions WHERE id = ? LIMIT 1');
+        $stmt->execute([$id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
+     * Busca assinatura por asaas_subscription_id.
+     */
+    public function findByAsaasSubscriptionId(string $asaasSubId): ?array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT * FROM subscriptions WHERE asaas_subscription_id = ? LIMIT 1'
+        );
+        $stmt->execute([$asaasSubId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
+     * Atualiza o status de uma assinatura pelo id local (PK).
+     * Retorna true se atualizou.
+     */
+    public function updateStatusById(
+        int $id,
+        string $newStatus,
+        ?string $rawStatus,
+        ?string $nextBillingDate,
+        ?string $gracePeriodEnd
+    ): bool {
+        $stmt = $this->db->prepare(
+            'UPDATE subscriptions
+                SET status = :status,
+                    raw_status = :raw_status,
+                    next_billing_date = COALESCE(:next_billing_date, next_billing_date),
+                    grace_period_end = COALESCE(:grace_period_end, grace_period_end),
+                    cancelled_at = CASE WHEN :status_cancelled THEN NOW() ELSE cancelled_at END,
+                    paused_at    = CASE WHEN :status_paused    THEN NOW() ELSE paused_at    END,
+                    expired_at   = CASE WHEN :status_expired   THEN NOW() ELSE expired_at   END,
+                    start_date   = COALESCE(start_date, :start_date_now),
+                    updated_at   = NOW()
+              WHERE id = :id'
+        );
+        $stmt->execute([
+            ':status' => $newStatus,
+            ':raw_status' => $rawStatus,
+            ':next_billing_date' => $nextBillingDate,
+            ':grace_period_end' => $gracePeriodEnd,
+            ':status_cancelled' => $newStatus === self::STATUS_CANCELLED ? 1 : 0,
+            ':status_paused'    => $newStatus === self::STATUS_PAUSED    ? 1 : 0,
+            ':status_expired'   => $newStatus === self::STATUS_EXPIRED   ? 1 : 0,
+            ':start_date_now' => $nextBillingDate,
+            ':id' => $id,
+        ]);
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
      * Busca assinatura ativa de um usuario. Retorna null se nenhuma.
      */
     public function findActiveByUserId(int $userId): ?array

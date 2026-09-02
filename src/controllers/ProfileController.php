@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../services/MercadoPagoService.php';
+require_once __DIR__ . '/../services/AsaasService.php';
 
 class ProfileController
 {
@@ -111,14 +112,7 @@ class ProfileController
         $user = $this->userModel->findById($userId);
         if (!$user) { header('Location: /?action=login'); exit; }
 
-        $mpPublicKey = '';
-        if (MercadoPagoService::isConfigured()) {
-            try {
-                $mpPublicKey = (new MercadoPagoService())->getPublicKey();
-            } catch (Throwable) {
-                $mpPublicKey = '';
-            }
-        }
+        $hasAsaas = AsaasService::isConfigured();
 
         $planSvc = new PlanService($this->db);
         $currentPlanSlug = $planSvc->getUserPlanSlug($userId);

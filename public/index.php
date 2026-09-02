@@ -71,6 +71,9 @@ require_once __DIR__ . '/../src/models/Subscription.php';
 require_once __DIR__ . '/../src/services/MercadoPagoService.php';
 require_once __DIR__ . '/../src/services/WebhookService.php';
 require_once __DIR__ . '/../src/controllers/SubscriptionController.php';
+require_once __DIR__ . '/../src/services/AsaasService.php';
+require_once __DIR__ . '/../src/services/AsaasWebhookService.php';
+require_once __DIR__ . '/../src/controllers/AsaasSubscriptionController.php';
 
 $db = getDBConnection();
 require_once __DIR__ . '/../src/db_bootstrap.php';
@@ -114,6 +117,13 @@ $subscriptionController = $mpService !== null
     ? new SubscriptionController($db, $userModel, $planService, $subscriptionModel, $mpService)
     : null;
 
+$asaasService = AsaasService::isConfigured()
+    ? new AsaasService()
+    : null;
+$asaasSubscriptionController = $asaasService !== null
+    ? new AsaasSubscriptionController($db, $userModel, $planService, $subscriptionModel, $asaasService)
+    : null;
+
 $action = $_GET['action'] ?? null;
 
 // --- Validação CSRF para requisições POST ---
@@ -125,6 +135,7 @@ $csrfProtectedActions = [
     'update_password', 'feedback_create', 'reportar', 'reportar_create',
     'admin_bug_update', 'admin_feedback_update', 'ai_chat', 'logout',
     'subscription_create', 'subscription_cancel',
+    'asaas_subscription_create', 'asaas_subscription_cancel',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -250,16 +261,75 @@ if ($action === 'register') {
         'processed' => (bool)($result['processed'] ?? false),
     ]);
     exit;
+} elseif ($action === 'asaas_webhook') {
+    // Webhook publico do Asaas (servidor-servidor).
+    // NAO exige login nem CSRF: autenticacao via header "asaas-access-token"
+    // (hash_equals com ASAAS_WEBHOOK_TOKEN).
+    if ($asaasService === null) {
+        http_response_code(503);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'asaas_not_configured']);
+        exit;
+    }
+
+    $rawBody = (string)file_get_contents('php://input');
+    $accessToken = isset($_SERVER['HTTP_ASAAS_ACCESS_TOKEN']) ? (string)$_SERVER['HTTP_ASAAS_ACCESS_TOKEN'] : null;
+    $sourceIp = isset($_SERVER['REMOTE_ADDR']) ? (string)$_SERVER['REMOTE_ADDR'] : null;
+
+    $webhookSecret = (string)(getenv('ASAAS_WEBHOOK_TOKEN') ?: '');
+    if ($webhookSecret === '') {
+        http_response_code(503);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'webhook_token_not_configured']);
+        exit;
+    }
+
+    if ($accessToken === null || $accessToken === '' || !hash_equals($webhookSecret, $accessToken)) {
+        http_response_code(401);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'invalid_token']);
+        exit;
+    }
+
+    $webhookService = new AsaasWebhookService($db, $subscriptionModel);
+    $result = $webhookService->handle($rawBody, $accessToken, $sourceIp);
+
+    http_response_code((int)($result['status'] ?? 200));
+    header('Content-Type: application/json');
+    echo json_encode([
+        'received'  => true,
+        'duplicate' => (bool)($result['duplicate'] ?? false),
+        'processed' => (bool)($result['processed'] ?? false),
+    ]);
+    exit;
 } elseif ($action === 'subscription_create') {
-    if ($subscriptionController === null) {
+    if ($asaasSubscriptionController !== null) {
+        $asaasSubscriptionController->create();
+    } elseif ($subscriptionController !== null) {
+        $subscriptionController->create();
+    } else {
         header('Location: /?action=meu_plano&error=mp_not_configured'); exit;
     }
-    $subscriptionController->create();
 } elseif ($action === 'subscription_cancel') {
-    if ($subscriptionController === null) {
+    if ($asaasSubscriptionController !== null) {
+        $asaasSubscriptionController->cancel();
+    } elseif ($subscriptionController !== null) {
+        $subscriptionController->cancel();
+    } else {
         header('Location: /?action=meu_plano&error=mp_not_configured'); exit;
     }
-    $subscriptionController->cancel();
+} elseif ($action === 'asaas_subscription_create') {
+    if ($asaasSubscriptionController !== null) {
+        $asaasSubscriptionController->create();
+    } else {
+        header('Location: /?action=meu_plano&error=asaas_not_configured'); exit;
+    }
+} elseif ($action === 'asaas_subscription_cancel') {
+    if ($asaasSubscriptionController !== null) {
+        $asaasSubscriptionController->cancel();
+    } else {
+        header('Location: /?action=meu_plano&error=asaas_not_configured'); exit;
+    }
 } elseif ($action === 'update_profile') {
     $profileController->updateProfile();
 } elseif ($action === 'update_password') {

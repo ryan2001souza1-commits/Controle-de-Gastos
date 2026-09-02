@@ -71,9 +71,15 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     user_id INTEGER NOT NULL,
     plan_id INTEGER NOT NULL,
     plan_slug VARCHAR(20) NOT NULL,
+    -- Mercado Pago (legado, preservado para historico)
     mp_preapproval_id VARCHAR(60) UNIQUE,
     mp_plan_id VARCHAR(60),
     mp_payer_id VARCHAR(60),
+    -- Asaas
+    asaas_customer_id VARCHAR(60),
+    asaas_subscription_id VARCHAR(60),
+    provider VARCHAR(20),
+    provider_status VARCHAR(30),
     external_reference VARCHAR(100),
     status VARCHAR(20) NOT NULL DEFAULT 'pending'
         CHECK (status IN ('pending','active','paused','cancelled','expired','rejected')),
@@ -130,6 +136,7 @@ CREATE TABLE IF NOT EXISTS payment_webhooks (
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS active_subscription_id INTEGER
     REFERENCES subscriptions(id) ON DELETE SET NULL;
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS mercadopago_payer_id VARCHAR(60);
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS asaas_customer_id VARCHAR(60);
 
 --============================================================
 -- CATEGORIAS
