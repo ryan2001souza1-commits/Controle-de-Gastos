@@ -242,6 +242,48 @@ if ($action === 'register') {
     $profileController->index();
 } elseif ($action === 'meu_plano') {
     $profileController->meuPlano();
+} elseif ($action === 'mercadopago_webhook') {
+    // Webhook publico do Mercado Pago (servidor-servidor).
+    // NAO exige login nem CSRF: a autenticacao e feita via X-Signature (HMAC-SHA256)
+    // validada pelo WebhookService.
+    if ($mpService === null) {
+        http_response_code(503);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'mp_not_configured']);
+        exit;
+    }
+
+    $rawBody = (string)file_get_contents('php://input');
+
+    $xSignature = isset($_SERVER['HTTP_X_SIGNATURE']) ? (string)$_SERVER['HTTP_X_SIGNATURE'] : null;
+    $xRequestId = isset($_SERVER['HTTP_X_REQUEST_ID']) ? (string)$_SERVER['HTTP_X_REQUEST_ID'] : null;
+
+    // O Mercado Pago pode enviar o ID do recurso na query string de varias formas:
+    //   ?data.id=123   (formato com ponto na chave — PHP converte para $_GET['data_id'])
+    //   ?data_id=123   (formato alternativo)
+    //   ?id=123        (alguns tipos de notificacao)
+    $resourceId = null;
+    if (isset($_GET['data_id']) && is_string($_GET['data_id']) && $_GET['data_id'] !== '') {
+        $resourceId = (string)$_GET['data_id'];
+    } elseif (isset($_GET['data.id']) && is_string($_GET['data.id']) && $_GET['data.id'] !== '') {
+        $resourceId = (string)$_GET['data.id'];
+    } elseif (isset($_GET['id']) && is_string($_GET['id']) && $_GET['id'] !== '') {
+        $resourceId = (string)$_GET['id'];
+    }
+
+    $sourceIp = isset($_SERVER['REMOTE_ADDR']) ? (string)$_SERVER['REMOTE_ADDR'] : null;
+
+    $webhookService = new WebhookService($db, $subscriptionModel, $mpService);
+    $result = $webhookService->handle($rawBody, $xSignature, $xRequestId, $resourceId, $sourceIp);
+
+    http_response_code((int)($result['status'] ?? 200));
+    header('Content-Type: application/json');
+    echo json_encode([
+        'received'  => true,
+        'duplicate' => (bool)($result['duplicate'] ?? false),
+        'processed' => (bool)($result['processed'] ?? false),
+    ]);
+    exit;
 } elseif ($action === 'subscription_create') {
     if ($subscriptionController === null) {
         header('Location: /?action=meu_plano&error=mp_not_configured'); exit;

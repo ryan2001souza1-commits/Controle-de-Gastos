@@ -11,6 +11,7 @@
  *
  * Seguranca:
  *   - Access Token lido APENAS de getenv() (NUNCA do codigo, banco ou sessao)
+ *   - Webhook Secret (MERCADOPAGO_WEBHOOK_SECRET) lido APENAS de getenv()
  *   - Timeout HTTP curto (5s) para respeitar limite serverless da Vercel (10s)
  *   - Erros nunca logam o token nem o payload completo
  *   - Nenhuma chamada externa ao MP dentro do webhook (regra: processar e responder rapido)
@@ -49,6 +50,15 @@ class MercadoPagoService
         return is_string($t) && str_starts_with($t, 'TEST-');
     }
 
+    /**
+     * Retorna o segredo usado para validar a assinatura (HMAC-SHA256) do
+     * webhook do Mercado Pago.
+     *
+     * Variavel de ambiente esperada (padrao):
+     *   MERCADOPAGO_WEBHOOK_SECRET
+     *
+     * Retorna null se nao configurado (o WebhookService trata como rejeicao).
+     */
     public function getWebhookSecret(): ?string
     {
         return $this->webhookSecret;
