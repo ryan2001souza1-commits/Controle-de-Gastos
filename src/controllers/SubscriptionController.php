@@ -97,21 +97,53 @@ class SubscriptionController
             'Assinatura ' . $plan['nome'] . ' - Controle de Gastos'
         );
 
+        $mpIdMasked = '';
+        $respKeys = is_array($resp['data'] ?? null) ? array_keys($resp['data']) : [];
+        $mpStatus = (string)($resp['data']['status'] ?? 'none');
+        $mpPlanId = (string)($resp['data']['preapproval_plan_id'] ?? '');
+        $respNext = isset($resp['data']['next_payment_date']) ? (string)$resp['data']['next_payment_date'] : 'none';
+        $respPayerId = isset($resp['data']['payer_id']) ? (string)$resp['data']['payer_id'] : 'none';
+        $respAuto = isset($resp['data']['auto_recurring']) && is_array($resp['data']['auto_recurring'])
+            ? sprintf(
+                'amount=%s currency=%s freq=%s/%s',
+                (string)($resp['data']['auto_recurring']['transaction_amount'] ?? 'n/a'),
+                (string)($resp['data']['auto_recurring']['currency_id'] ?? 'n/a'),
+                (string)($resp['data']['auto_recurring']['frequency'] ?? 'n/a'),
+                (string)($resp['data']['auto_recurring']['frequency_type'] ?? 'n/a')
+            )
+            : 'none';
         if (!$resp['ok']) {
             $mpId  = (string)($resp['data']['id'] ?? '');
+            $mpIdMasked = ($mpId !== '' ? substr($mpId, 0, 3) . '…' . substr($mpId, -3) : 'none');
             $err   = (string)($resp['error'] ?? 'unknown');
-            error_log('[SubscriptionController] createPreapproval falhou para user=' . $userId
+            $errCode = (string)($resp['data']['code'] ?? '');
+            $errMsg  = (string)($resp['data']['message'] ?? '');
+            error_log('[SubscriptionController] createPreapproval FAILED user=' . $userId
                 . ' slug=' . $planSlug
                 . ' http=' . $resp['status']
-                . ' mp_id=' . ($mpId !== '' ? $mpId : 'none')
+                . ' mp_id=' . $mpIdMasked
                 . ' error=' . $err
+                . ' api_code=' . $errCode
+                . ' api_msg=' . substr($errMsg, 0, 200)
             );
             header('Location: /?action=meu_plano&error=mp_create_failed');
             return;
         }
 
         $mpId = (string)($resp['data']['id'] ?? '');
-        $mpStatus = (string)($resp['data']['status'] ?? 'pending');
+        $mpIdMasked = ($mpId !== '' ? substr($mpId, 0, 3) . '…' . substr($mpId, -3) : 'none');
+        error_log('[SubscriptionController] createPreapproval OK user=' . $userId
+            . ' slug=' . $planSlug
+            . ' http=' . $resp['status']
+            . ' mp_id=' . $mpIdMasked
+            . ' mp_status=' . $mpStatus
+            . ' mp_plan_id=' . ($mpPlanId !== '' ? substr($mpPlanId, 0, 3) . '…' . substr($mpPlanId, -3) : 'none')
+            . ' next_payment=' . $respNext
+            . ' payer_id=' . ($respPayerId !== 'none' ? substr($respPayerId, 0, 3) . '…' : 'none')
+            . ' auto=' . $respAuto
+            . ' resp_keys=' . implode(',', $respKeys)
+        );
+
         if ($mpId === '') {
             error_log('[SubscriptionController] createPreapproval OK sem id retornado');
             header('Location: /?action=meu_plano&error=mp_no_id');
@@ -123,11 +155,22 @@ class SubscriptionController
         $resp['data']['_plan_id_local']    = (int)($plan['id'] ?? 0);
         $resp['data']['_plan_slug_local']  = $planSlug;
 
-        $this->subscriptions->createFromPreapproval($resp['data']);
+        $subId = $this->subscriptions->createFromPreapproval($resp['data']);
+        error_log('[SubscriptionController] createFromPreapproval persisted user=' . $userId
+            . ' sub_id=' . $subId
+            . ' mp_id=' . $mpIdMasked
+        );
 
         $row = $this->subscriptions->findByMpPreapprovalId($mpId);
         if ($row !== null) {
-            $this->subscriptions->applyStatusToUser($row);
+            $applied = $this->subscriptions->applyStatusToUser($row);
+            error_log('[SubscriptionController] applyStatusToUser user=' . $userId
+                . ' sub_id=' . (int)($row['id'] ?? 0)
+                . ' status=' . (string)($row['status'] ?? 'none')
+                . ' applied=' . ($applied ? '1' : '0')
+            );
+        } else {
+            error_log('[SubscriptionController] row not found after insert mp_id=' . $mpIdMasked);
         }
 
         header('Location: /?action=meu_plano&subscribed=1');

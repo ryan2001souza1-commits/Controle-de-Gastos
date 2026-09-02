@@ -148,6 +148,13 @@ class WebhookService
 
     private function process(array $payload, string $topic, ?string $resourceId, int $webhookId): void
     {
+        $resourceIdMasked = ($resourceId !== null && $resourceId !== '')
+            ? (strlen($resourceId) > 6 ? substr($resourceId, 0, 3) . '…' . substr($resourceId, -3) : '***')
+            : 'none';
+        $extRefMasked = isset($payload['external_reference']) && is_string($payload['external_reference'])
+            ? substr($payload['external_reference'], 0, 16) . '…'
+            : 'none';
+        error_log('[WebhookService] processing topic=' . $topic . ' resource=' . $resourceIdMasked . ' ext_ref=' . $extRefMasked);
         // Tópicos que ALTERAM o estado do preapproval (gatilho para getPreapproval)
         //   - preapproval
         //   - subscription (alias antigo)
