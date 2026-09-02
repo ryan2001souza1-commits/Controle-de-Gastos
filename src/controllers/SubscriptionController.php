@@ -100,12 +100,10 @@ class SubscriptionController
         if (!$resp['ok']) {
             $mpId  = (string)($resp['data']['id'] ?? '');
             $err   = (string)($resp['error'] ?? 'unknown');
-            $tokenSig = substr($cardTokenId, 0, 4) . '...' . substr($cardTokenId, -4);
             error_log('[SubscriptionController] createPreapproval falhou para user=' . $userId
                 . ' slug=' . $planSlug
                 . ' http=' . $resp['status']
                 . ' mp_id=' . ($mpId !== '' ? $mpId : 'none')
-                . ' token_sig=' . $tokenSig
                 . ' error=' . $err
             );
             header('Location: /?action=meu_plano&error=mp_create_failed');

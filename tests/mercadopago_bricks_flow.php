@@ -68,8 +68,19 @@ mp_assert('T06 plan_id lido de MERCADOPAGO_PLAN_ID_<SLUG>', str_contains($ctrl, 
 mp_assert('T07 external_reference no formato user_<id>_<slug>', str_contains($ctrl, "'user_' . \$userId . '_' . \$planSlug"));
 
 // --- 6. Erro 400 nao expoe token ---
-mp_assert('T08 log de erro usa apenas token_sig mascarado', str_contains($ctrl, 'token_sig=') && str_contains($ctrl, "substr(\$cardTokenId, 0, 4) . '...' . substr(\$cardTokenId, -4)"));
-mp_assert('T09 card_token_id nao e logado completo', !preg_match('/error_log.*card_token_id.*\$_POST\[.*card_token_id.*\]/', $ctrl));
+// Politica estrita: ZERO caracteres ou derivados do card_token_id em logs.
+// Tambem e proibido qualquer substr/fingerprint/hash derivado.
+$ctrl = file_get_contents($ROOT . '/src/controllers/SubscriptionController.php');
+$leakPatterns = [
+    'token_sig'           => str_contains($ctrl, 'token_sig'),
+    'substr(...cardTokenId' => preg_match('/substr\s*\([^)]*\$cardTokenId/i', $ctrl) === 1,
+    'substr cardTokenId (' => preg_match('/substr\s*\(\s*\$cardTokenId/i', $ctrl) === 1,
+    'cardTokenId em log'  => preg_match('/error_log\s*\([^)]*\$cardTokenId/', $ctrl) === 1,
+    'cardTokenId[0..4]'   => preg_match('/\$cardTokenId\s*\[\s*0\s*:/', $ctrl) === 1,
+    'cardTokenId fingerprint' => preg_match('/(?:hash|sha|md5|prefix|suffix|fingerprint)\s*\(?\s*\$cardTokenId/i', $ctrl) === 1,
+];
+mp_assert('T08 ZERO derivados do card_token_id em logs (token_sig/substr/hash removidos)', !in_array(true, $leakPatterns, true));
+mp_assert('T09 card_token_id nao e logado completo', !preg_match('/error_log[^;]*\$cardTokenId[^;]*;/', $ctrl));
 
 // --- 7. Nenhuma exposicao do access token ---
 mp_assert('T10 Access Token NUNCA vai para o frontend', !str_contains(file_get_contents($ROOT . '/public/meu_plano.php'), 'MERCADOPAGO_ACCESS_TOKEN'));
