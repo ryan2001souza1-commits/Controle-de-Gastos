@@ -194,6 +194,7 @@ class MercadoPagoService
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_HEADER => true,
         ];
         if ($method === 'GET') {
             $opts[CURLOPT_HTTPGET] = true;
@@ -213,7 +214,19 @@ class MercadoPagoService
             return ['ok' => false, 'status' => 0, 'data' => [], 'error' => 'conexao'];
         }
 
-        $data = json_decode((string)$response, true);
+        $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+        $rawHeaders = substr($response, 0, $headerSize);
+        $body = substr($response, $headerSize);
+
+        $mpRequestId = null;
+        foreach (explode("\r\n", $rawHeaders) as $header) {
+            if (str_starts_with(strtolower($header), 'x-request-id:')) {
+                $mpRequestId = trim(substr($header, 12));
+                break;
+            }
+        }
+
+        $data = json_decode((string)$body, true);
         if (!is_array($data)) {
             $data = [];
         }
@@ -221,9 +234,35 @@ class MercadoPagoService
         if ($httpCode >= 200 && $httpCode < 300) {
             return ['ok' => true, 'status' => $httpCode, 'data' => $data, 'error' => null];
         }
+
         $errCode = isset($data['code']) ? (string)$data['code'] : null;
         $errMsg  = isset($data['message']) ? (string)$data['message'] : ('http ' . $httpCode);
-        error_log('[MercadoPago] api error: ' . $errCode . ' ' . $errMsg);
+
+        $causeSummary = '';
+        if (isset($data['cause']) && is_array($data['cause'])) {
+            $causeParts = [];
+            foreach ($data['cause'] as $c) {
+                if (is_array($c)) {
+                    $causeCode = isset($c['code']) ? (string)$c['code'] : null;
+                    $causeDesc = isset($c['description']) ? substr((string)$c['description'], 0, 80) : null;
+                    if ($causeCode !== null) {
+                        $causeParts[] = $causeCode . ($causeDesc !== null ? ':' . $causeDesc : '');
+                    }
+                }
+            }
+            if ($causeParts !== []) {
+                $causeSummary = ' causes=[' . implode('; ', $causeParts) . ']';
+            }
+        }
+
+        $reqIdLog = $mpRequestId !== null ? ' req_id=' . $mpRequestId : '';
+        error_log('[MercadoPago] api error: http=' . $httpCode
+            . ' code=' . ($errCode ?? '')
+            . ' msg=' . substr((string)$errMsg, 0, 200)
+            . $causeSummary
+            . $reqIdLog
+        );
+
         return ['ok' => false, 'status' => $httpCode, 'data' => $data, 'error' => $errMsg];
     }
 }
