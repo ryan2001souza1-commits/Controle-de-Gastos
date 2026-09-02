@@ -136,7 +136,7 @@ class AsaasService
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $err = curl_error($ch);
-        curl_close($ch);
+        unset($ch);
 
         if ($response === false) {
             error_log('[Asaas] curl error: ' . $err);
@@ -251,8 +251,13 @@ class AsaasService
         if ($found !== null) {
             $cid = (string)($found['id'] ?? '');
             if ($cid !== '') {
-                $upd = $db->prepare('UPDATE usuarios SET asaas_customer_id = ? WHERE id = ?');
-                $upd->execute([$cid, $userId]);
+                try {
+                    $upd = $db->prepare('UPDATE usuarios SET asaas_customer_id = ? WHERE id = ?');
+                    $upd->execute([$cid, $userId]);
+                } catch (Throwable $e) {
+                    error_log('[Asaas] failed to persist customer id locally: ' . $e->getMessage());
+                    return ['ok' => false, 'customerId' => null, 'created' => false, 'error' => 'local_save_failed'];
+                }
                 return ['ok' => true, 'customerId' => $cid, 'created' => false, 'error' => null];
             }
         }
@@ -269,8 +274,13 @@ class AsaasService
             return ['ok' => false, 'customerId' => null, 'created' => false, 'error' => 'no_customer_id'];
         }
 
-        $upd = $db->prepare('UPDATE usuarios SET asaas_customer_id = ? WHERE id = ?');
-        $upd->execute([$cid, $userId]);
+        try {
+            $upd = $db->prepare('UPDATE usuarios SET asaas_customer_id = ? WHERE id = ?');
+            $upd->execute([$cid, $userId]);
+        } catch (Throwable $e) {
+            error_log('[Asaas] failed to persist customer id locally: ' . $e->getMessage());
+            return ['ok' => false, 'customerId' => null, 'created' => false, 'error' => 'local_save_failed'];
+        }
 
         return ['ok' => true, 'customerId' => $cid, 'created' => true, 'error' => null];
     }

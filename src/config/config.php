@@ -1,5 +1,30 @@
 <?php
 
+// ============================================================
+// Error handling seguro para produção
+// Em produção, NÃO exibir warnings/deprecations/stack traces para o
+// usuário final. Manter TODOS os erros nos logs (inclusive
+// E_DEPRECATED) para monitoramento e debugging.
+// Em dev local, exibir tudo para facilitar debug.
+// ============================================================
+$_isProd = (
+    getenv('VERCEL_ENV') === 'production'
+    || getenv('APP_ENV') === 'production'
+    || getenv('VERCEL') === '1'
+);
+if ($_isProd) {
+    ini_set('display_errors', '0');
+    ini_set('display_startup_errors', '0');
+    ini_set('log_errors', '1');
+    error_reporting(E_ALL);
+} else {
+    ini_set('display_errors', '1');
+    ini_set('display_startup_errors', '1');
+    ini_set('log_errors', '1');
+    error_reporting(E_ALL);
+}
+unset($_isProd);
+
 // Carrega .env automaticamente quando executado via CLI ou sem Vercel (não sobrescreve env real)
 // Compatível com Vercel: em produção as Environment Variables já estão disponíveis via getenv/$_ENV
 if (getenv('VERCEL_ENV') === false) {
