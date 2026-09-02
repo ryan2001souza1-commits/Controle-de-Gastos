@@ -196,10 +196,19 @@ class WebhookService
 
         $existing = $this->subscriptions->findByMpPreapprovalId((string)$preapproval['id']);
         if ($existing === null) {
-            // Subscricao nao existe localmente — pode ser criada apenas pelo fluxo
-            // iniciado pelo usuario (subscription_create). Sem isso, nao fazemos
-            // nada (evita criar assinatura para um preapproval de outro sistema).
-            return;
+            // Fluxo via checkout de Preapproval Plan: o preapproval foi criado
+            // pelo Mercado Pago, nao pela API. Criamos a subscription local
+            // agora, derivada de preapproval_plan_id + external_reference.
+            $this->db->beginTransaction();
+            try {
+                $local = $this->buildLocalPreapproval($preapproval, $extRef, $userId);
+                $this->subscriptions->createFromPreapproval($local);
+                $this->db->commit();
+                $existing = $this->subscriptions->findByMpPreapprovalId((string)$preapproval['id']);
+            } catch (Throwable $e) {
+                $this->db->rollBack();
+                throw $e;
+            }
         }
 
         // === ATUALIZA STATUS ===
@@ -227,6 +236,38 @@ class WebhookService
             $this->db->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Constroi o payload local para createFromPreapproval a partir de um
+     * preapproval retornado pelo MP no fluxo de checkout de plano.
+     */
+    private function buildLocalPreapproval(array $preapproval, string $extRef, int $userId): array
+    {
+        $mpPlanId = (string)($preapproval['preapproval_plan_id'] ?? '');
+        $planSlug = $this->resolvePlanSlugByMpPlanId($mpPlanId);
+        $planId = 0;
+        if ($planSlug !== '') {
+            $stmt = $this->db->prepare('SELECT id FROM plans WHERE slug = ? LIMIT 1');
+            $stmt->execute([$planSlug]);
+            $planId = (int)($stmt->fetchColumn() ?: 0);
+        }
+
+        $pre = $preapproval;
+        $pre['_user_id_local'] = $userId;
+        $pre['_plan_id_local'] = $planId;
+        $pre['_plan_slug_local'] = $planSlug;
+        return $pre;
+    }
+
+    private function resolvePlanSlugByMpPlanId(string $mpPlanId): string
+    {
+        if ($mpPlanId === '') return '';
+        $pro = (string)(getenv('MERCADOPAGO_PLAN_ID_PRO') ?: '');
+        $premium = (string)(getenv('MERCADOPAGO_PLAN_ID_PREMIUM') ?: '');
+        if ($pro !== '' && hash_equals($pro, $mpPlanId)) return 'pro';
+        if ($premium !== '' && hash_equals($premium, $mpPlanId)) return 'premium';
+        return '';
     }
 
     private function extractUserIdFromRef(string $extRef): ?int

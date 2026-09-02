@@ -87,71 +87,46 @@ class SubscriptionController
                 . ' planId=' . substr($planId, 0, 8) . '...'
                 . ' planIdEnvKey=' . $planIdEnvKey
                 . ' extRef=' . $extRef
-                . ' backUrl=' . $backUrl
             );
         }
 
-        $resp = $this->mp->createPreapproval(
-            $planId,
-            (string)$user->email,
-            $extRef,
-            $backUrl,
-            'Assinatura ' . $plan['nome']
-        );
-
-        $hasId      = !empty($resp['data']['id']);
-        $hasInit    = !empty($resp['data']['init_point']);
-        $hasSandbox = !empty($resp['data']['sandbox_init_point']);
-        $dataKeys   = is_array($resp['data']) ? array_keys($resp['data']) : [];
-
-        if (getenv('CSRF_DIAG') === '1') {
-            error_log('[CSRF_DIAG-sub_create] API response: http=' . ($resp['status'] ?? 0)
-                . ' ok=' . ($resp['ok'] ? '1' : '0')
-                . ' has_id=' . ($hasId ? '1' : '0')
-                . ' has_init_point=' . ($hasInit ? '1' : '0')
-                . ' has_sandbox_init_point=' . ($hasSandbox ? '1' : '0')
-                . ' data_keys=' . json_encode($dataKeys)
-                . ' error=' . ($resp['error'] ?? 'none')
-            );
-        }
-
-        if (!$resp['ok']) {
-            error_log('[SubscriptionController] createPreapproval falhou: http=' . ($resp['status'] ?? 0) . ' error=' . ($resp['error'] ?? 'unknown'));
-            header('Location: /?action=meu_plano&error=mp_create_failed');
-            return;
-        }
-
-        if (empty($resp['data']['id'])) {
-            error_log('[SubscriptionController] API nao retornou id. data_keys=' . json_encode($dataKeys));
-            header('Location: /?action=meu_plano&error=mp_create_failed');
-            return;
-        }
-
-        $checkoutUrl = (string)($resp['data']['init_point']
-            ?? $resp['data']['sandbox_init_point']
-            ?? '');
-        if ($checkoutUrl === '') {
-            error_log('[SubscriptionController] API nao retornou init_point nem sandbox_init_point. data_keys=' . json_encode($dataKeys));
-            header('Location: /?action=meu_plano&error=mp_create_failed');
-            return;
-        }
-
-        if (getenv('CSRF_DIAG') === '1') {
-            error_log('[CSRF_DIAG-sub_create] REDIRECT to checkout: ' . substr($checkoutUrl, 0, 60) . '...');
-        }
-
-        $pre = $resp['data'];
-        $pre['_user_id_local'] = $userId;
-        $pre['_plan_id_local'] = (int)$plan['id'];
-        $pre['_plan_slug_local'] = $planSlug;
-
-        try {
-            $subId = $this->subscriptions->createFromPreapproval($pre);
-            $_SESSION['pending_subscription_id'] = $subId;
-        } catch (PDOException $e) {
-            if (!(str_contains($e->getMessage(), 'unique') || str_contains($e->getMessage(), 'duplicate'))) {
-                throw $e;
+        $planResp = $this->mp->getPreapprovalPlan($planId);
+        $checkoutUrl = '';
+        if ($planResp['ok']) {
+            $baseUrl = (string)($planResp['data']['init_point']
+                ?? $planResp['data']['sandbox_init_point']
+                ?? '');
+            if ($baseUrl !== '') {
+                $separator = (str_contains($baseUrl, '?')) ? '&' : '?';
+                $checkoutUrl = $baseUrl
+                    . $separator . 'external_reference=' . urlencode($extRef)
+                    . '&back_url=' . urlencode($backUrl);
             }
+        }
+
+        if (getenv('CSRF_DIAG') === '1') {
+            $hasInit = !empty($planResp['data']['init_point']);
+            $hasSand = !empty($planResp['data']['sandbox_init_point']);
+            error_log('[CSRF_DIAG-sub_create] API GET /preapproval_plan/' . substr($planId, 0, 8) . '...: http='
+                . ($planResp['status'] ?? 0) . ' ok=' . ($planResp['ok'] ? '1' : '0')
+                . ' has_init_point=' . ($hasInit ? '1' : '0')
+                . ' has_sandbox=' . ($hasSand ? '1' : '0')
+                . ' checkout_url=' . ($checkoutUrl !== '' ? substr($checkoutUrl, 0, 80) . '...' : 'EMPTY')
+                . ' error=' . ($planResp['error'] ?? 'none')
+            );
+        }
+
+        if ($checkoutUrl === '') {
+            error_log('[SubscriptionController] getPreapprovalPlan falhou para planId=' . substr($planId, 0, 8)
+                . ' http=' . ($planResp['status'] ?? 0)
+                . ' error=' . ($planResp['error'] ?? 'unknown')
+            );
+            header('Location: /?action=meu_plano&error=mp_create_failed');
+            return;
+        }
+
+        if (getenv('CSRF_DIAG') === '1') {
+            error_log('[CSRF_DIAG-sub_create] REDIRECT to checkout: ' . substr($checkoutUrl, 0, 80) . '...');
         }
 
         header('Location: ' . $checkoutUrl);

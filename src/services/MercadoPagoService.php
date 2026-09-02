@@ -72,6 +72,11 @@ class MercadoPagoService
     /**
      * Cria uma assinatura (preapproval) vinculada a um preapproval_plan_id.
      *
+     * @deprecated desde 2025-09: o endpoint /preapproval passou a exigir
+     *   card_token_id para pagamento imediato. Para planos ja criados
+     *   via /preapproval_plan, o fluxo correto e redirecionar para a
+     *   init_point do proprio plano (ver getPlanCheckoutUrl()).
+     *
      * @return array{ok:bool, status:int, data:array, error:?string}
      */
     public function createPreapproval(
@@ -92,6 +97,44 @@ class MercadoPagoService
             $payload['reason'] = $reason;
         }
         return $this->request('POST', '/preapproval', $payload);
+    }
+
+    /**
+     * Obtem os dados de um Preapproval Plan ja criado, incluindo a URL
+     * de checkout (init_point / sandbox_init_point) para onde o cliente
+     * deve ser redirecionado.
+     *
+     * Endpoint: GET /preapproval_plan/{id}
+     *
+     * @return array{ok:bool, status:int, data:array, error:?string}
+     */
+    public function getPreapprovalPlan(string $planId): array
+    {
+        return $this->request('GET', '/preapproval_plan/' . rawurlencode($planId));
+    }
+
+    /**
+     * Retorna a URL de checkout de um Preapproval Plan.
+     *
+     * Em ambiente sandbox (token TEST-*), usa sandbox_init_point se existir;
+     * caso contrario usa init_point (que ja e roteada para sandbox automaticamente
+     * quando o token e de teste).
+     *
+     * @return string URL valida de checkout ou string vazia se nao disponivel.
+     */
+    public function getPlanCheckoutUrl(string $planId): string
+    {
+        $resp = $this->getPreapprovalPlan($planId);
+        if (!$resp['ok']) {
+            return '';
+        }
+        $data = $resp['data'];
+        $sandbox = isset($data['sandbox_init_point']) ? (string)$data['sandbox_init_point'] : '';
+        $init    = isset($data['init_point']) ? (string)$data['init_point'] : '';
+        if ($this->isSandbox() && $sandbox !== '') {
+            return $sandbox;
+        }
+        return $init;
     }
 
     /**
