@@ -150,7 +150,6 @@ class MercadoPagoService
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $err = curl_error($ch);
-        curl_close($ch);
 
         if ($response === false) {
             error_log('[MercadoPago] curl error: ' . $err);
