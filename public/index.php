@@ -310,6 +310,12 @@ if ($action === 'register') {
     } else {
         header('Location: /?action=meu_plano&error=mp_not_configured'); exit;
     }
+} elseif ($action === 'subscription_redirect') {
+    if ($subscriptionController !== null) {
+        $subscriptionController->redirect();
+    } else {
+        header('Location: /?action=meu_plano&error=mp_not_configured'); exit;
+    }
 } elseif ($action === 'subscription_cancel') {
     if ($asaasSubscriptionController !== null) {
         $asaasSubscriptionController->cancel();

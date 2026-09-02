@@ -178,6 +178,58 @@ class SubscriptionController
     }
 
     /**
+     * GET /index.php?action=subscription_redirect&plan=pro|premium
+     * Redireciona o usuario logado para a URL de checkout (init_point)
+     * do Preapproval Plan configurado no Mercado Pago para o slug informado.
+     *
+     * Esse fluxo NAO exige captura manual de cartao nesta tela: o MP
+     * apresenta o checkout hospedado (Checkout Bricks / pagina de assinatura)
+     * para o usuario finalizar o pagamento.
+     *
+     * Resposta: 302 Location para init_point (ou de volta para meu_plano com erro).
+     */
+    public function redirect(): void
+    {
+        requireLogin();
+
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        if ($userId <= 0) {
+            header('Location: /?action=meu_plano&error=incomplete_profile');
+            return;
+        }
+
+        $planSlug = PlanService::normalizeSlug((string)($_GET['plan'] ?? $_POST['plan'] ?? ''));
+        if (!in_array($planSlug, [PlanService::SLUG_PRO, PlanService::SLUG_PREMIUM], true)) {
+            header('Location: /?action=meu_plano&error=invalid_plan');
+            return;
+        }
+
+        $existing = $this->subscriptions->findActiveByUserId($userId);
+        if ($existing !== null) {
+            header('Location: /?action=meu_plano&error=already_subscribed');
+            return;
+        }
+
+        $planIdEnvKey = 'MERCADOPAGO_PLAN_ID_' . strtoupper($planSlug);
+        $planId = (string)(getenv($planIdEnvKey) ?: '');
+        if ($planId === '') {
+            error_log('[SubscriptionController] plano MP nao configurado: ' . $planSlug . ' env=' . $planIdEnvKey);
+            header('Location: /?action=meu_plano&error=plan_not_configured');
+            return;
+        }
+
+        $checkoutUrl = $this->mp->getPlanCheckoutUrl($planId);
+        if ($checkoutUrl === '') {
+            error_log('[SubscriptionController] checkout url indisponivel para plan_id=' . $planId . ' slug=' . $planSlug);
+            header('Location: /?action=meu_plano&error=mp_not_configured');
+            return;
+        }
+
+        header('Location: ' . $checkoutUrl);
+        return;
+    }
+
+    /**
      * POST /index.php?action=subscription_cancel
      * Body: csrf_token
      * Resposta: redirect para meu_plano.
