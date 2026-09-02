@@ -60,6 +60,7 @@ $errMessages = [
     'missing_card_data'     => 'Preencha todos os dados do cartão.',
     'missing_holder_data'   => 'Preencha todos os dados do titular.',
     'invalid_cpf'          => 'CPF inválido ou não cadastrado. Cadastre um CPF válido em Configurações antes de assinar um plano.',
+    'incomplete_profile'   => 'Seus dados de cadastro estão incompletos. Preencha nome e e-mail em Configurações.',
     'asaas_customer_failed' => 'Não foi possível criar o cadastro no Asaas.',
     'asaas_create_failed'   => 'Não foi possível processar a assinatura. Verifique os dados do cartão e tente novamente.',
     'asaas_no_id'           => 'Resposta incompleta do serviço de pagamento.',

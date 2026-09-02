@@ -88,6 +88,14 @@ class AsaasSubscriptionController
             return;
         }
 
+        $userName  = trim((string)($user->name ?? ''));
+        $userEmail = trim((string)($user->email ?? ''));
+        if ($userName === '' || $userEmail === '' || !filter_var($userEmail, FILTER_VALIDATE_EMAIL)) {
+            error_log('[AsaasSub] pre-check failed: missing or invalid user profile data');
+            header('Location: /?action=meu_plano&error=incomplete_profile');
+            return;
+        }
+
         $cardData = $this->readCardDataFromPost();
         $missing = [];
         if ($cardData['holderName'] === '') $missing[] = 'card_holder_name';
@@ -102,7 +110,7 @@ class AsaasSubscriptionController
 
         $holderInfo = [
             'name'         => $cardData['holderName'],
-            'email'        => (string)($user->email ?? ''),
+            'email'        => $userEmail,
             'cpfCnpj'      => $cpf,
             'postalCode'   => preg_replace('/\D/', '', (string)($_POST['holder_postal_code'] ?? '')),
             'addressNumber'=> (string)($_POST['holder_address_number'] ?? ''),
@@ -119,8 +127,8 @@ class AsaasSubscriptionController
         $customer = $this->asaas->findOrCreateCustomer(
             $this->db,
             $userId,
-            (string)($user->nome ?? ''),
-            (string)($user->email ?? ''),
+            $userName,
+            $userEmail,
             $cpf
         );
         if (!$customer['ok'] || empty($customer['customerId'])) {
