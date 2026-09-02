@@ -98,6 +98,83 @@ function runMigrations(PDO $db): void
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )",
+
+        //============================================================
+        // SUBSCRIPTIONS (Mercado Pago - preapproval)
+        //============================================================
+        // Estados internos (CHECK):
+        //   pending   - preapproval criado, aguardando pagamento
+        //   active    - autorizado e em cobranca recorrente
+        //   paused    - pausado pelo usuario ou pelo MP
+        //   cancelled - cancelado (acesso preservado ate grace_period_end)
+        //   expired   - periodo pago terminou
+        //   rejected  - pagamento recusado / assinatura rejeitada
+        // Mapeamento de status do MP -> status interno (ver docs):
+        //   pending   <- pending
+        //   active    <- authorized
+        //   paused    <- paused
+        //   cancelled <- cancelled
+        //   expired   <- expired / finished
+        //   rejected  <- rejected
+        "CREATE TABLE IF NOT EXISTS subscriptions (
+            id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+            plan_id INTEGER NOT NULL REFERENCES planos(id) ON DELETE RESTRICT,
+            plan_slug VARCHAR(20) NOT NULL,
+            mp_preapproval_id VARCHAR(60) UNIQUE,
+            mp_plan_id VARCHAR(60),
+            mp_payer_id VARCHAR(60),
+            external_reference VARCHAR(100),
+            status VARCHAR(20) NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending','active','paused','cancelled','expired','rejected')),
+            reason VARCHAR(50),
+            raw_status VARCHAR(50),
+            start_date TIMESTAMP,
+            next_billing_date TIMESTAMP,
+            paused_at TIMESTAMP,
+            cancelled_at TIMESTAMP,
+            expired_at TIMESTAMP,
+            grace_period_end TIMESTAMP,
+            amount_cents INTEGER,
+            currency CHAR(3) DEFAULT 'BRL',
+            frequency SMALLINT,
+            frequency_type VARCHAR(10) DEFAULT 'months'
+                CHECK (frequency_type IS NULL OR frequency_type IN ('days','months','years')),
+            last_event_id VARCHAR(100),
+            last_event_type VARCHAR(40),
+            last_event_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )",
+
+        //============================================================
+        // PAYMENT_WEBHOOKS (idempotencia e auditoria de webhooks MP)
+        //============================================================
+        // - event_id UNIQUE garante idempotencia (regra 3 e 4)
+        // - payload JSONB preserva o evento para auditoria
+        // - status do processamento rastreia cada etapa
+        // - NUNCA armazena access_token, Authorization header
+        //   completo, nem dados de cartao. Apenas signature_header
+        //   para forensics.
+        "CREATE TABLE IF NOT EXISTS payment_webhooks (
+            id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            event_id VARCHAR(100) UNIQUE,
+            topic VARCHAR(30) NOT NULL
+                CHECK (topic IN ('preapproval','subscription','subscription_preapproval','subscription_authorized_payment','subscription_preapproval_plan','payment','plan','invoice')),
+            action VARCHAR(30),
+            resource_id VARCHAR(100),
+            payload JSONB NOT NULL,
+            signature_header VARCHAR(500),
+            source_ip VARCHAR(45),
+            status VARCHAR(20) NOT NULL DEFAULT 'received'
+                CHECK (status IN ('received','processing','processed','failed','skipped')),
+            error_message TEXT,
+            received_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            processed_at TIMESTAMP,
+            subscription_id INTEGER REFERENCES subscriptions(id) ON DELETE SET NULL,
+            user_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL
+        )",
+
         "CREATE TABLE IF NOT EXISTS bug_reports (
             id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
             usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
@@ -185,6 +262,35 @@ function runMigrations(PDO $db): void
         "CREATE INDEX IF NOT EXISTS idx_feedback_usuario ON feedback(usuario_id)",
         "CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)",
         "CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at DESC)",
+
+        // subscriptions: impede 2 preapprovals iguais (regra 2 + 3)
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_mp_preapproval
+            ON subscriptions(mp_preapproval_id) WHERE mp_preapproval_id IS NOT NULL",
+        // busca rapida: "tem assinatura ativa para este usuario?"
+        "CREATE INDEX IF NOT EXISTS idx_subscriptions_user_status
+            ON subscriptions(user_id, status)",
+        // cron de renovacoes futuras
+        "CREATE INDEX IF NOT EXISTS idx_subscriptions_status_renewal
+            ON subscriptions(status, next_billing_date) WHERE status = 'active'",
+        // validacao de external_reference no webhook
+        "CREATE INDEX IF NOT EXISTS idx_subscriptions_ext_ref
+            ON subscriptions(external_reference) WHERE external_reference IS NOT NULL",
+        // preservacao de acesso durante atraso (regra 12)
+        "CREATE INDEX IF NOT EXISTS idx_subscriptions_grace
+            ON subscriptions(grace_period_end) WHERE grace_period_end IS NOT NULL",
+
+        // payment_webhooks: idempotencia (event_id ja UNIQUE na coluna)
+        "CREATE INDEX IF NOT EXISTS idx_payment_webhooks_topic_received
+            ON payment_webhooks(topic, received_at DESC)",
+        // reprocessamento de falhas
+        "CREATE INDEX IF NOT EXISTS idx_payment_webhooks_status
+            ON payment_webhooks(status) WHERE status IN ('received','failed')",
+        // lookup por assinatura
+        "CREATE INDEX IF NOT EXISTS idx_payment_webhooks_subscription
+            ON payment_webhooks(subscription_id) WHERE subscription_id IS NOT NULL",
+        // lookup por usuario
+        "CREATE INDEX IF NOT EXISTS idx_payment_webhooks_user
+            ON payment_webhooks(user_id) WHERE user_id IS NOT NULL",
     ];
     foreach ($extraIndexes as $sql) {
         try { $db->exec($sql); } catch (Throwable $e) {}
@@ -207,23 +313,28 @@ function runMigrations(PDO $db): void
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS plano_status VARCHAR(20) NOT NULL DEFAULT 'ativo'",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS plano_inicio TIMESTAMP",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS plano_fim TIMESTAMP",
+        // Mercado Pago - relacionamento com assinatura ativa
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS active_subscription_id
+            INTEGER REFERENCES subscriptions(id) ON DELETE SET NULL",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS mercadopago_payer_id VARCHAR(60)",
     ];
     foreach ($addColumnIfMissing as $sql) {
         $db->exec($sql);
     }
 
-    // Seed planos basicos (idempotente)
-    // preco NULL para PRO/PREMIUM = preco ainda nao definido (etapa de estrutura apenas)
-    // preco 0 para gratuito = plano gratuito
+    // Seed planos basicos (idempotente).
+    // Precos sao a fonte oficial para o backend e o frontend.
+    // GRATUITO: 0.00 | PRO: 29.90 | PREMIUM: 59.90
+    // Para ajustar valores, atualize aqui e reexecute as migrations.
     try {
         $db->exec("INSERT INTO planos (nome, slug, preco, descricao, status)
-            VALUES ('Gratuito','gratuito',0,'Plano gratuito com recursos essenciais.','ativo')
+            VALUES ('Gratuito','gratuito',0.00,'Plano gratuito com recursos essenciais.','ativo')
             ON CONFLICT (slug) DO NOTHING");
         $db->exec("INSERT INTO planos (nome, slug, preco, descricao, status)
-            VALUES ('Pro','pro',NULL,'Plano Pro com recursos avancados.','ativo')
+            VALUES ('Pro','pro',29.90,'Plano Pro com recursos avancados.','ativo')
             ON CONFLICT (slug) DO NOTHING");
         $db->exec("INSERT INTO planos (nome, slug, preco, descricao, status)
-            VALUES ('Premium','premium',NULL,'Plano Premium completo.','ativo')
+            VALUES ('Premium','premium',59.90,'Plano Premium completo.','ativo')
             ON CONFLICT (slug) DO NOTHING");
     } catch (Throwable $e) {}
 
@@ -243,12 +354,14 @@ function runMigrations(PDO $db): void
         $db->exec("ALTER TABLE planos ALTER COLUMN preco SET DEFAULT 0");
     } catch (Throwable $e) {}
 
-    // Reseta preco de PRO/PREMIUM para NULL (preco ainda nao definido nesta etapa).
-    // Idempotente e seguro: se ja forem NULL, nao faz nada.
+    // Aplica precos oficiais a PRO e PREMIUM (somente se estiverem NULL).
+    // Idempotente: se ja tiverem preco, nao sobrescreve.
+    // Se precisar ajustar valores, altere aqui e reexecute as migrations.
     try {
-        $upd = $db->prepare("UPDATE planos SET preco = NULL, updated_at = NOW()
-            WHERE slug IN ('pro', 'premium') AND preco IS NOT NULL");
-        $upd->execute();
+        $db->exec("UPDATE planos SET preco = 29.90, updated_at = NOW()
+            WHERE slug = 'pro' AND preco IS NULL");
+        $db->exec("UPDATE planos SET preco = 59.90, updated_at = NOW()
+            WHERE slug = 'premium' AND preco IS NULL");
     } catch (Throwable $e) {}
 
     // Criação/promotion do admin via variáveis de ambiente (sem credencial no código)

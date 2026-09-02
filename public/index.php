@@ -67,6 +67,10 @@ require_once __DIR__ . '/../src/controllers/FeedbackController.php';
 require_once __DIR__ . '/../src/services/AiFinanceContext.php';
 require_once __DIR__ . '/../src/services/AiService.php';
 require_once __DIR__ . '/../src/controllers/AiController.php';
+require_once __DIR__ . '/../src/models/Subscription.php';
+require_once __DIR__ . '/../src/services/MercadoPagoService.php';
+require_once __DIR__ . '/../src/services/WebhookService.php';
+require_once __DIR__ . '/../src/controllers/SubscriptionController.php';
 
 $db = getDBConnection();
 require_once __DIR__ . '/../src/db_bootstrap.php';
@@ -102,6 +106,13 @@ $adminController = new AdminController($userModel, $bugModel, $planModel, $feedb
 $bugReportController = new BugReportController($bugModel, $db);
 $feedbackController = new FeedbackController($feedbackModel, $db);
 $aiController = new AiController($db);
+$subscriptionModel = new Subscription($db);
+$mpService = MercadoPagoService::isConfigured()
+    ? new MercadoPagoService()
+    : null;
+$subscriptionController = $mpService !== null
+    ? new SubscriptionController($db, $userModel, $planService, $subscriptionModel, $mpService)
+    : null;
 
 $action = $_GET['action'] ?? null;
 
@@ -113,6 +124,7 @@ $csrfProtectedActions = [
     'store_goal', 'update_goal', 'delete_goal', 'update_profile',
     'update_password', 'feedback_create', 'reportar', 'reportar_create',
     'admin_bug_update', 'admin_feedback_update', 'ai_chat', 'logout',
+    'subscription_create', 'subscription_cancel',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -196,6 +208,16 @@ if ($action === 'register') {
     $profileController->index();
 } elseif ($action === 'meu_plano') {
     $profileController->meuPlano();
+} elseif ($action === 'subscription_create') {
+    if ($subscriptionController === null) {
+        header('Location: /?action=meu_plano&error=mp_not_configured'); exit;
+    }
+    $subscriptionController->create();
+} elseif ($action === 'subscription_cancel') {
+    if ($subscriptionController === null) {
+        header('Location: /?action=meu_plano&error=mp_not_configured'); exit;
+    }
+    $subscriptionController->cancel();
 } elseif ($action === 'update_profile') {
     $profileController->updateProfile();
 } elseif ($action === 'update_password') {

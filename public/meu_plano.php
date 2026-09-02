@@ -205,18 +205,20 @@ $statusBadgeClass = $planIsAtivo ? 'badge-success' : 'badge-warning';
                     </div>
 
                     <!-- Botão upgrade -->
-                    <button
-                        type="button"
-                        class="btn"
-                        style="width:100%;justify-content:center;opacity:.45;cursor:not-allowed"
-                        disabled
-                        aria-disabled="true"
-                        title="Pagamento em breve">
-                        <?= render_icon('zap', 15) ?>
-                        Atualizar para <?= htmlspecialchars($planName) ?>
-                    </button>
+                    <form method="POST" action="/index.php?action=subscription_create" style="width:100%">
+                        <input type="hidden" name="plan_slug" value="<?= htmlspecialchars($slug) ?>">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_field()) ?>">
+                        <button
+                            type="submit"
+                            class="btn"
+                            style="width:100%;justify-content:center"
+                            title="Assinar plano <?= htmlspecialchars($planName) ?>">
+                            <?= render_icon('zap', 15) ?>
+                            Atualizar para <?= htmlspecialchars($planName) ?>
+                        </button>
+                    </form>
                     <div style="margin-top:var(--space-2);font-size:11px;color:var(--color-text-3);text-align:center">
-                        Pagamento via Mercado Pago em breve
+                        Cobrança segura via Mercado Pago
                     </div>
                 </div>
             </div>
