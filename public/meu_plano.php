@@ -296,20 +296,23 @@ $errText = $errMessages[$errKey] ?? null;
 
                 <div>
                     <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">Número do cartão</label>
-                    <input type="text" id="mp-card-number" inputmode="numeric" maxlength="19" placeholder="0000 0000 0000 0000" required
-                        style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-1);font-size:14px">
+                    <div id="mp-card-number"
+                        style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-2);font-size:14px;min-height:44px;box-sizing:border-box">
+                    </div>
                 </div>
 
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
                     <div>
                         <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">Validade</label>
-                        <input type="text" id="mp-card-exp" inputmode="numeric" maxlength="7" placeholder="MM/AA" required
-                            style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-1);font-size:14px">
+                        <div id="mp-card-exp" inputmode="numeric"
+                            style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-2);font-size:14px;min-height:44px;box-sizing:border-box">
+                        </div>
                     </div>
                     <div>
                         <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">CVV</label>
-                        <input type="text" id="mp-card-cvv" inputmode="numeric" maxlength="4" placeholder="123" required
-                            style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-1);font-size:14px">
+                        <div id="mp-card-cvv" inputmode="numeric"
+                            style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-2);font-size:14px;min-height:44px;box-sizing:border-box">
+                        </div>
                     </div>
                 </div>
 
@@ -321,8 +324,12 @@ $errText = $errMessages[$errKey] ?? null;
 
                 <div>
                     <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">CPF do titular</label>
-                    <input type="text" id="mp-card-doc" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" required
-                        style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-1);font-size:14px">
+                    <div id="mp-card-doc-type"
+                        style="width:100%;margin-bottom:6px">
+                    </div>
+                    <div id="mp-card-doc"
+                        style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-2);font-size:14px;min-height:44px;box-sizing:border-box">
+                    </div>
                 </div>
 
                 <div id="mp-issuer" style="display:none">
@@ -450,18 +457,9 @@ $errText = $errMessages[$errKey] ?? null;
             },
             callbacks: {
                 onFormMounted: function() {
-                    var exp = $('mp-card-exp');
-                    if (exp) {
-                        exp.addEventListener('input', function() { exp.value = formatExp(exp.value); });
-                    }
-                    var num = $('mp-card-number');
-                    if (num) {
-                        num.addEventListener('input', function() { num.value = formatCard(num.value); });
-                    }
-                    var doc = $('mp-card-doc');
-                    if (doc) {
-                        doc.addEventListener('input', function() { doc.value = formatCpf(doc.value); });
-                    }
+                    // Os campos de cartao (cardNumber, expirationDate, securityCode)
+                    // sao divs cujo conteudo e substituido pelo iframe do MP.
+                    // Nao precisamos de event listeners nos containers.
                 },
                 onBinChange: function(bin) {
                     var issuerEl = $('mp-issuer');
