@@ -411,8 +411,12 @@ $errText = $errMessages[$errKey] ?? null;
         el.removeAttribute('data-visible');
     }
     function setLoading(on) {
-        $('mp-submit').disabled = !!on;
-        $('mp-submit-label').textContent = on ? 'Processando…' : 'Assinar agora';
+        try {
+            var btn = $('mp-submit');
+            var lbl = $('mp-submit-label');
+            if (btn) btn.disabled = !!on;
+            if (lbl) lbl.textContent = on ? 'Processando…' : 'Assinar agora';
+        } catch (e) { /* elementos ausentes: ignorar */ }
     }
 
     function onlyDigits(s) { return (s || '').replace(/\D+/g, ''); }
@@ -511,23 +515,27 @@ $errText = $errMessages[$errKey] ?? null;
                     }
                 },
                 onError: function(errors) {
-                    if (errors && errors.length) {
-                        showError(errors.map(function(e){ return e.message; }).join(' '));
-                    }
+                    showError((errors && errors.length)
+                        ? errors.map(function(e){ return e.message; }).join(' ')
+                        : 'Erro ao processar cartão. Tente novamente.');
+                    setLoading(false);
                 },
                 onSubmit: function(event) {
                     event.preventDefault();
-                    clearError();
-                    if (!cardForm) {
-                        showError('Sistema de pagamento não inicializado.');
-                        return;
-                    }
-                    setLoading(true);
+                    var submitted = false;
+                    var finalize = function() { if (!submitted) { submitted = true; setLoading(false); } };
                     try {
+                        clearError();
+                        if (!cardForm) {
+                            showError('Sistema de pagamento não inicializado.');
+                            setLoading(false);
+                            return;
+                        }
+                        setLoading(true);
                         var formData = cardForm.getCardFormData();
-                        var token = formData.token;
+                        var token = formData && formData.token;
                         if (!token) {
-                            var errMsg = (formData.error && formData.error.message)
+                            var errMsg = (formData && formData.error && formData.error.message)
                                 ? formData.error.message
                                 : 'Verifique os dados do cartão e tente novamente.';
                             showError(errMsg);
@@ -550,9 +558,30 @@ $errText = $errMessages[$errKey] ?? null;
                                 return;
                             }
                             var finalUrl = resp.url || '';
-                            if (finalUrl.indexOf('error=1') !== -1 || finalUrl.indexOf('error=access_denied') !== -1) {
-                                showError('Pagamento não autorizado. Verifique os dados do cartão.');
+                            var urlErr = null;
+                            try {
+                                var u = new URL(finalUrl, window.location.origin);
+                                urlErr = u.searchParams.get('error');
+                            } catch (e) {}
+                            var errMessages = {
+                                'invalid_plan':        'Plano inválido.',
+                                'plan_not_found':      'Plano não encontrado.',
+                                'plan_not_configured': 'Plano não configurado no servidor.',
+                                'missing_card_token':  'Token do cartão não foi gerado. Tente novamente.',
+                                'mp_create_failed':     'Não foi possível processar a assinatura no Mercado Pago. Verifique os dados do cartão.',
+                                'mp_no_id':            'Resposta incompleta do Mercado Pago. Tente novamente.',
+                                'mp_not_configured':   'Serviço de pagamento não configurado.',
+                                'already_subscribed':  'Você já possui uma assinatura ativa.',
+                                'incomplete_profile':  'Complete seu perfil (nome e e-mail) em Configurações.',
+                                'method':              'Método não permitido.'
+                            };
+                            if (urlErr && errMessages[urlErr]) {
+                                showError(errMessages[urlErr]);
                                 setLoading(false);
+                                return;
+                            }
+                            if (finalUrl.indexOf('subscribed=1') !== -1) {
+                                window.location.href = finalUrl;
                             } else {
                                 window.location.href = finalUrl || '/?action=meu_plano&subscribed=1';
                             }
@@ -573,8 +602,12 @@ $errText = $errMessages[$errKey] ?? null;
         clearError();
         setLoading(false);
         currentPlanSlug = slug;
-        $('mp-plan-slug').value = slug;
-        $('mp-plan-name').textContent = planName || slug;
+        try {
+            var planSlugEl = $('mp-plan-slug');
+            var planNameEl = $('mp-plan-name');
+            if (planSlugEl) planSlugEl.value = slug;
+            if (planNameEl) planNameEl.textContent = planName || slug;
+        } catch (e) {}
         var modal = $('mp-checkout-modal');
         modal.hidden = false;
         modal.setAttribute('data-open', '1');
