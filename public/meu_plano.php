@@ -517,6 +517,53 @@ $errText = $errMessages[$errKey] ?? null;
                 },
                 onSubmit: function(event) {
                     event.preventDefault();
+                    clearError();
+                    if (!cardForm) {
+                        showError('Sistema de pagamento não inicializado.');
+                        return;
+                    }
+                    setLoading(true);
+                    try {
+                        var formData = cardForm.getCardFormData();
+                        var token = formData.token;
+                        if (!token) {
+                            var errMsg = (formData.error && formData.error.message)
+                                ? formData.error.message
+                                : 'Verifique os dados do cartão e tente novamente.';
+                            showError(errMsg);
+                            setLoading(false);
+                            return;
+                        }
+                        var fd = new FormData();
+                        fd.append('plan_slug', currentPlanSlug);
+                        fd.append('card_token_id', token);
+                        fd.append('csrf_token', CSRF_TOKEN);
+                        fetch('/index.php?action=subscription_create', {
+                            method: 'POST',
+                            body: fd,
+                            credentials: 'same-origin',
+                            redirect: 'follow'
+                        }).then(function(resp) {
+                            if (!resp.ok && resp.status >= 500) {
+                                showError('Erro no servidor. Tente novamente em instantes.');
+                                setLoading(false);
+                                return;
+                            }
+                            var finalUrl = resp.url || '';
+                            if (finalUrl.indexOf('error=1') !== -1 || finalUrl.indexOf('error=access_denied') !== -1) {
+                                showError('Pagamento não autorizado. Verifique os dados do cartão.');
+                                setLoading(false);
+                            } else {
+                                window.location.href = finalUrl || '/?action=meu_plano&subscribed=1';
+                            }
+                        }).catch(function(fetchErr) {
+                            showError('Erro de conexão. Verifique sua internet e tente novamente.');
+                            setLoading(false);
+                        });
+                    } catch (err) {
+                        showError('Erro ao processar. Tente novamente.');
+                        setLoading(false);
+                    }
                 }
             }
         });
@@ -524,6 +571,7 @@ $errText = $errMessages[$errKey] ?? null;
 
     async function openModal(slug, planName) {
         clearError();
+        setLoading(false);
         currentPlanSlug = slug;
         $('mp-plan-slug').value = slug;
         $('mp-plan-name').textContent = planName || slug;
@@ -557,36 +605,6 @@ $errText = $errMessages[$errKey] ?? null;
         }
         if (ev.target.id === 'mp-close' || ev.target.id === 'mp-cancel') {
             closeModal();
-        }
-    });
-
-    document.getElementById('mp-card-form').addEventListener('submit', async function(ev) {
-        ev.preventDefault();
-        clearError();
-        if (!cardForm) { showError('Sistema de pagamento não inicializado.'); return; }
-        setLoading(true);
-        try {
-            var token = await cardForm.tokenize();
-            if (!token || !token.id) {
-                showError('Não foi possível tokenizar o cartão. Verifique os dados.');
-                setLoading(false);
-                return;
-            }
-            $('mp-card-token').value = token.id;
-            var fd = new FormData();
-            fd.append('plan_slug', $('mp-plan-slug').value);
-            fd.append('card_token_id', token.id);
-            fd.append('csrf_token', CSRF_TOKEN);
-            var resp = await fetch('/index.php?action=subscription_create', {
-                method: 'POST',
-                body: fd,
-                credentials: 'same-origin'
-            });
-            var loc = resp.headers.get('Location') || '/?action=meu_plano&subscribed=1';
-            window.location.href = loc;
-        } catch (e) {
-            showError('Não foi possível processar o pagamento. Tente novamente.');
-            setLoading(false);
         }
     });
 })();
