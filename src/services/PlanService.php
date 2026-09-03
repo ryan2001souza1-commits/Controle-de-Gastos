@@ -342,7 +342,6 @@ class PlanService
 
     /**
      * Retorna o preco numerico de um plano (float, reais, sem formatacao).
-     * Usado para passar valores ao Mercado Pago Brick, que espera amount em reais.
      * Ex: 9.90 para R$ 9,90/mês.
      * Retorna null se o plano nao existe ou nao tem preco definido.
      */

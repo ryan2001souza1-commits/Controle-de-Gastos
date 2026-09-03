@@ -31,7 +31,7 @@ include __DIR__ . '/../partials/admin_layout_start.php';
 ?>
 
 <div class="admin-alert admin-alert-info" style="margin-bottom:4px">
-    Nenhum gateway de pagamento está conectado. Para ativar cobranças, configure Stripe, Mercado Pago ou similar e conecte via webhook. As colunas <code>usuarios.plano</code>, <code>plano_status</code>, <code>plano_inicio</code> e <code>plano_fim</code> estão preparadas para receber atualizações automáticas via webhook de pagamento.
+    Nenhum gateway de pagamento está conectado. Para ativar cobranças, configure um gateway de pagamento e conecte via webhook.
 </div>
 
 <section class="admin-card">

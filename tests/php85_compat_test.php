@@ -4,7 +4,7 @@
  *
  * Testa:
  *  - config.php: display_errors seguro, Vercel_ENV, error_reporting
- *  - MercadoPagoService, Mailer, GoogleAuthService, AiService NAO usam curl_close()
+ *  - Mailer, GoogleAuthService, AiService NAO usam curl_close()
  *  - ProfileController: nao imprime nada antes de redirect
  */
 
@@ -49,20 +49,16 @@ php85_assert('T07 config.php ativa log_errors=1 em producao',
     && strpos($configSrc, "'1'") !== false);
 
 // --- curl_close ausente nos servicos de rede ---
-$mpSrc = file_get_contents($ROOT . '/src/services/MercadoPagoService.php');
-php85_assert('T08 MercadoPagoService NAO usa curl_close',
-    strpos($mpSrc, 'curl_close') === false);
-
 $mailerSrc = file_get_contents($ROOT . '/src/services/Mailer.php');
-php85_assert('T09 Mailer NAO usa curl_close',
+php85_assert('T08 Mailer NAO usa curl_close',
     strpos($mailerSrc, 'curl_close') === false);
 
 $gauthSrc = file_get_contents($ROOT . '/src/services/GoogleAuthService.php');
-php85_assert('T10 GoogleAuthService NAO usa curl_close',
+php85_assert('T09 GoogleAuthService NAO usa curl_close',
     strpos($gauthSrc, 'curl_close') === false);
 
 $aiSrc = file_get_contents($ROOT . '/src/services/AiService.php');
-php85_assert('T11 AiService NAO usa curl_close',
+php85_assert('T10 AiService NAO usa curl_close',
     strpos($aiSrc, 'curl_close') === false);
 
 // --- ProfileController: updateProfile nao imprime nada antes do redirect ---

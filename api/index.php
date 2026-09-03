@@ -121,17 +121,33 @@ if (in_array($pathInfo, $blocked, true)) {
     echo '404 Not Found';
     return;
 }
-// Webhook do Mercado Pago e um endpoint publico (servidor-servidor)
-// SEM sessao e SEM CSRF. Ele se valida por X-Signature.
-$publicWebhookPaths = ['/mercadopago_webhook.php', '/mercadopago_webhook'];
-if (in_array($pathInfo, $publicWebhookPaths, true)) {
-    require_once $ROOT . '/public/mercadopago_webhook.php';
-    return;
-}
-// Pagina de retorno do Mercado Pago (apenas UX, nao ativa plano)
-$publicReturnPaths = ['/mercadopago_return.php', '/mercadopago_return'];
-if (in_array($pathInfo, $publicReturnPaths, true)) {
-    require_once $ROOT . '/public/mercadopago_return.php';
+// Paginas publicas permitidas
+$allowed = ['/login.php','/register.php','/forgot.php','/reset.php','/termos.php','/privacidade.php'];
+if (in_array($pathInfo, $allowed, true)) {
+    require_once $ROOT . '/public/partials/icons.php';
+    if (file_exists($ROOT . '/src/config/config.php') && !function_exists('isLoggedIn')) {
+        require_once $ROOT . '/src/config/config.php';
+    }
+    if (session_status() === PHP_SESSION_NONE) {
+        $lifetime = 604800;
+        try {
+            $db = getDBConnection();
+            $db->exec("CREATE TABLE IF NOT EXISTS sessions (id VARCHAR(128) PRIMARY KEY, data TEXT NOT NULL, expires_at TIMESTAMP NOT NULL)");
+            $db->exec("CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)");
+            require_once $ROOT . '/src/config/session_handler.php';
+            $handler = new DbSessionHandler($db, $lifetime);
+            session_set_save_handler($handler, true);
+        } catch (Throwable $e) {
+            error_log('[api/index.php session] ' . $e->getMessage());
+            ini_set('session.gc_maxlifetime', (string)$lifetime);
+        }
+        @session_start();
+    }
+    if (!function_exists('csrf_field')) {
+        require_once $ROOT . '/src/helpers/csrf.php';
+    }
+    $viewFile = $ROOT . '/public' . $pathInfo;
+    include $viewFile;
     return;
 }
 if ($pathInfo !== '/index.php' && $pathInfo !== '/' && !str_starts_with($pathInfo, '/api/')) {
@@ -139,41 +155,8 @@ if ($pathInfo !== '/index.php' && $pathInfo !== '/' && !str_starts_with($pathInf
     $real = realpath($viewFile);
     $publicReal = realpath($ROOT . '/public');
     if ($real && $publicReal && str_starts_with($real, $publicReal) && is_file($real) && is_readable($real)) {
-        // Apenas views standalone (sem dependência de $data do controller) podem ser servidas diretamente.
-        // Views com dados (dashboard, lancamentos etc.) DEVEM passar pelo router public/index.php
-        // para que o controller prepare $data, senão renderizam vazias ou quebram.
-        $allowed = ['/login.php','/register.php','/forgot.php','/reset.php','/termos.php','/privacidade.php'];
-        if (in_array($pathInfo, $allowed, true)) {
-            require_once $ROOT . '/public/partials/icons.php';
-            if (file_exists($ROOT . '/src/config/config.php') && !function_exists('isLoggedIn')) {
-                require_once $ROOT . '/src/config/config.php';
-            }
-            // Registro do DbSessionHandler ANTES de session_start() — CRÍTICO.
-            // Se este bloco usar o handler padrão (arquivo), o token CSRF é escrito no
-            // sistema de arquivos. Mas public/index.php registra DbSessionHandler antes de
-            // session_start(). O POST do login leria do DB — onde o token não existe.
-            // Resultado: "Sessão expirada" após logout → login.
-            if (session_status() === PHP_SESSION_NONE) {
-                $lifetime = 604800;
-                try {
-                    $db = getDBConnection();
-                    $db->exec("CREATE TABLE IF NOT EXISTS sessions (id VARCHAR(128) PRIMARY KEY, data TEXT NOT NULL, expires_at TIMESTAMP NOT NULL)");
-                    $db->exec("CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)");
-                    require_once $ROOT . '/src/config/session_handler.php';
-                    $handler = new DbSessionHandler($db, $lifetime);
-                    session_set_save_handler($handler, true);
-                } catch (Throwable $e) {
-                    error_log('[api/index.php session] ' . $e->getMessage());
-                    ini_set('session.gc_maxlifetime', (string)$lifetime);
-                }
-                @session_start();
-            }
-            if (!function_exists('csrf_field')) {
-                require_once $ROOT . '/src/helpers/csrf.php';
-            }
-            include $real;
-            return;
-        }
+        include $real;
+        return;
     }
 }
 

@@ -67,10 +67,6 @@ require_once __DIR__ . '/../src/controllers/FeedbackController.php';
 require_once __DIR__ . '/../src/services/AiFinanceContext.php';
 require_once __DIR__ . '/../src/services/AiService.php';
 require_once __DIR__ . '/../src/controllers/AiController.php';
-require_once __DIR__ . '/../src/models/Subscription.php';
-require_once __DIR__ . '/../src/services/MercadoPagoService.php';
-require_once __DIR__ . '/../src/services/WebhookService.php';
-require_once __DIR__ . '/../src/controllers/SubscriptionController.php';
 
 
 $db = getDBConnection();
@@ -107,13 +103,6 @@ $adminController = new AdminController($userModel, $bugModel, $planModel, $feedb
 $bugReportController = new BugReportController($bugModel, $db);
 $feedbackController = new FeedbackController($feedbackModel, $db);
 $aiController = new AiController($db);
-$subscriptionModel = new Subscription($db);
-$mpService = MercadoPagoService::isConfigured()
-    ? new MercadoPagoService()
-    : null;
-$subscriptionController = $mpService !== null
-    ? new SubscriptionController($db, $userModel, $planService, $subscriptionModel, $mpService)
-    : null;
 
 $action = $_GET['action'] ?? null;
 
@@ -125,7 +114,6 @@ $csrfProtectedActions = [
     'store_goal', 'update_goal', 'delete_goal', 'update_profile',
     'update_password', 'feedback_create', 'reportar', 'reportar_create',
     'admin_bug_update', 'admin_feedback_update', 'ai_chat', 'logout',
-    'subscription_create', 'subscription_cancel',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -209,68 +197,6 @@ if ($action === 'register') {
     $profileController->index();
 } elseif ($action === 'meu_plano') {
     $profileController->meuPlano();
-} elseif ($action === 'mercadopago_webhook') {
-    // Webhook publico do Mercado Pago (servidor-servidor).
-    // NAO exige login nem CSRF: a autenticacao e feita via X-Signature (HMAC-SHA256)
-    // validada pelo WebhookService.
-    if ($mpService === null) {
-        http_response_code(503);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'mp_not_configured']);
-        exit;
-    }
-
-    $rawBody = (string)file_get_contents('php://input');
-
-    $xSignature = isset($_SERVER['HTTP_X_SIGNATURE']) ? (string)$_SERVER['HTTP_X_SIGNATURE'] : null;
-    $xRequestId = isset($_SERVER['HTTP_X_REQUEST_ID']) ? (string)$_SERVER['HTTP_X_REQUEST_ID'] : null;
-
-    // O Mercado Pago pode enviar o ID do recurso na query string de varias formas:
-    //   ?data.id=123   (formato com ponto na chave — PHP converte para $_GET['data_id'])
-    //   ?data_id=123   (formato alternativo)
-    //   ?id=123        (alguns tipos de notificacao)
-    $resourceId = null;
-    if (isset($_GET['data_id']) && is_string($_GET['data_id']) && $_GET['data_id'] !== '') {
-        $resourceId = (string)$_GET['data_id'];
-    } elseif (isset($_GET['data.id']) && is_string($_GET['data.id']) && $_GET['data.id'] !== '') {
-        $resourceId = (string)$_GET['data.id'];
-    } elseif (isset($_GET['id']) && is_string($_GET['id']) && $_GET['id'] !== '') {
-        $resourceId = (string)$_GET['id'];
-    }
-
-    $sourceIp = isset($_SERVER['REMOTE_ADDR']) ? (string)$_SERVER['REMOTE_ADDR'] : null;
-
-    $webhookService = new WebhookService($db, $subscriptionModel, $mpService);
-    $result = $webhookService->handle($rawBody, $xSignature, $xRequestId, $resourceId, $sourceIp);
-
-    http_response_code((int)($result['status'] ?? 200));
-    header('Content-Type: application/json');
-    echo json_encode([
-        'received'  => true,
-        'duplicate' => (bool)($result['duplicate'] ?? false),
-        'processed' => (bool)($result['processed'] ?? false),
-    ]);
-    exit;
-} elseif ($action === 'subscription_create') {
-    // Mercado Pago (POST com card_token_id).
-    if ($subscriptionController !== null) {
-        $subscriptionController->create();
-    } else {
-        header('Location: /?action=meu_plano&error=mp_not_configured'); exit;
-    }
-} elseif ($action === 'subscription_redirect') {
-    if ($subscriptionController !== null) {
-        $subscriptionController->redirect();
-    } else {
-        header('Location: /?action=meu_plano&error=mp_not_configured'); exit;
-    }
-} elseif ($action === 'subscription_cancel') {
-    // Mercado Pago (POST).
-    if ($subscriptionController !== null) {
-        $subscriptionController->cancel();
-    } else {
-        header('Location: /?action=meu_plano&error=mp_not_configured'); exit;
-    }
 } elseif ($action === 'update_profile') {
     $profileController->updateProfile();
 } elseif ($action === 'update_password') {
@@ -369,8 +295,6 @@ if ($action === 'register') {
         exit;
     }
 } elseif ($action === 'diag') {
-    // Endpoint de diagnóstico — SOMENTE development/local.
-    // Bloqueia em produção (VERCEL_ENV) a menos que DIAG_SECRET esteja configurado.
     requireLogin();
     if (empty($_SESSION['is_admin'])) { http_response_code(403); exit; }
     $isProduction = getenv('VERCEL_ENV') !== false;
@@ -412,197 +336,6 @@ if ($action === 'register') {
         echo json_encode(['error'=>'Erro interno']);
         exit;
     }
-} elseif ($action === 'mp_env_diag') {
-    requireLogin();
-    if (empty($_SESSION['is_admin']) || (int)$_SESSION['is_admin'] !== 1) {
-        $isAdminDb = $userModel->isAdmin((int)($_SESSION['user_id'] ?? 0));
-        if (!$isAdminDb) {
-            http_response_code(403);
-            header('Content-Type: application/json');
-            echo json_encode(['error' => 'Admin required']);
-            exit;
-        }
-        $_SESSION['is_admin'] = 1;
-    }
-    $token = (string)(getenv('MERCADOPAGO_ACCESS_TOKEN') ?: '');
-    $pubKey = (string)(getenv('MERCADOPAGO_PUBLIC_KEY') ?: '');
-    $mode = strtolower((string)(getenv('MERCADOPAGO_MODE') ?: ''));
-    $webhookSecret = (string)(getenv('MERCADOPAGO_WEBHOOK_SECRET') ?: '');
-    $planPro = (string)(getenv('MERCADOPAGO_PLAN_ID_PRO') ?: '');
-    $planPrem = (string)(getenv('MERCADOPAGO_PLAN_ID_PREMIUM') ?: '');
-
-    $tokenType = 'missing';
-    if ($token !== '') {
-        $tokenType = str_starts_with($token, 'TEST-') ? 'test' :
-            (str_starts_with($token, 'APP_USR-') || str_starts_with($token, 'APP PRD-') ? 'production' : 'unknown');
-    }
-
-    $pubKeyType = 'missing';
-    if ($pubKey !== '') {
-        $pubKeyType = str_starts_with($pubKey, 'TEST-') ? 'test' :
-            (str_starts_with($pubKey, 'APP_USR-') || str_starts_with($pubKey, 'APP PRD-') ? 'production' : 'unknown');
-    }
-
-    $modeType = 'production';
-    if ($mode === 'sandbox') {
-        $modeType = 'sandbox';
-    } elseif ($mode !== 'production' && $mode !== '') {
-        $modeType = 'other';
-    }
-
-    $diag = [
-        'mode' => $modeType,
-        'public_key_type' => $pubKeyType,
-        'access_token_type' => $tokenType,
-        'plan_pro_configured' => ($planPro !== '' ? 'yes' : 'no'),
-        'plan_premium_configured' => ($planPrem !== '' ? 'yes' : 'no'),
-        'webhook_secret_configured' => ($webhookSecret !== '' ? 'yes' : 'no'),
-    ];
-
-    $checkPlan = function(string $planId) use ($token): array {
-        if ($planId === '') {
-            return ['configured' => false, 'http' => null, 'api_reachable' => null];
-        }
-        if ($token === '') {
-            return ['configured' => true, 'http' => null, 'api_reachable' => false, 'error' => 'access_token_missing'];
-        }
-        $url = 'https://api.mercadopago.com/preapproval_plan/' . rawurlencode($planId);
-        $ch = curl_init();
-        if (!$ch) {
-            return ['configured' => true, 'http' => null, 'api_reachable' => false];
-        }
-        curl_setopt_array($ch, [
-            CURLOPT_URL => $url,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 8,
-            CURLOPT_HTTPHEADER => [
-                "Authorization: Bearer {$token}",
-                'Accept: application/json',
-                'User-Agent: Controle-de-Gastos-diag/1.0',
-            ],
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
-            CURLOPT_FOLLOWLOCATION => true,
-        ]);
-        $raw = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError = curl_error($ch);
-        curl_close($ch);
-        $data = is_string($raw) ? json_decode($raw, true) : null;
-        if (!is_array($data)) {
-            $data = [];
-        }
-        $out = [
-            'configured' => true,
-            'http' => $httpCode,
-            'api_reachable' => ($httpCode > 0),
-        ];
-        if ($httpCode >= 200 && $httpCode < 300) {
-            $out['plan_id'] = isset($data['id']) ? (string)$data['id'] : null;
-            $out['plan_status'] = isset($data['status']) ? (string)$data['status'] : null;
-            $out['application_id'] = isset($data['application_id']) ? (string)$data['application_id'] : null;
-            $out['collector_id'] = isset($data['collector_id']) ? (string)$data['collector_id'] : null;
-            $out['reason'] = isset($data['reason']) ? (string)$data['reason'] : null;
-            $ar = isset($data['auto_recurring']) && is_array($data['auto_recurring']) ? $data['auto_recurring'] : [];
-            $out['amount'] = isset($ar['transaction_amount']) ? (string)$ar['transaction_amount'] : null;
-            $out['currency'] = isset($ar['currency_id']) ? (string)$ar['currency_id'] : null;
-            $out['has_sandbox_init_point'] = !empty($data['sandbox_init_point']);
-            $out['has_init_point'] = !empty($data['init_point']);
-        } else {
-            $out['api_code'] = isset($data['code']) ? (string)$data['code'] : null;
-            $out['api_message'] = isset($data['message']) ? substr((string)$data['message'], 0, 200) : null;
-            if (!empty($data['cause']) && is_array($data['cause'])) {
-                $cs = [];
-                foreach ($data['cause'] as $c) {
-                    if (is_array($c)) {
-                        $cs[] = (isset($c['code']) ? (string)$c['code'] : '?')
-                            . (isset($c['description']) ? ':' . substr((string)$c['description'], 0, 80) : '');
-                    }
-                }
-                if ($cs !== []) {
-                    $out['api_causes'] = $cs;
-                }
-            }
-        }
-        return $out;
-    };
-
-    $diag['plan_pro'] = $checkPlan($planPro);
-    $diag['plan_premium'] = $checkPlan($planPrem);
-
-    header('Content-Type: application/json');
-    echo json_encode($diag);
-    exit;
-} elseif ($action === 'mp_trace') {
-    requireLogin();
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        http_response_code(405);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'Method not allowed']);
-        exit;
-    }
-    header('Content-Type: application/json');
-    $body = file_get_contents('php://input');
-    $data = is_string($body) ? json_decode($body, true) : null;
-    if (!is_array($data)) {
-        $data = $_POST;
-    }
-    if (!is_array($data)) {
-        $data = [];
-    }
-    $events = isset($data['events']) && is_array($data['events']) ? $data['events'] : [];
-    $redactKeys = [
-        'card_token_id', 'cardToken', 'card_token', 'cardNumber', 'card_number',
-        'cvv', 'securityCode', 'security_code', 'password', 'senha',
-        'access_token', 'public_key', 'webhook_secret', 'payer_email', 'email',
-    ];
-    $safeEvents = [];
-    foreach ($events as $ev) {
-        if (!is_array($ev)) {
-            $safeEvents[] = ['t' => 'invalid', 'i' => null, 'ts' => 0];
-            continue;
-        }
-        $type = isset($ev['t']) ? substr((string)$ev['t'], 0, 50) : 'unknown';
-        $info = isset($ev['i']) ? $ev['i'] : null;
-        if (is_string($info) && strlen($info) > 500) {
-            $info = substr($info, 0, 500);
-        }
-        if (is_array($info)) {
-            $cleaned = [];
-            foreach ($info as $k => $v) {
-                $keyLower = strtolower((string)$k);
-                $redacted = false;
-                foreach ($redactKeys as $rk) {
-                    if (strpos($keyLower, $rk) !== false) {
-                        $cleaned[$k] = '[redacted]';
-                        $redacted = true;
-                        break;
-                    }
-                }
-                if (!$redacted) {
-                    if (is_string($v) && strlen($v) > 200) {
-                        $v = substr($v, 0, 200);
-                    }
-                    $cleaned[$k] = $v;
-                }
-            }
-            $info = $cleaned;
-        }
-        $ts = isset($ev['ts']) ? (int)$ev['ts'] : 0;
-        $safeEvents[] = ['t' => $type, 'i' => $info, 'ts' => $ts];
-    }
-    $logLine = '[mp_trace] user=' . (int)($_SESSION['user_id'] ?? 0)
-        . ' events=' . count($safeEvents);
-    foreach ($safeEvents as $i => $ev) {
-        $infoStr = is_array($ev['i']) ? json_encode($ev['i'], JSON_UNESCAPED_SLASHES) : (string)$ev['i'];
-        if (strlen($infoStr) > 200) {
-            $infoStr = substr($infoStr, 0, 200);
-        }
-        $logLine .= ' | #' . $i . ' ' . $ev['t'] . ':' . $infoStr;
-    }
-    error_log($logLine);
-    echo json_encode(['ok' => true, 'count' => count($safeEvents)]);
-    exit;
 } elseif ($action === 'termos') {
     require basePath('termos.php');
 } elseif ($action === 'privacy') {

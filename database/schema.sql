@@ -50,93 +50,37 @@ CREATE TABLE IF NOT EXISTS planos (
 );
 
 --============================================================
--- SUBSCRIPTIONS (Mercado Pago - preapproval)
+-- SUBSCRIPTIONS
 --============================================================
 -- Estados internos (CHECK):
---   pending   - preapproval criado, aguardando pagamento
---   active    - autorizado e em cobranca recorrente
---   paused    - pausado pelo usuario ou pelo MP
---   cancelled - cancelado (acesso preservado ate grace_period_end)
+--   pending   - assinatura criada, aguardando ativacao
+--   active    - ativa e em cobranca
+--   paused    - pausada
+--   cancelled - cancelada
 --   expired   - periodo pago terminou
---   rejected  - pagamento recusado / assinatura rejeitada
--- Mapeamento MP -> interno:
---   pending   <- pending
---   active    <- authorized
---   paused    <- paused
---   cancelled <- cancelled
---   expired   <- expired / finished
---   rejected  <- rejected
+--   rejected  - recusada
 CREATE TABLE IF NOT EXISTS subscriptions (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id INTEGER NOT NULL,
     plan_id INTEGER NOT NULL,
     plan_slug VARCHAR(20) NOT NULL,
-    -- Mercado Pago (legado, preservado para historico)
-    mp_preapproval_id VARCHAR(60) UNIQUE,
-    mp_plan_id VARCHAR(60),
-    mp_payer_id VARCHAR(60),
-    -- Asaas
-    asaas_customer_id VARCHAR(60),
-    asaas_subscription_id VARCHAR(60),
-    provider VARCHAR(20),
-    provider_status VARCHAR(30),
-    external_reference VARCHAR(100),
     status VARCHAR(20) NOT NULL DEFAULT 'pending'
         CHECK (status IN ('pending','active','paused','cancelled','expired','rejected')),
-    reason VARCHAR(50),
-    raw_status VARCHAR(50),
     start_date TIMESTAMP,
     next_billing_date TIMESTAMP,
     paused_at TIMESTAMP,
     cancelled_at TIMESTAMP,
     expired_at TIMESTAMP,
     grace_period_end TIMESTAMP,
-    amount_cents INTEGER,
-    currency CHAR(3) DEFAULT 'BRL',
-    frequency SMALLINT,
-    frequency_type VARCHAR(10) DEFAULT 'months'
-        CHECK (frequency_type IS NULL OR frequency_type IN ('days','months','years')),
-    last_event_id VARCHAR(100),
-    last_event_type VARCHAR(40),
-    last_event_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE,
     FOREIGN KEY (plan_id) REFERENCES planos(id) ON DELETE RESTRICT
 );
 
---============================================================
--- PAYMENT_WEBHOOKS (idempotencia e auditoria de webhooks MP)
---============================================================
--- - event_id UNIQUE garante idempotencia
--- - payload JSONB preserva o evento para auditoria
--- - NUNCA armazena access_token nem dados de cartao
-CREATE TABLE IF NOT EXISTS payment_webhooks (
-    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    event_id VARCHAR(100) UNIQUE,
-    topic VARCHAR(30) NOT NULL
-        CHECK (topic IN ('preapproval','subscription','payment','plan','invoice')),
-    action VARCHAR(30),
-    resource_id VARCHAR(100),
-    payload JSONB NOT NULL,
-    signature_header VARCHAR(500),
-    source_ip VARCHAR(45),
-    status VARCHAR(20) NOT NULL DEFAULT 'received'
-        CHECK (status IN ('received','processing','processed','failed','skipped')),
-    error_message TEXT,
-    received_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    processed_at TIMESTAMP,
-    subscription_id INTEGER,
-    user_id INTEGER,
-    FOREIGN KEY (subscription_id) REFERENCES subscriptions(id) ON DELETE SET NULL,
-    FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE SET NULL
-);
-
--- Adicao tardia em usuarios para relacionamento com assinatura ativa
+-- Relacionamento com assinatura ativa
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS active_subscription_id INTEGER
     REFERENCES subscriptions(id) ON DELETE SET NULL;
-ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS mercadopago_payer_id VARCHAR(60);
-ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS asaas_customer_id VARCHAR(60);
 
 --============================================================
 -- CATEGORIAS
@@ -312,23 +256,7 @@ CREATE INDEX IF NOT EXISTS idx_password_resets_expires_at ON password_resets(exp
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 
 -- subscriptions indexes
-CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_mp_preapproval
-    ON subscriptions(mp_preapproval_id) WHERE mp_preapproval_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_subscriptions_user_status
     ON subscriptions(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_status_renewal
     ON subscriptions(status, next_billing_date) WHERE status = 'active';
-CREATE INDEX IF NOT EXISTS idx_subscriptions_ext_ref
-    ON subscriptions(external_reference) WHERE external_reference IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_subscriptions_grace
-    ON subscriptions(grace_period_end) WHERE grace_period_end IS NOT NULL;
-
--- payment_webhooks indexes
-CREATE INDEX IF NOT EXISTS idx_payment_webhooks_topic_received
-    ON payment_webhooks(topic, received_at DESC);
-CREATE INDEX IF NOT EXISTS idx_payment_webhooks_status
-    ON payment_webhooks(status) WHERE status IN ('received','failed');
-CREATE INDEX IF NOT EXISTS idx_payment_webhooks_subscription
-    ON payment_webhooks(subscription_id) WHERE subscription_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_payment_webhooks_user
-    ON payment_webhooks(user_id) WHERE user_id IS NOT NULL;
