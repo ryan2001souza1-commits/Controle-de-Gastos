@@ -518,6 +518,72 @@ if ($action === 'register') {
         'webhook_secret_configured' => ($webhookSecret !== '' ? 'yes' : 'no'),
     ];
 
+    $checkPlan = function(string $planId) use ($token): array {
+        if ($planId === '') {
+            return ['configured' => false, 'http' => null, 'api_reachable' => null];
+        }
+        if ($token === '') {
+            return ['configured' => true, 'http' => null, 'api_reachable' => false, 'error' => 'access_token_missing'];
+        }
+        $ctx = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                'header' => "Authorization: Bearer {$token}\r\nAccept: application/json\r\nUser-Agent: Controle-de-Gastos-diag/1.0\r\n",
+                'timeout' => 8,
+                'ignore_errors' => true,
+            ],
+            'ssl' => [
+                'verify_peer' => true,
+                'verify_peer_name' => true,
+            ],
+        ]);
+        $url = 'https://api.mercadopago.com/preapproval_plan/' . rawurlencode($planId);
+        $raw = @file_get_contents($url, false, $ctx);
+        $statusHeader = isset($http_response_header[0]) ? $http_response_header[0] : '';
+        preg_match('/\s(\d{3})\s/', $statusHeader, $m);
+        $httpCode = isset($m[1]) ? (int)$m[1] : 0;
+        $data = is_string($raw) ? json_decode($raw, true) : null;
+        if (!is_array($data)) {
+            $data = [];
+        }
+        $out = [
+            'configured' => true,
+            'http' => $httpCode,
+            'api_reachable' => ($httpCode > 0),
+        ];
+        if ($httpCode >= 200 && $httpCode < 300) {
+            $out['plan_id'] = isset($data['id']) ? (string)$data['id'] : null;
+            $out['plan_status'] = isset($data['status']) ? (string)$data['status'] : null;
+            $out['application_id'] = isset($data['application_id']) ? (string)$data['application_id'] : null;
+            $out['collector_id'] = isset($data['collector_id']) ? (string)$data['collector_id'] : null;
+            $out['reason'] = isset($data['reason']) ? (string)$data['reason'] : null;
+            $ar = isset($data['auto_recurring']) && is_array($data['auto_recurring']) ? $data['auto_recurring'] : [];
+            $out['amount'] = isset($ar['transaction_amount']) ? (string)$ar['transaction_amount'] : null;
+            $out['currency'] = isset($ar['currency_id']) ? (string)$ar['currency_id'] : null;
+            $out['has_sandbox_init_point'] = !empty($data['sandbox_init_point']);
+            $out['has_init_point'] = !empty($data['init_point']);
+        } else {
+            $out['api_code'] = isset($data['code']) ? (string)$data['code'] : null;
+            $out['api_message'] = isset($data['message']) ? substr((string)$data['message'], 0, 200) : null;
+            if (!empty($data['cause']) && is_array($data['cause'])) {
+                $cs = [];
+                foreach ($data['cause'] as $c) {
+                    if (is_array($c)) {
+                        $cs[] = (isset($c['code']) ? (string)$c['code'] : '?')
+                            . (isset($c['description']) ? ':' . substr((string)$c['description'], 0, 80) : '');
+                    }
+                }
+                if ($cs !== []) {
+                    $out['api_causes'] = $cs;
+                }
+            }
+        }
+        return $out;
+    };
+
+    $diag['plan_pro'] = $checkPlan($planPro);
+    $diag['plan_premium'] = $checkPlan($planPrem);
+
     header('Content-Type: application/json');
     echo json_encode($diag);
     exit;
