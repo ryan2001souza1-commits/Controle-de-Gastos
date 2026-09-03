@@ -272,8 +272,8 @@ $errText = $errMessages[$errKey] ?? null;
 
 <?php if (!empty($mpPublicKey)): ?>
 <!-- Modal de checkout Mercado Pago (tokenizacao no navegador) -->
-<div id="mp-checkout-modal" hidden style="position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:9999;padding:var(--space-3)">
-    <div style="background:var(--color-surface-1);border-radius:16px;max-width:460px;width:100%;padding:var(--space-5);border:1px solid var(--color-border);position:relative">
+<div id="mp-checkout-modal" hidden style="position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-start;justify-content:center;z-index:9999;padding:var(--space-3);overflow-y:auto">
+    <div style="background:var(--color-surface-1);border-radius:16px;max-width:460px;width:100%;max-height:90vh;overflow-y:auto;padding:var(--space-5);border:1px solid var(--color-border);position:relative">
         <button type="button" id="mp-close" aria-label="Fechar" style="position:absolute;top:12px;right:12px;background:transparent;border:0;cursor:pointer;font-size:20px;color:var(--color-text-3)">×</button>
         <div style="font-size:18px;font-weight:700;color:var(--color-text-1);letter-spacing:-.02em;margin-bottom:4px">
             Assinar plano <span id="mp-plan-name">Pro</span>
@@ -297,21 +297,21 @@ $errText = $errMessages[$errKey] ?? null;
                 <div>
                     <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">Número do cartão</label>
                     <div id="mp-card-number"
-                        style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-2);font-size:14px;min-height:44px;box-sizing:border-box">
+                        style="width:100%;height:44px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);box-sizing:border-box;overflow:hidden">
                     </div>
                 </div>
 
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
                     <div>
                         <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">Validade</label>
-                        <div id="mp-card-exp" inputmode="numeric"
-                            style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-2);font-size:14px;min-height:44px;box-sizing:border-box">
+                        <div id="mp-card-exp"
+                            style="width:100%;height:44px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);box-sizing:border-box;overflow:hidden">
                         </div>
                     </div>
                     <div>
                         <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">CVV</label>
-                        <div id="mp-card-cvv" inputmode="numeric"
-                            style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-2);font-size:14px;min-height:44px;box-sizing:border-box">
+                        <div id="mp-card-cvv"
+                            style="width:100%;height:44px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);box-sizing:border-box;overflow:hidden">
                         </div>
                     </div>
                 </div>
@@ -325,10 +325,10 @@ $errText = $errMessages[$errKey] ?? null;
                 <div>
                     <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">CPF do titular</label>
                     <div id="mp-card-doc-type"
-                        style="width:100%;margin-bottom:6px">
+                        style="width:100%;margin-bottom:6px;height:30px;box-sizing:border-box;overflow:hidden">
                     </div>
                     <div id="mp-card-doc"
-                        style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-2);font-size:14px;min-height:44px;box-sizing:border-box">
+                        style="width:100%;height:44px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);box-sizing:border-box;overflow:hidden">
                     </div>
                 </div>
 
