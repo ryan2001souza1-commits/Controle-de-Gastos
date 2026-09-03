@@ -282,7 +282,7 @@ $errText = $errMessages[$errKey] ?? null;
             Os dados do cartão são enviados diretamente ao Mercado Pago. Eles <strong>nunca</strong> passam pelo nosso servidor.
         </div>
 
-        <form id="mp-card-form" autocomplete="off" novalidate>
+        <form id="mp-card-form" autocomplete="off" novalidate method="post">
             <?= csrf_field() ?>
             <input type="hidden" name="plan_slug" id="mp-plan-slug" value="">
             <input type="hidden" name="card_token_id" id="mp-card-token" value="">
@@ -602,6 +602,7 @@ $errText = $errMessages[$errKey] ?? null;
         clearError();
         setLoading(false);
         currentPlanSlug = slug;
+        try { mpFormSubmitted = false; } catch (e) {}
         try {
             var planSlugEl = $('mp-plan-slug');
             var planNameEl = $('mp-plan-name');
@@ -625,6 +626,7 @@ $errText = $errMessages[$errKey] ?? null;
         modal.removeAttribute('data-open');
         currentPlanSlug = null;
         if (cardForm) { try { cardForm.unmount(); } catch (e) {} cardForm = null; }
+        try { mpFormSubmitted = false; } catch (e) {}
     }
 
     document.addEventListener('click', function(ev) {
@@ -640,6 +642,21 @@ $errText = $errMessages[$errKey] ?? null;
             closeModal();
         }
     });
+
+    var mpFormSubmitted = false;
+    var mpFormEl = document.getElementById('mp-card-form');
+    if (mpFormEl) {
+        mpFormEl.addEventListener('submit', function(ev) {
+            if (mpFormSubmitted) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                return false;
+            }
+            ev.preventDefault();
+            ev.stopPropagation();
+            mpFormSubmitted = true;
+        });
+    }
 })();
 </script>
 <?php endif; ?>
