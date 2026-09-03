@@ -121,19 +121,7 @@ if (in_array($pathInfo, $blocked, true)) {
     echo '404 Not Found';
     return;
 }
-// Webhook do Mercado Pago e um endpoint publico (servidor-servidor)
-// SEM sessao e SEM CSRF. Ele se valida por X-Signature.
-$publicWebhookPaths = ['/mercadopago_webhook.php', '/mercadopago_webhook'];
-if (in_array($pathInfo, $publicWebhookPaths, true)) {
-    require_once $ROOT . '/public/mercadopago_webhook.php';
-    return;
-}
-// Pagina de retorno do Mercado Pago (apenas UX, nao ativa plano)
-$publicReturnPaths = ['/mercadopago_return.php', '/mercadopago_return'];
-if (in_array($pathInfo, $publicReturnPaths, true)) {
-    require_once $ROOT . '/public/mercadopago_return.php';
-    return;
-}
+
 if ($pathInfo !== '/index.php' && $pathInfo !== '/' && !str_starts_with($pathInfo, '/api/')) {
     $viewFile = $ROOT . '/public' . $pathInfo;
     $real = realpath($viewFile);
