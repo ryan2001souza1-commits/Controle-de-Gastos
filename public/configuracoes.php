@@ -101,7 +101,7 @@ if (isset($_GET['success']) && isset($msgs[$_GET['success']])): ?>
                             <div class="form-group">
                                 <label for="cpf">CPF</label>
                                 <input type="text" id="cpf" name="cpf" inputmode="numeric" maxlength="14" value="<?= htmlspecialchars($cpfFormatted) ?>" placeholder="000.000.000-00" autocomplete="off">
-                                <span class="form-hint">Obrigatório para assinar PRO ou PREMIUM. Será usado apenas para identificar você no Asaas.</span>
+                                <span class="form-hint">Obrigatório para assinar PRO ou PREMIUM. Será usado apenas para identificar você no processo de pagamento.</span>
                             </div>
                         </div>
                         <div class="form-row">
