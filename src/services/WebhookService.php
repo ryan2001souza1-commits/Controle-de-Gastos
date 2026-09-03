@@ -95,10 +95,31 @@ public function handle(
             $this->process($payload, $topic, $resourceId, $webhookId);
             $this->markProcessed($webhookId);
             return ['status' => 200, 'duplicate' => false, 'processed' => true, 'reason' => null];
+        } catch (RuntimeException $e) {
+            $msg = $e->getMessage();
+            // Erros nao-retentaveis: external_reference invalido, id ausente.
+            // Respondemos 200 para o MP nao entrar em loop.
+            if ($msg === 'mp_invalid_preapproval') {
+                $this->markFailed($webhookId, $msg);
+                return ['status' => 200, 'duplicate' => false, 'processed' => false, 'reason' => $msg];
+            }
+            // mp_get_failed: MP temporariamente indisponivel. Retornar 500
+            // para que o MP retent e busque dados mais tarde.
+            error_log('[WebhookService] process RuntimeException: ' . $msg);
+            $this->markFailed($webhookId, $msg);
+            return ['status' => 500, 'duplicate' => false, 'processed' => false, 'reason' => $msg];
+        } catch (PDOException $e) {
+            // Falha de banco. Retornar 500 para retry (idempotencia protege
+            // contra duplicates quando o INSERT em subscriptions falhar por
+            // unique constraint no mp_preapproval_id).
+            error_log('[WebhookService] PDOException: ' . $e->getMessage());
+            $this->markFailed($webhookId, 'database_error');
+            return ['status' => 500, 'duplicate' => false, 'processed' => false, 'reason' => 'database_error'];
         } catch (Throwable $e) {
+            // Qualquer excecao inesperada. 500 = retry seguro.
             error_log('[WebhookService] process error: ' . $e->getMessage());
             $this->markFailed($webhookId, $e->getMessage());
-            return ['status' => 200, 'duplicate' => false, 'processed' => false, 'reason' => 'processing_error'];
+            return ['status' => 500, 'duplicate' => false, 'processed' => false, 'reason' => 'internal_error'];
         }
     }
 
@@ -195,31 +216,70 @@ public function handle(
         // === BUSCA A VERDADE NO MERCADO PAGO ===
         $resp = $this->mp->getPreapproval($resourceId);
         if (!$resp['ok']) {
+            // Falha transitória (5xx do MP, rede, timeout). Sinalizar
+            // como erro retentável.
             throw new RuntimeException('mp_get_failed');
         }
         $preapproval = $resp['data'];
-        if (empty($preapproval['id']) || empty($preapproval['external_reference'])) {
+        if (empty($preapproval['id'])) {
+            // Payload sem id — nao ha o que associar. Nao ritentar.
             throw new RuntimeException('mp_invalid_preapproval');
         }
 
-        $extRef = (string)$preapproval['external_reference'];
-        $userId = $this->extractUserIdFromRef($extRef);
-        if ($userId === null) {
-            // external_reference desconhecido
+        // === IDENTIFICA O USUARIO LOCAL ===
+        // Cadeia de prioridade (idempotente, segura):
+        //   1. mp_preapproval_id jah em subscriptions (caso comum)
+        //   2. external_reference válido (user_X_pro)
+        //   3. mercadopago_payer_id jah associado a um usuario local
+        //   4. nenhuma associacao → nao ativar nada
+        $preapprovalId = (string)$preapproval['id'];
+        $extRef = (string)($preapproval['external_reference'] ?? '');
+        $mpPayerId = (string)($preapproval['payer_id'] ?? '');
+
+        $userId = null;
+        $existing = $this->subscriptions->findByMpPreapprovalId($preapprovalId);
+        if ($existing !== null) {
+            $userId = (int)($existing['user_id'] ?? 0);
+        }
+
+        if ($userId === null || $userId <= 0) {
+            $fromRef = $this->extractUserIdFromRef($extRef);
+            if ($fromRef !== null) {
+                $userId = $fromRef;
+            }
+        }
+
+        if (($userId === null || $userId <= 0) && $mpPayerId !== '') {
+            $stmt = $this->db->prepare(
+                'SELECT id FROM usuarios WHERE mercadopago_payer_id = ? LIMIT 1'
+            );
+            $stmt->execute([$mpPayerId]);
+            $localUserId = $stmt->fetchColumn();
+            if ($localUserId !== false && (int)$localUserId > 0) {
+                $userId = (int)$localUserId;
+            }
+        }
+
+        if ($userId === null || $userId <= 0) {
+            // Nenhuma associacao segura. Registra para reconciliacao
+            // administrativa e responde 200 (nao ritentar — nao
+            // sabemos o que fazer com isto).
+            error_log('[WebhookService] nao associado: mp_id=' . substr($preapprovalId, 0, 3) . '…'
+                . ' ext_ref=' . ($extRef !== '' ? substr($extRef, 0, 16) . '…' : 'none')
+                . ' payer_id=' . ($mpPayerId !== '' ? substr($mpPayerId, 0, 3) . '…' : 'none')
+            );
+            $this->linkWebhookToEntities($webhookId, null, null);
             return;
         }
 
-        $existing = $this->subscriptions->findByMpPreapprovalId((string)$preapproval['id']);
         if ($existing === null) {
-            // Fluxo via checkout de Preapproval Plan: o preapproval foi criado
-            // pelo Mercado Pago, nao pela API. Criamos a subscription local
-            // agora, derivada de preapproval_plan_id + external_reference.
+            // Nao tinhamos subscription local ainda. Cria agora.
             $this->db->beginTransaction();
             try {
                 $local = $this->buildLocalPreapproval($preapproval, $extRef, $userId);
                 $this->subscriptions->createFromPreapproval($local);
                 $this->db->commit();
-                $existing = $this->subscriptions->findByMpPreapprovalId((string)$preapproval['id']);
+                $existing = $this->subscriptions->findByMpPreapprovalId($preapprovalId);
             } catch (Throwable $e) {
                 $this->db->rollBack();
                 throw $e;
@@ -235,13 +295,13 @@ public function handle(
         $this->db->beginTransaction();
         try {
             $this->subscriptions->updateStatusByMpId(
-                (string)$preapproval['id'],
+                $preapprovalId,
                 $newStatus,
                 $rawStatus,
                 $nextBilling,
                 $graceEnd
             );
-            $updated = $this->subscriptions->findByMpPreapprovalId((string)$preapproval['id']);
+            $updated = $this->subscriptions->findByMpPreapprovalId($preapprovalId);
             if ($updated !== null) {
                 $this->subscriptions->applyStatusToUser($updated);
             }
@@ -272,6 +332,11 @@ public function handle(
         $pre['_user_id_local'] = $userId;
         $pre['_plan_id_local'] = $planId;
         $pre['_plan_slug_local'] = $planSlug;
+        // Garante que payer_id esta presente para createFromPreapproval().
+        // Usado por buildLocalPreapproval() no fluxo de webhook-before-redirect.
+        if (!isset($pre['payer_id'])) {
+            $pre['payer_id'] = null;
+        }
         return $pre;
     }
 

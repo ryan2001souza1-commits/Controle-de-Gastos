@@ -185,6 +185,20 @@ class ProfileController
         $showPeriodPicker = false;
         $userName = $_SESSION['user_name'] ?? $user->name;
         $userEmail = $user->email;
+
+        // Public key do Mercado Pago (segura para expor no navegador).
+        // O access_token nunca eh enviado ao frontend.
+        $mpPublicKey = (string)(getenv('MERCADOPAGO_PUBLIC_KEY') ?: '');
+        $mpMode = strtolower((string)(getenv('MERCADOPAGO_MODE') ?: 'production'));
+        $mpSandbox = ($mpMode === 'sandbox');
+
+        // Precos reais dos planos (em reais, nao centavos).
+        // Usado pelo SDK MP.js para exibir parcelas corretas.
+        $mpPlanAmounts = [
+            'pro'      => '9.90',
+            'premium'  => '19.90',
+        ];
+
         require basePath('meu_plano.php');
     }
 

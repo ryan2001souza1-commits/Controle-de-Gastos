@@ -344,6 +344,9 @@ function runMigrations(PDO $db): void
             ON subscriptions(provider) WHERE provider IS NOT NULL",
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_asaas_customer
             ON usuarios(asaas_customer_id) WHERE asaas_customer_id IS NOT NULL",
+        // Busca rapida por mercadopago_payer_id (webhook, reconciliacao)
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_mp_payer
+            ON usuarios(mercadopago_payer_id) WHERE mercadopago_payer_id IS NOT NULL",
     ];
     foreach ($asaasIndexes as $sql) {
         try { $db->exec($sql); } catch (Throwable $e) {}

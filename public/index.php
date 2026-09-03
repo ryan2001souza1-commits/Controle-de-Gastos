@@ -303,9 +303,8 @@ if ($action === 'register') {
     ]);
     exit;
 } elseif ($action === 'subscription_create') {
-    if ($asaasSubscriptionController !== null) {
-        $asaasSubscriptionController->create();
-    } elseif ($subscriptionController !== null) {
+    // Mercado Pago (POST com card_token_id). Nunca cai no Asaas.
+    if ($subscriptionController !== null) {
         $subscriptionController->create();
     } else {
         header('Location: /?action=meu_plano&error=mp_not_configured'); exit;
@@ -317,9 +316,8 @@ if ($action === 'register') {
         header('Location: /?action=meu_plano&error=mp_not_configured'); exit;
     }
 } elseif ($action === 'subscription_cancel') {
-    if ($asaasSubscriptionController !== null) {
-        $asaasSubscriptionController->cancel();
-    } elseif ($subscriptionController !== null) {
+    // Mercado Pago (POST). Nunca cai no Asaas.
+    if ($subscriptionController !== null) {
         $subscriptionController->cancel();
     } else {
         header('Location: /?action=meu_plano&error=mp_not_configured'); exit;

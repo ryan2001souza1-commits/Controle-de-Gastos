@@ -161,6 +161,14 @@ class SubscriptionController
             . ' mp_id=' . $mpIdMasked
         );
 
+        // Armazena mercadopago_payer_id no usuario local, somente se for
+        // seguro (preapproval_id jah vinculado a este usuario e payer_id
+        // ainda nao pertence a OUTRO usuario local).
+        $mpPayerId = (string)($resp['data']['payer_id'] ?? '');
+        if ($mpPayerId !== '') {
+            $this->linkMpPayerIdToUser($userId, $mpPayerId, $mpId);
+        }
+
         $row = $this->subscriptions->findByMpPreapprovalId($mpId);
         if ($row !== null) {
             $applied = $this->subscriptions->applyStatusToUser($row);
@@ -175,6 +183,71 @@ class SubscriptionController
 
         header('Location: /?action=meu_plano&subscribed=1');
         return;
+    }
+
+    /**
+     * Associa o mercadopago_payer_id ao usuario local SOMENTE se for
+     * seguro:
+     *   - NUNCA sobrescreve um payer_id ja gravado para outro usuario
+     *     (o indice UNIQUE parcial ja protege; aqui detecta o conflito
+     *     e aborta de forma controlada).
+     *   - NUNCA atualiza se o usuario logado ja tem outro payer_id
+     *     diferente (evita troca de identidade em cenarios de
+     *     compartilhamento de conta MP entre login e pagamento).
+     *
+     * Em caso de conflito, registra erro tecnico e nao quebra o fluxo
+     * de assinatura (que jah foi criada localmente). A vinculacao
+     * tera de ser revisada manualmente.
+     */
+    private function linkMpPayerIdToUser(int $userId, string $mpPayerId, string $mpPreapprovalId): void
+    {
+        try {
+            $stmt = $this->db->prepare(
+                'SELECT mercadopago_payer_id FROM usuarios WHERE id = ? LIMIT 1'
+            );
+            $stmt->execute([$userId]);
+            $current = $stmt->fetchColumn();
+            $current = ($current !== false && $current !== null) ? (string)$current : '';
+
+            if ($current === $mpPayerId) {
+                // Jah associado e consistente
+                return;
+            }
+
+            if ($current !== '') {
+                error_log('[SubscriptionController] linkMpPayerIdToUser CONFLITO: user=' . $userId
+                    . ' jah possui payer_id=' . substr($current, 0, 3) . '…'
+                    . ' ignorando novo=' . substr($mpPayerId, 0, 3) . '…'
+                    . ' mp_id=' . substr($mpPreapprovalId, 0, 3) . '…'
+                );
+                return;
+            }
+
+            // Verifica se o payer_id ja esta vinculado a OUTRO usuario.
+            $stmt = $this->db->prepare(
+                'SELECT id FROM usuarios WHERE mercadopago_payer_id = ? LIMIT 1'
+            );
+            $stmt->execute([$mpPayerId]);
+            $other = $stmt->fetchColumn();
+            if ($other !== false && (int)$other !== $userId) {
+                error_log('[SubscriptionController] linkMpPayerIdToUser ORFAO: payer_id=' . substr($mpPayerId, 0, 3) . '…'
+                    . ' ja pertence a outro usuario. Nao associar. mp_id=' . substr($mpPreapprovalId, 0, 3) . '…'
+                );
+                return;
+            }
+
+            $up = $this->db->prepare(
+                'UPDATE usuarios SET mercadopago_payer_id = ?, updated_at = NOW() WHERE id = ?'
+            );
+            $up->execute([$mpPayerId, $userId]);
+        } catch (PDOException $e) {
+            // 23505 = unique_violation
+            if ((string)$e->getCode() === '23505') {
+                error_log('[SubscriptionController] linkMpPayerIdToUser unique_violation user=' . $userId);
+                return;
+            }
+            error_log('[SubscriptionController] linkMpPayerIdToUser error: ' . $e->getMessage());
+        }
     }
 
     /**

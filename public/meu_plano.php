@@ -251,14 +251,15 @@ $errText = $errMessages[$errKey] ?? null;
                     </div>
 
                     <div style="width:100%">
-                        <a
-                            href="/index.php?action=subscription_redirect&amp;plan=<?= htmlspecialchars($slug) ?>"
+                        <button
+                            type="button"
                             class="btn"
-                            style="width:100%;justify-content:center;text-decoration:none;display:inline-flex;align-items:center"
+                            data-open-checkout="<?= htmlspecialchars($slug) ?>"
+                            style="width:100%;justify-content:center;border:0;cursor:pointer;font:inherit;color:inherit;background:var(--color-primary);color:#fff"
                             title="Assinar plano <?= htmlspecialchars($planName) ?>">
                             <?= render_icon('zap', 15) ?>
                             Atualizar para <?= htmlspecialchars($planName) ?>
-                        </a>
+                        </button>
                     </div>
                     <div style="margin-top:var(--space-2);font-size:11px;color:var(--color-text-3);text-align:center">
                         Pagamento seguro via Mercado Pago
@@ -268,6 +269,317 @@ $errText = $errMessages[$errKey] ?? null;
         <?php endforeach; ?>
     </div>
 </section>
+
+<?php if (!empty($mpPublicKey)): ?>
+<!-- Modal de checkout Mercado Pago (tokenizacao no navegador) -->
+<div id="mp-checkout-modal" hidden style="position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:9999;padding:var(--space-3)">
+    <div style="background:var(--color-surface-1);border-radius:16px;max-width:460px;width:100%;padding:var(--space-5);border:1px solid var(--color-border);position:relative">
+        <button type="button" id="mp-close" aria-label="Fechar" style="position:absolute;top:12px;right:12px;background:transparent;border:0;cursor:pointer;font-size:20px;color:var(--color-text-3)">×</button>
+        <div style="font-size:18px;font-weight:700;color:var(--color-text-1);letter-spacing:-.02em;margin-bottom:4px">
+            Assinar plano <span id="mp-plan-name">Pro</span>
+        </div>
+        <div style="font-size:13px;color:var(--color-text-3);margin-bottom:var(--space-4)">
+            Os dados do cartão são enviados diretamente ao Mercado Pago. Eles <strong>nunca</strong> passam pelo nosso servidor.
+        </div>
+
+        <form id="mp-card-form" autocomplete="off" novalidate>
+            <?= csrf_field() ?>
+            <input type="hidden" name="plan_slug" id="mp-plan-slug" value="">
+            <input type="hidden" name="card_token_id" id="mp-card-token" value="">
+
+            <div style="display:flex;flex-direction:column;gap:var(--space-3)">
+                <div>
+                    <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">E-mail do pagador</label>
+                    <input type="email" id="mp-payer-email" value="<?= htmlspecialchars($userEmail) ?>" required
+                        style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-1);font-size:14px">
+                </div>
+
+                <div>
+                    <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">Número do cartão</label>
+                    <input type="text" id="mp-card-number" inputmode="numeric" maxlength="19" placeholder="0000 0000 0000 0000" required
+                        style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-1);font-size:14px">
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
+                    <div>
+                        <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">Validade</label>
+                        <input type="text" id="mp-card-exp" inputmode="numeric" maxlength="7" placeholder="MM/AA" required
+                            style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-1);font-size:14px">
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">CVV</label>
+                        <input type="text" id="mp-card-cvv" inputmode="numeric" maxlength="4" placeholder="123" required
+                            style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-1);font-size:14px">
+                    </div>
+                </div>
+
+                <div>
+                    <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">Nome impresso no cartão</label>
+                    <input type="text" id="mp-card-holder" value="<?= htmlspecialchars($userName) ?>" required
+                        style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-1);font-size:14px">
+                </div>
+
+                <div>
+                    <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">CPF do titular</label>
+                    <input type="text" id="mp-card-doc" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" required
+                        style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-1);font-size:14px">
+                </div>
+
+                <div id="mp-issuer" style="display:none">
+                    <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">Banco emissor</label>
+                    <select id="mp-issuer-select" style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-1);font-size:14px"></select>
+                </div>
+
+                <div id="mp-installments-wrap" style="display:none">
+                    <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">Parcelas</label>
+                    <select id="mp-installments" style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-1);font-size:14px"></select>
+                </div>
+            </div>
+
+            <div id="mp-form-error" role="alert" style="display:none;margin-top:var(--space-3);padding:10px 12px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;color:#fca5a5;font-size:13px"></div>
+
+            <div style="display:flex;gap:var(--space-2);margin-top:var(--space-4)">
+                <button type="button" id="mp-cancel" class="btn" style="flex:1;justify-content:center;background:var(--color-surface-2);color:var(--color-text-2);border:1px solid var(--color-border)">Cancelar</button>
+                <button type="submit" id="mp-submit" class="btn" style="flex:2;justify-content:center;background:var(--color-primary);color:#fff;border:0">
+                    <span id="mp-submit-label">Assinar agora</span>
+                    <span id="mp-submit-spinner" hidden style="display:none;margin-left:8px">
+                        <svg width="16" height="16" viewBox="0 0 24 24" style="animation:mp-spin .8s linear infinite"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="40 60"/></svg>
+                    </span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+@keyframes mp-spin { to { transform: rotate(360deg); } }
+#mp-checkout-modal[data-open="1"] { display: flex !important; }
+</style>
+
+<script src="https://sdk.mercadopago.com/js/v2"></script>
+<script>
+(function() {
+    'use strict';
+    var PUBLIC_KEY = <?= json_encode($mpPublicKey, JSON_UNESCAPED_SLASHES) ?>;
+    var MP_MODE = <?= json_encode($mpSandbox ? 'sandbox' : 'production') ?>;
+    var PLAN_AMOUNTS = <?= json_encode($mpPlanAmounts ?? [], JSON_UNESCAPED_SLASHES) ?>;
+    var CSRF_TOKEN = <?= json_encode((function () {
+        $sess = session_status() === PHP_SESSION_ACTIVE;
+        if (!$sess) { return ''; }
+        $uid = $_SESSION['user_id'] ?? null;
+        global $csrfService;
+        if (!isset($csrfService)) { $csrfService = new CsrfService(); }
+        $t = $csrfService->getToken($uid);
+        if ($t === null && isset($_SESSION['csrf_token']) && is_string($_SESSION['csrf_token'])) { $t = $_SESSION['csrf_token']; }
+        return $t ?: '';
+    })(), JSON_UNESCAPED_SLASHES) ?>;
+
+    var mp = null;
+    var cardForm = null;
+
+    function $(id) { return document.getElementById(id); }
+    function showError(msg) {
+        var el = $('mp-form-error');
+        el.textContent = msg;
+        el.style.display = 'block';
+    }
+    function clearError() {
+        var el = $('mp-form-error');
+        el.textContent = '';
+        el.style.display = 'none';
+    }
+    function setLoading(on) {
+        $('mp-submit').disabled = !!on;
+        $('mp-submit-label').textContent = on ? 'Processando…' : 'Assinar agora';
+        $('mp-submit-spinner').style.display = on ? 'inline-block' : 'none';
+    }
+
+    function onlyDigits(s) { return (s || '').replace(/\D+/g, ''); }
+    function formatExp(s) {
+        var d = onlyDigits(s).slice(0, 4);
+        if (d.length < 3) return d;
+        return d.slice(0, 2) + '/' + d.slice(2);
+    }
+    function formatCard(s) {
+        var d = onlyDigits(s).slice(0, 19);
+        return d.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
+    }
+    function formatCpf(s) {
+        var d = onlyDigits(s).slice(0, 11);
+        if (d.length <= 3) return d;
+        if (d.length <= 6) return d.slice(0,3) + '.' + d.slice(3);
+        if (d.length <= 9) return d.slice(0,3) + '.' + d.slice(3,6) + '.' + d.slice(6);
+        return d.slice(0,3) + '.' + d.slice(3,6) + '.' + d.slice(6,9) + '-' + d.slice(9);
+    }
+
+    function ensureMp() {
+        if (mp) return Promise.resolve(mp);
+        return new Promise(function(resolve, reject) {
+            if (!window.MercadoPago) { reject(new Error('SDK indisponível')); return; }
+            mp = new window.MercadoPago(PUBLIC_KEY, { locale: 'pt-BR' });
+            resolve(mp);
+        });
+    }
+
+    function getBin() {
+        var n = onlyDigits($('mp-card-number').value);
+        return n.length >= 6 ? n.slice(0, 6) : null;
+    }
+
+    var currentPlanSlug = null;
+
+    function buildCardForm(mpInstance) {
+        if (cardForm) { try { cardForm.unmount(); } catch (e) {} }
+        var amount = (currentPlanSlug && PLAN_AMOUNTS[currentPlanSlug])
+            ? PLAN_AMOUNTS[currentPlanSlug]
+            : '0';
+        cardForm = mpInstance.cardForm({
+            amount: amount,
+            iframe: true,
+            form: {
+                id: 'mp-card-form',
+                cardNumber: { id: 'mp-card-number', placeholder: '0000 0000 0000 0000' },
+                expirationDate: { id: 'mp-card-exp', placeholder: 'MM/AA' },
+                securityCode: { id: 'mp-card-cvv', placeholder: '123' },
+                cardholderName: { id: 'mp-card-holder', placeholder: 'Nome impresso' },
+                issuer: { id: 'mp-issuer-select' },
+                installments: { id: 'mp-installments' },
+                identificationType: { id: 'mp-card-doc-type' },
+                identificationNumber: { id: 'mp-card-doc', placeholder: '000.000.000-00' },
+                email: { id: 'mp-payer-email' },
+            },
+            callbacks: {
+                onFormMounted: function() {
+                    var exp = $('mp-card-exp');
+                    if (exp) {
+                        exp.addEventListener('input', function() { exp.value = formatExp(exp.value); });
+                    }
+                    var num = $('mp-card-number');
+                    if (num) {
+                        num.addEventListener('input', function() { num.value = formatCard(num.value); });
+                    }
+                    var doc = $('mp-card-doc');
+                    if (doc) {
+                        doc.addEventListener('input', function() { doc.value = formatCpf(doc.value); });
+                    }
+                },
+                onBinChange: function(bin) {
+                    var issuerEl = $('mp-issuer');
+                    if (bin && bin.length >= 6) {
+                        issuerEl.style.display = 'block';
+                        try { mpInstance.getIssuers({ bin: bin }, function(err, issuers) {
+                            var sel = $('mp-issuer-select');
+                            sel.innerHTML = '';
+                            if (err || !issuers) return;
+                            issuers.forEach(function(i) {
+                                var opt = document.createElement('option');
+                                opt.value = i.id;
+                                opt.textContent = i.name;
+                                sel.appendChild(opt);
+                            });
+                        }); } catch (e) {}
+                    } else {
+                        issuerEl.style.display = 'none';
+                    }
+                },
+                onInstallmentsReceived: function(data) {
+                    var wrap = $('mp-installments-wrap');
+                    if (data && data.length) {
+                        wrap.style.display = 'block';
+                        var sel = $('mp-installments');
+                        sel.innerHTML = '';
+                        data.forEach(function(it) {
+                            var opt = document.createElement('option');
+                            opt.value = it.installments;
+                            opt.textContent = it.installments + 'x ' + (it.label || '');
+                            sel.appendChild(opt);
+                        });
+                    } else {
+                        wrap.style.display = 'none';
+                    }
+                },
+                onError: function(errors) {
+                    if (errors && errors.length) {
+                        showError(errors.map(function(e){ return e.message; }).join(' '));
+                    }
+                },
+                onSubmit: function(event) {
+                    event.preventDefault();
+                }
+            }
+        });
+    }
+
+    async function openModal(slug, planName) {
+        clearError();
+        currentPlanSlug = slug;
+        $('mp-plan-slug').value = slug;
+        $('mp-plan-name').textContent = planName || slug;
+        var modal = $('mp-checkout-modal');
+        modal.hidden = false;
+        modal.setAttribute('data-open', '1');
+        try {
+            var inst = await ensureMp();
+            buildCardForm(inst);
+        } catch (e) {
+            showError('Não foi possível carregar o sistema de pagamento. Tente novamente em instantes.');
+        }
+    }
+
+    function closeModal() {
+        var modal = $('mp-checkout-modal');
+        modal.hidden = true;
+        modal.removeAttribute('data-open');
+        currentPlanSlug = null;
+        if (cardForm) { try { cardForm.unmount(); } catch (e) {} cardForm = null; }
+    }
+
+    document.addEventListener('click', function(ev) {
+        var btn = ev.target.closest('[data-open-checkout]');
+        if (btn) {
+            ev.preventDefault();
+            var slug = btn.getAttribute('data-open-checkout');
+            var name = btn.getAttribute('data-plan-name') || (slug === 'pro' ? 'Pro' : 'Premium');
+            openModal(slug, name);
+            return;
+        }
+        if (ev.target.id === 'mp-close' || ev.target.id === 'mp-cancel') {
+            closeModal();
+        }
+    });
+
+    document.getElementById('mp-card-form').addEventListener('submit', async function(ev) {
+        ev.preventDefault();
+        clearError();
+        if (!cardForm) { showError('Sistema de pagamento não inicializado.'); return; }
+        setLoading(true);
+        try {
+            var token = await cardForm.tokenize();
+            if (!token || !token.id) {
+                showError('Não foi possível tokenizar o cartão. Verifique os dados.');
+                setLoading(false);
+                return;
+            }
+            $('mp-card-token').value = token.id;
+            var fd = new FormData();
+            fd.append('plan_slug', $('mp-plan-slug').value);
+            fd.append('card_token_id', token.id);
+            fd.append('csrf_token', CSRF_TOKEN);
+            var resp = await fetch('/index.php?action=subscription_create', {
+                method: 'POST',
+                body: fd,
+                credentials: 'same-origin'
+            });
+            var loc = resp.headers.get('Location') || '/?action=meu_plano&subscribed=1';
+            window.location.href = loc;
+        } catch (e) {
+            showError('Não foi possível processar o pagamento. Tente novamente.');
+            setLoading(false);
+        }
+    });
+})();
+</script>
+<?php endif; ?>
 <?php endif; ?>
 
 
