@@ -645,6 +645,10 @@ $errText = $errMessages[$errKey] ?? null;
                         fd.append('plan_slug', currentPlanSlug);
                         fd.append('card_token_id', token);
                         fd.append('csrf_token', CSRF_TOKEN);
+                        var payerEmailEl = $('mp-payer-email');
+                        if (payerEmailEl && payerEmailEl.value) {
+                            fd.append('payer_email', payerEmailEl.value.trim());
+                        }
                         fetch('/index.php?action=subscription_create', {
                             method: 'POST',
                             body: fd,

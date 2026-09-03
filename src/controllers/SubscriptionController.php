@@ -88,9 +88,17 @@ class SubscriptionController
         $appUrl = rtrim((string)(getenv('APP_URL') ?: 'https://example.com'), '/');
         $backUrl = $appUrl . '/mercadopago_return.php?ref=' . urlencode($extRef);
 
+        $payerEmailForMp = $user->email;
+        if (strtolower((string)(getenv('MERCADOPAGO_MODE') ?: 'production')) === 'sandbox') {
+            $postedEmail = trim((string)($_POST['payer_email'] ?? ''));
+            if ($postedEmail !== '' && filter_var($postedEmail, FILTER_VALIDATE_EMAIL)) {
+                $payerEmailForMp = $postedEmail;
+            }
+        }
+
         $resp = $this->mp->createPreapproval(
             $planId,
-            $user->email,
+            $payerEmailForMp,
             $cardTokenId,
             $extRef,
             $backUrl,
