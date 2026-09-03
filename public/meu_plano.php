@@ -287,70 +287,63 @@ $errText = $errMessages[$errKey] ?? null;
             <input type="hidden" name="plan_slug" id="mp-plan-slug" value="">
             <input type="hidden" name="card_token_id" id="mp-card-token" value="">
 
-            <div style="display:flex;flex-direction:column;gap:var(--space-3)">
-                <div>
-                    <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">E-mail do pagador</label>
-                    <input type="email" id="mp-payer-email" value="<?= htmlspecialchars($userEmail) ?>" required
-                        style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-1);font-size:14px">
+            <div class="mp-field-group">
+                <div class="mp-field">
+                    <label class="mp-label" for="mp-payer-email">E-mail do pagador</label>
+                    <input type="email" id="mp-payer-email" value="<?= htmlspecialchars($userEmail) ?>" required class="mp-input">
                 </div>
 
-                <div>
-                    <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">Número do cartão</label>
-                    <div id="mp-card-number"
-                        style="width:100%;height:44px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);box-sizing:border-box;overflow:hidden">
+                <div class="mp-field">
+                    <label class="mp-label" for="mp-card-number">Número do cartão</label>
+                    <div id="mp-card-number" class="mp-field-frame"></div>
+                </div>
+
+                <div class="mp-row">
+                    <div class="mp-field">
+                        <label class="mp-label" for="mp-card-exp">Validade</label>
+                        <div id="mp-card-exp" class="mp-field-frame"></div>
+                    </div>
+                    <div class="mp-field">
+                        <label class="mp-label" for="mp-card-cvv">CVV</label>
+                        <div id="mp-card-cvv" class="mp-field-frame"></div>
                     </div>
                 </div>
 
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)">
-                    <div>
-                        <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">Validade</label>
-                        <div id="mp-card-exp"
-                            style="width:100%;height:44px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);box-sizing:border-box;overflow:hidden">
-                        </div>
-                    </div>
-                    <div>
-                        <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">CVV</label>
-                        <div id="mp-card-cvv"
-                            style="width:100%;height:44px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);box-sizing:border-box;overflow:hidden">
-                        </div>
-                    </div>
+                <div class="mp-field">
+                    <label class="mp-label" for="mp-card-holder">Nome impresso no cartão</label>
+                    <input type="text" id="mp-card-holder" value="<?= htmlspecialchars($userName) ?>" required class="mp-input">
                 </div>
 
-                <div>
-                    <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">Nome impresso no cartão</label>
-                    <input type="text" id="mp-card-holder" value="<?= htmlspecialchars($userName) ?>" required
-                        style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-1);font-size:14px">
-                </div>
-
-                <div>
-                    <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">CPF do titular</label>
-                    <div id="mp-card-doc-type"
-                        style="width:100%;margin-bottom:6px;height:30px;box-sizing:border-box;overflow:hidden">
+                <div class="mp-doc-group">
+                    <div class="mp-field">
+                        <label class="mp-label" for="mp-card-doc-type">Tipo de documento</label>
+                        <div id="mp-card-doc-type" class="mp-field-frame mp-field-frame-select"></div>
                     </div>
-                    <div id="mp-card-doc"
-                        style="width:100%;height:44px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);box-sizing:border-box;overflow:hidden">
+                    <div class="mp-field">
+                        <label class="mp-label" for="mp-card-doc">CPF / CNPJ do titular</label>
+                        <div id="mp-card-doc" class="mp-field-frame"></div>
                     </div>
                 </div>
 
-                <div id="mp-issuer" style="display:none">
-                    <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">Banco emissor</label>
-                    <select id="mp-issuer-select" style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-1);font-size:14px"></select>
+                <div id="mp-issuer" class="mp-field" style="display:none">
+                    <label class="mp-label" for="mp-issuer-select">Banco emissor</label>
+                    <select id="mp-issuer-select" class="mp-input"></select>
                 </div>
 
-                <div id="mp-installments-wrap" style="display:none">
-                    <label style="display:block;font-size:12px;font-weight:600;color:var(--color-text-2);margin-bottom:6px">Parcelas</label>
-                    <select id="mp-installments" style="width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-2);color:var(--color-text-1);font-size:14px"></select>
+                <div id="mp-installments-wrap" class="mp-field" style="display:none">
+                    <label class="mp-label" for="mp-installments">Parcelas</label>
+                    <select id="mp-installments" class="mp-input"></select>
                 </div>
             </div>
 
-            <div id="mp-form-error" role="alert" style="display:none;margin-top:var(--space-3);padding:10px 12px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;color:#fca5a5;font-size:13px"></div>
+            <div id="mp-form-error" class="mp-form-error" role="alert"></div>
 
-            <div style="display:flex;gap:var(--space-2);margin-top:var(--space-4)">
-                <button type="button" id="mp-cancel" class="btn" style="flex:1;justify-content:center;background:var(--color-surface-2);color:var(--color-text-2);border:1px solid var(--color-border)">Cancelar</button>
-                <button type="submit" id="mp-submit" class="btn" style="flex:2;justify-content:center;background:var(--color-primary);color:#fff;border:0">
+            <div class="mp-actions">
+                <button type="button" id="mp-cancel" class="btn mp-btn-secondary">Cancelar</button>
+                <button type="submit" id="mp-submit" class="btn mp-btn-primary">
                     <span id="mp-submit-label">Assinar agora</span>
-                    <span id="mp-submit-spinner" hidden style="display:none;margin-left:8px">
-                        <svg width="16" height="16" viewBox="0 0 24 24" style="animation:mp-spin .8s linear infinite"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="40 60"/></svg>
+                    <span id="mp-submit-spinner" class="mp-spinner" hidden>
+                        <svg width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="40 60"/></svg>
                     </span>
                 </button>
             </div>
@@ -361,6 +354,29 @@ $errText = $errMessages[$errKey] ?? null;
 <style>
 @keyframes mp-spin { to { transform: rotate(360deg); } }
 #mp-checkout-modal[data-open="1"] { display: flex !important; }
+
+.mp-field-group { display: flex; flex-direction: column; gap: 12px; }
+.mp-field { display: flex; flex-direction: column; gap: 6px; }
+.mp-label { display: block; font-size: 12px; font-weight: 600; color: var(--color-text-2); }
+.mp-input { width: 100%; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-2); color: var(--color-text-1); font-size: 14px; box-sizing: border-box; }
+.mp-input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(124,58,237,.15); }
+.mp-field-frame { width: 100%; height: 44px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-2); box-sizing: border-box; overflow: hidden; }
+.mp-field-frame-select { height: 44px; }
+.mp-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.mp-doc-group { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; }
+.mp-doc-group .mp-field-frame { flex: 1; }
+.mp-form-error { display: none; margin-top: 12px; padding: 10px 12px; background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.3); border-radius: 8px; color: #fca5a5; font-size: 13px; }
+.mp-form-error[data-visible="1"] { display: block; }
+.mp-actions { display: flex; gap: 8px; margin-top: 16px; }
+.mp-btn-secondary { flex: 1; justify-content: center; background: var(--color-surface-2); color: var(--color-text-2); border: 1px solid var(--color-border); }
+.mp-btn-primary { flex: 2; justify-content: center; background: var(--color-primary); color: #fff; border: 0; }
+#mp-submit:disabled .mp-spinner { display: inline-block; animation: mp-spin .8s linear infinite; margin-left: 8px; }
+.mp-spinner { display: none; }
+
+@media (max-width: 400px) {
+    .mp-row { grid-template-columns: 1fr; }
+    .mp-doc-group { grid-template-columns: 1fr; }
+}
 </style>
 
 <script src="https://sdk.mercadopago.com/js/v2"></script>
@@ -388,17 +404,16 @@ $errText = $errMessages[$errKey] ?? null;
     function showError(msg) {
         var el = $('mp-form-error');
         el.textContent = msg;
-        el.style.display = 'block';
+        el.setAttribute('data-visible', '1');
     }
     function clearError() {
         var el = $('mp-form-error');
         el.textContent = '';
-        el.style.display = 'none';
+        el.removeAttribute('data-visible');
     }
     function setLoading(on) {
         $('mp-submit').disabled = !!on;
         $('mp-submit-label').textContent = on ? 'Processando…' : 'Assinar agora';
-        $('mp-submit-spinner').style.display = on ? 'inline-block' : 'none';
     }
 
     function onlyDigits(s) { return (s || '').replace(/\D+/g, ''); }
