@@ -529,36 +529,28 @@ if ($action === 'register') {
         if ($token === '') {
             return ['configured' => true, 'http' => null, 'api_reachable' => false, 'error' => 'access_token_missing'];
         }
-        $ctx = stream_context_create([
-            'http' => [
-                'method' => 'GET',
-                'header' => "Authorization: Bearer {$token}\r\nAccept: application/json\r\nUser-Agent: Controle-de-Gastos-diag/1.0\r\n",
-                'timeout' => 8,
-                'ignore_errors' => true,
-            ],
-            'ssl' => [
-                'verify_peer' => true,
-                'verify_peer_name' => true,
-            ],
-        ]);
         $url = 'https://api.mercadopago.com/preapproval_plan/' . rawurlencode($planId);
-        $raw = @file_get_contents($url, false, $ctx);
-        $httpCode = 0;
-        $statusHeader = '';
-        if (function_exists('http_get_last_response_headers')) {
-            $lastHeaders = @http_get_last_response_headers();
-            if (is_array($lastHeaders) && isset($lastHeaders[0])) {
-                $statusHeader = (string)$lastHeaders[0];
-            }
-        } else {
-            $localHeaders = isset($http_response_header) && is_array($http_response_header) ? $http_response_header : [];
-            if (isset($localHeaders[0])) {
-                $statusHeader = (string)$localHeaders[0];
-            }
+        $ch = curl_init();
+        if (!$ch) {
+            return ['configured' => true, 'http' => null, 'api_reachable' => false];
         }
-        if ($statusHeader !== '' && preg_match('/\s(\d{3})\s/', $statusHeader, $m)) {
-            $httpCode = (int)$m[1];
-        }
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 8,
+            CURLOPT_HTTPHEADER => [
+                "Authorization: Bearer {$token}",
+                'Accept: application/json',
+                'User-Agent: Controle-de-Gastos-diag/1.0',
+            ],
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_FOLLOWLOCATION => true,
+        ]);
+        $raw = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
         $data = is_string($raw) ? json_decode($raw, true) : null;
         if (!is_array($data)) {
             $data = [];
