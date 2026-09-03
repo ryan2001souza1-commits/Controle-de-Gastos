@@ -543,9 +543,22 @@ if ($action === 'register') {
         ]);
         $url = 'https://api.mercadopago.com/preapproval_plan/' . rawurlencode($planId);
         $raw = @file_get_contents($url, false, $ctx);
-        $statusHeader = isset($http_response_header[0]) ? $http_response_header[0] : '';
-        preg_match('/\s(\d{3})\s/', $statusHeader, $m);
-        $httpCode = isset($m[1]) ? (int)$m[1] : 0;
+        $httpCode = 0;
+        $statusHeader = '';
+        if (function_exists('http_get_last_response_headers')) {
+            $lastHeaders = @http_get_last_response_headers();
+            if (is_array($lastHeaders) && isset($lastHeaders[0])) {
+                $statusHeader = (string)$lastHeaders[0];
+            }
+        } else {
+            $localHeaders = isset($http_response_header) && is_array($http_response_header) ? $http_response_header : [];
+            if (isset($localHeaders[0])) {
+                $statusHeader = (string)$localHeaders[0];
+            }
+        }
+        if ($statusHeader !== '' && preg_match('/\s(\d{3})\s/', $statusHeader, $m)) {
+            $httpCode = (int)$m[1];
+        }
         $data = is_string($raw) ? json_decode($raw, true) : null;
         if (!is_array($data)) {
             $data = [];
