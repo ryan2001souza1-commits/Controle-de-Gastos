@@ -35,25 +35,33 @@ class WebhookService
      * Processa um webhook. Retorna:
      *   ['status' => 200, 'duplicate' => bool, 'processed' => bool, 'reason' => ?string]
      */
-    public function handle(
-        string $rawBody,
-        ?string $xSignature,
-        ?string $xRequestId,
-        ?string $xDataId,
-        ?string $sourceIp
-    ): array {
-        if ($xSignature === null || $xSignature === '') {
-            return $this->reject('missing_signature');
-        }
+public function handle(
+         string $rawBody,
+         ?string $xSignature,
+         ?string $xRequestId,
+         ?string $xDataId,
+         ?string $sourceIp
+     ): array {
+         if ($xSignature === null || $xSignature === '') {
+             return $this->reject('missing_signature');
+         }
 
-        $secret = $this->mp->getWebhookSecret();
-        if ($secret === null || $secret === '') {
-            return $this->reject('missing_secret');
-        }
+         $secret = $this->mp->getWebhookSecret();
+         if ($secret === null || $secret === '') {
+             return $this->reject('missing_secret');
+         }
 
-        if (!$this->verifySignature($xSignature, $secret, $xRequestId, $xDataId)) {
-            return $this->reject('bad_signature');
-        }
+         // Fallback para payload['data']['id'] se xDataId não fornecido via query string
+         if ($xDataId === null || $xDataId === '') {
+             $payload = json_decode($rawBody, true);
+             if (is_array($payload) && isset($payload['data']['id']) && is_string($payload['data']['id'])) {
+                 $xDataId = (string)$payload['data']['id'];
+             }
+         }
+
+         if (!$this->verifySignature($xSignature, $secret, $xRequestId, $xDataId)) {
+             return $this->reject('bad_signature');
+         }
 
         $payload = json_decode($rawBody, true);
         if (!is_array($payload)) {

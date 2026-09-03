@@ -47,8 +47,19 @@ if ($rawBody === false || $rawBody === '') {
 
 $xSignature = $_SERVER['HTTP_X_SIGNATURE'] ?? null;
 $xRequestId = $_SERVER['HTTP_X_REQUEST_ID'] ?? null;
-$xDataId    = $_SERVER['HTTP_X_DATA_ID'] ?? null;
 $sourceIp   = $_SERVER['REMOTE_ADDR'] ?? null;
+
+// O Mercado Pago envia o identificador do recurso como parâmetro de query
+// (?data.id=123 ou ?data_id=123, dependendo da normalização do PHP).
+// Priorizamos a query string; fallback para o payload JSON em handle().
+$dataId = null;
+if (isset($_GET['data_id']) && is_string($_GET['data_id']) && $_GET['data_id'] !== '') {
+    $dataId = (string)$_GET['data_id'];
+} elseif (isset($_GET['data.id']) && is_string($_GET['data.id']) && $_GET['data.id'] !== '') {
+    $dataId = (string)$_GET['data.id'];
+} elseif (isset($_GET['id']) && is_string($_GET['id']) && $_GET['id'] !== '') {
+    $dataId = (string)$_GET['id'];
+}
 
 try {
     require_once $ROOT . '/src/config/config.php';
@@ -66,7 +77,7 @@ try {
     $mpService = new MercadoPagoService();
     $webhookService = new WebhookService($db, $subscriptionModel, $mpService);
 
-    $result = $webhookService->handle($rawBody, $xSignature, $xRequestId, $xDataId, $sourceIp);
+    $result = $webhookService->handle($rawBody, $xSignature, $xRequestId, $dataId, $sourceIp);
 
     http_response_code($result['status']);
     header('Content-Type: application/json');
