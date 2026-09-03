@@ -591,6 +591,80 @@ if ($action === 'register') {
     header('Content-Type: application/json');
     echo json_encode($diag);
     exit;
+} elseif ($action === 'mp_trace') {
+    requireLogin();
+    if (empty($_SESSION['is_admin']) || (int)$_SESSION['is_admin'] !== 1) {
+        $isAdminDb = $userModel->isAdmin((int)($_SESSION['user_id'] ?? 0));
+        if (!$isAdminDb) {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'Admin required']);
+            exit;
+        }
+        $_SESSION['is_admin'] = 1;
+    }
+    header('Content-Type: application/json');
+    $body = file_get_contents('php://input');
+    $data = is_string($body) ? json_decode($body, true) : null;
+    if (!is_array($data)) {
+        $data = $_POST;
+    }
+    if (!is_array($data)) {
+        $data = [];
+    }
+    $events = isset($data['events']) && is_array($data['events']) ? $data['events'] : [];
+    $redactKeys = [
+        'card_token_id', 'cardToken', 'card_token', 'cardNumber', 'card_number',
+        'cvv', 'securityCode', 'security_code', 'password', 'senha',
+        'access_token', 'public_key', 'webhook_secret', 'payer_email', 'email',
+    ];
+    $safeEvents = [];
+    foreach ($events as $ev) {
+        if (!is_array($ev)) {
+            $safeEvents[] = ['t' => 'invalid', 'i' => null, 'ts' => 0];
+            continue;
+        }
+        $type = isset($ev['t']) ? substr((string)$ev['t'], 0, 50) : 'unknown';
+        $info = isset($ev['i']) ? $ev['i'] : null;
+        if (is_string($info) && strlen($info) > 500) {
+            $info = substr($info, 0, 500);
+        }
+        if (is_array($info)) {
+            $cleaned = [];
+            foreach ($info as $k => $v) {
+                $keyLower = strtolower((string)$k);
+                $redacted = false;
+                foreach ($redactKeys as $rk) {
+                    if (strpos($keyLower, $rk) !== false) {
+                        $cleaned[$k] = '[redacted]';
+                        $redacted = true;
+                        break;
+                    }
+                }
+                if (!$redacted) {
+                    if (is_string($v) && strlen($v) > 200) {
+                        $v = substr($v, 0, 200);
+                    }
+                    $cleaned[$k] = $v;
+                }
+            }
+            $info = $cleaned;
+        }
+        $ts = isset($ev['ts']) ? (int)$ev['ts'] : 0;
+        $safeEvents[] = ['t' => $type, 'i' => $info, 'ts' => $ts];
+    }
+    $logLine = '[mp_trace] user=' . (int)($_SESSION['user_id'] ?? 0)
+        . ' events=' . count($safeEvents);
+    foreach ($safeEvents as $i => $ev) {
+        $infoStr = is_array($ev['i']) ? json_encode($ev['i'], JSON_UNESCAPED_SLASHES) : (string)$ev['i'];
+        if (strlen($infoStr) > 200) {
+            $infoStr = substr($infoStr, 0, 200);
+        }
+        $logLine .= ' | #' . $i . ' ' . $ev['t'] . ':' . $infoStr;
+    }
+    error_log($logLine);
+    echo json_encode(['ok' => true, 'count' => count($safeEvents)]);
+    exit;
 } elseif ($action === 'termos') {
     require basePath('termos.php');
 } elseif ($action === 'privacy') {

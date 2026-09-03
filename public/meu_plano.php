@@ -382,6 +382,122 @@ $errText = $errMessages[$errKey] ?? null;
 <script>
 (function() {
     'use strict';
+
+    /* =====================================================
+       INSTRUMENTACAO TEMPORARIA DE DIAGNOSTICO
+       Remover apos identificar a causa da duplo submit
+       ===================================================== */
+    (function() {
+        var _trace = [];
+        var _origFetch = window.fetch.bind(window);
+        var _origSubmit = null;
+        var _origRequestSubmit = null;
+        var _origLocationHref = null;
+        var _origLocationAssign = null;
+
+        function _log(type, info) {
+            _trace.push({ t: type, i: info, ts: Date.now() });
+        }
+
+        window._mpTrace = _trace;
+        window._mpTraceLog = _log;
+
+        window.fetch = function(url, opts) {
+            var safeUrl = (typeof url === 'string') ? url : (url && url.url) ? url.url : 'unknown';
+            var safeOpts = opts || {};
+            _log('fetch.start', { m: safeOpts.method || 'GET', u: safeUrl });
+            return _origFetch(url, opts).then(function(r) {
+                _log('fetch.end', {
+                    m: safeOpts.method || 'GET',
+                    u: r.url || safeUrl,
+                    s: r.status,
+                    rd: r.redirected
+                });
+                return r;
+            })['catch'](function(e) {
+                _log('fetch.err', { m: safeOpts.method || 'GET', u: safeUrl, e: e.message || String(e) });
+                return Promise.reject(e);
+            });
+        };
+
+        var _origOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function(method, url) {
+            _log('xhr.open', { m: method, u: url });
+            return _origOpen.apply(this, arguments);
+        };
+
+        var _origSend = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.send = function() {
+            _log('xhr.send', {});
+            return _origSend.apply(this, arguments);
+        };
+
+        function _wrapSubmit(form) {
+            if (!form || form._mpWrapped) return;
+            form._mpWrapped = true;
+            var origSubmit = form.submit;
+            form.submit = function() {
+                _log('form.submit', { f: form.id || '?', l: window.location.href });
+                return (origSubmit || HTMLFormElement.prototype.submit).call(form);
+            };
+        }
+
+        document.addEventListener('submit', function(ev) {
+            var t = ev.target;
+            if (t && (t.id === 'mp-card-form' || t.id === 'mp-card-form-new')) {
+                _log('submit.event', {
+                    f: t.id,
+                    d: ev.defaultPrevented,
+                    l: window.location.href,
+                    stopImp: ev.cancelable
+                });
+                _wrapSubmit(t);
+            }
+        }, true);
+
+        var _locationDesc = Object.getOwnPropertyDescriptor(window.Location.prototype, 'href');
+        if (_locationDesc && _locationDesc.configurable) {
+            Object.defineProperty(window, 'location', {
+                get: function() {
+                    return _locationDesc.get.call(this);
+                },
+                set: function(val) {
+                    _log('location.href.set', { v: String(val).substring(0, 100), f: window.location.href });
+                    return _locationDesc.set.call(this, val);
+                }
+            });
+        }
+        if (window.location && window.location.assign) {
+            var _origAssign = window.location.assign.bind(window.location);
+            window.location.assign = function(url) {
+                _log('location.assign', { u: String(url).substring(0, 100), f: window.location.href });
+                return _origAssign(url);
+            };
+        }
+
+        window.addEventListener('beforeunload', function() {
+            _log('beforeunload', { l: window.location.href });
+        });
+
+        function _sendTrace() {
+            if (_trace.length === 0) return;
+            var payload = JSON.stringify({ events: _trace });
+            _trace = [];
+            if (navigator.sendBeacon) {
+                navigator.sendBeacon('/index.php?action=mp_trace', payload);
+            }
+        }
+
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'hidden') _sendTrace();
+        });
+        window.addEventListener('pagehide', function() { _sendTrace(); });
+        setInterval(_sendTrace, 30000);
+    })();
+    /* =====================================================
+       FIM DA INSTRUMENTACAO TEMPORARIA
+       ===================================================== */
+
     var PUBLIC_KEY = <?= json_encode($mpPublicKey, JSON_UNESCAPED_SLASHES) ?>;
     var MP_MODE = <?= json_encode($mpSandbox ? 'sandbox' : 'production') ?>;
     var PLAN_AMOUNTS = <?= json_encode($mpPlanAmounts ?? [], JSON_UNESCAPED_SLASHES) ?>;
@@ -515,13 +631,16 @@ $errText = $errMessages[$errKey] ?? null;
                     }
                 },
                 onError: function(errors) {
+                    if (window._mpTraceLog) window._mpTraceLog('cardform.onError', { n: (errors && errors.length) || 0 });
                     showError((errors && errors.length)
                         ? errors.map(function(e){ return e.message; }).join(' ')
                         : 'Erro ao processar cartão. Tente novamente.');
                     setLoading(false);
                 },
                 onSubmit: function(event) {
+                    if (window._mpTraceLog) window._mpTraceLog('cardform.onSubmit.entry', { d: event.defaultPrevented });
                     event.preventDefault();
+                    if (window._mpTraceLog) window._mpTraceLog('cardform.onSubmit.preventDefault.done', {});
                     var submitted = false;
                     var finalize = function() { if (!submitted) { submitted = true; setLoading(false); } };
                     try {
@@ -635,6 +754,7 @@ $errText = $errMessages[$errKey] ?? null;
             ev.preventDefault();
             var slug = btn.getAttribute('data-open-checkout');
             var name = btn.getAttribute('data-plan-name') || (slug === 'pro' ? 'Pro' : 'Premium');
+            if (window._mpTraceLog) window._mpTraceLog('click.assinar', { slug: slug, l: window.location.href });
             openModal(slug, name);
             return;
         }
