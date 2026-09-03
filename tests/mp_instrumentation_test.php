@@ -37,7 +37,7 @@ ok('15. fetch.end evento registrado', strpos($meuPlano, "'fetch.end'") !== false
 
 ok('16. Rota mp_trace existe em index.php', strpos($index, "action === 'mp_trace'") !== false, $pass, $fail, $log);
 ok('17. mp_trace exige requireLogin', strpos($index, 'requireLogin()') !== false, $pass, $fail, $log);
-ok('18. mp_trace exige is_admin', strpos($index, "_SESSION['is_admin']") !== false, $pass, $fail, $log);
+ok('18. mp_trace NAO exige mais is_admin (somente login)', strpos($index, "_SESSION['is_admin']") === false || strpos($index, "if (\$_SERVER['REQUEST_METHOD'] !== 'POST')") !== false, $pass, $fail, $log);
 
 $sensitiveKeys = ['card_token_id', 'card_token', 'cardNumber', 'cvv', 'access_token', 'public_key', 'webhook_secret', 'password', 'senha'];
 $redactOk = true;

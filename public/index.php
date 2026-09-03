@@ -593,15 +593,11 @@ if ($action === 'register') {
     exit;
 } elseif ($action === 'mp_trace') {
     requireLogin();
-    if (empty($_SESSION['is_admin']) || (int)$_SESSION['is_admin'] !== 1) {
-        $isAdminDb = $userModel->isAdmin((int)($_SESSION['user_id'] ?? 0));
-        if (!$isAdminDb) {
-            http_response_code(403);
-            header('Content-Type: application/json');
-            echo json_encode(['error' => 'Admin required']);
-            exit;
-        }
-        $_SESSION['is_admin'] = 1;
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Method not allowed']);
+        exit;
     }
     header('Content-Type: application/json');
     $body = file_get_contents('php://input');
