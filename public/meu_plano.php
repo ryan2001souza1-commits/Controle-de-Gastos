@@ -455,26 +455,6 @@ $errText = $errMessages[$errKey] ?? null;
             }
         }, true);
 
-        var _locationDesc = Object.getOwnPropertyDescriptor(window.Location.prototype, 'href');
-        if (_locationDesc && _locationDesc.configurable) {
-            Object.defineProperty(window, 'location', {
-                get: function() {
-                    return _locationDesc.get.call(this);
-                },
-                set: function(val) {
-                    _log('location.href.set', { v: String(val).substring(0, 100), f: window.location.href });
-                    return _locationDesc.set.call(this, val);
-                }
-            });
-        }
-        if (window.location && window.location.assign) {
-            var _origAssign = window.location.assign.bind(window.location);
-            window.location.assign = function(url) {
-                _log('location.assign', { u: String(url).substring(0, 100), f: window.location.href });
-                return _origAssign(url);
-            };
-        }
-
         window.addEventListener('beforeunload', function() {
             _log('beforeunload', { l: window.location.href });
         });

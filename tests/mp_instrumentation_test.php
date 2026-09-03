@@ -23,8 +23,8 @@ ok('1. Instrumentacao _mpTrace existe no JS', strpos($meuPlano, '_mpTrace') !== 
 ok('2. window.fetch wrappeado', strpos($meuPlano, 'window.fetch = function') !== false, $pass, $fail, $log);
 ok('3. XMLHttpRequest wrappeado', strpos($meuPlano, 'XMLHttpRequest.prototype.open') !== false, $pass, $fail, $log);
 ok('4. submit event listener com phase=capturing', preg_match("/addEventListener\s*\(\s*'submit'.*?true\s*\)/s", $meuPlano) !== 0, $pass, $fail, $log);
-ok('5. location.href set wrappeado', strpos($meuPlano, 'location.href.set') !== false, $pass, $fail, $log);
-ok('6. location.assign wrappeado', strpos($meuPlano, 'location.assign') !== false, $pass, $fail, $log);
+ok('5. location.href/set NAO mais sobrescrito (read-only)', strpos($meuPlano, 'location.href.set') === false, $pass, $fail, $log);
+ok('6. location.assign NAO mais sobrescrito (read-only)', strpos($meuPlano, 'window.location.assign =') === false, $pass, $fail, $log);
 ok('7. beforeunload listener', strpos($meuPlano, 'beforeunload') !== false, $pass, $fail, $log);
 ok('8. visibilitychange listener', strpos($meuPlano, 'visibilitychange') !== false, $pass, $fail, $log);
 ok('9. pagehide listener', strpos($meuPlano, 'pagehide') !== false, $pass, $fail, $log);
