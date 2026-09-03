@@ -477,11 +477,15 @@ if ($action === 'register') {
     }
 } elseif ($action === 'mp_env_diag') {
     requireLogin();
-    if (empty($_SESSION['is_admin'])) {
-        http_response_code(403);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'Admin required']);
-        exit;
+    if (empty($_SESSION['is_admin']) || (int)$_SESSION['is_admin'] !== 1) {
+        $isAdminDb = $userModel->isAdmin((int)($_SESSION['user_id'] ?? 0));
+        if (!$isAdminDb) {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'Admin required']);
+            exit;
+        }
+        $_SESSION['is_admin'] = 1;
     }
     $token = (string)(getenv('MERCADOPAGO_ACCESS_TOKEN') ?: '');
     $pubKey = (string)(getenv('MERCADOPAGO_PUBLIC_KEY') ?: '');
