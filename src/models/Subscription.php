@@ -168,19 +168,6 @@ class Subscription
     }
 
     /**
-     * Busca assinatura por asaas_subscription_id.
-     */
-    public function findByAsaasSubscriptionId(string $asaasSubId): ?array
-    {
-        $stmt = $this->db->prepare(
-            'SELECT * FROM subscriptions WHERE asaas_subscription_id = ? LIMIT 1'
-        );
-        $stmt->execute([$asaasSubId]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $row ?: null;
-    }
-
-    /**
      * Atualiza o status de uma assinatura pelo id local (PK).
      * Retorna true se atualizou.
      */

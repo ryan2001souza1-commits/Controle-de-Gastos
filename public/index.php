@@ -71,8 +71,7 @@ require_once __DIR__ . '/../src/models/Subscription.php';
 require_once __DIR__ . '/../src/services/MercadoPagoService.php';
 require_once __DIR__ . '/../src/services/WebhookService.php';
 require_once __DIR__ . '/../src/controllers/SubscriptionController.php';
-require_once __DIR__ . '/../src/services/AsaasService.php';
-require_once __DIR__ . '/../src/services/AsaasWebhookService.php';
+
 
 $db = getDBConnection();
 require_once __DIR__ . '/../src/db_bootstrap.php';
@@ -114,10 +113,6 @@ $mpService = MercadoPagoService::isConfigured()
     : null;
 $subscriptionController = $mpService !== null
     ? new SubscriptionController($db, $userModel, $planService, $subscriptionModel, $mpService)
-    : null;
-
-$asaasService = AsaasService::isConfigured()
-    ? new AsaasService()
     : null;
 
 $action = $_GET['action'] ?? null;
@@ -256,49 +251,8 @@ if ($action === 'register') {
         'processed' => (bool)($result['processed'] ?? false),
     ]);
     exit;
-} elseif ($action === 'asaas_webhook') {
-    // Webhook publico do Asaas (servidor-servidor).
-    // NAO exige login nem CSRF: autenticacao via header "asaas-access-token"
-    // (hash_equals com ASAAS_WEBHOOK_TOKEN).
-    if ($asaasService === null) {
-        http_response_code(503);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'asaas_not_configured']);
-        exit;
-    }
-
-    $rawBody = (string)file_get_contents('php://input');
-    $accessToken = isset($_SERVER['HTTP_ASAAS_ACCESS_TOKEN']) ? (string)$_SERVER['HTTP_ASAAS_ACCESS_TOKEN'] : null;
-    $sourceIp = isset($_SERVER['REMOTE_ADDR']) ? (string)$_SERVER['REMOTE_ADDR'] : null;
-
-    $webhookSecret = (string)(getenv('ASAAS_WEBHOOK_TOKEN') ?: '');
-    if ($webhookSecret === '') {
-        http_response_code(503);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'webhook_token_not_configured']);
-        exit;
-    }
-
-    if ($accessToken === null || $accessToken === '' || !hash_equals($webhookSecret, $accessToken)) {
-        http_response_code(401);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'invalid_token']);
-        exit;
-    }
-
-    $webhookService = new AsaasWebhookService($db, $subscriptionModel);
-    $result = $webhookService->handle($rawBody, $accessToken, $sourceIp);
-
-    http_response_code((int)($result['status'] ?? 200));
-    header('Content-Type: application/json');
-    echo json_encode([
-        'received'  => true,
-        'duplicate' => (bool)($result['duplicate'] ?? false),
-        'processed' => (bool)($result['processed'] ?? false),
-    ]);
-    exit;
 } elseif ($action === 'subscription_create') {
-    // Mercado Pago (POST com card_token_id). Nunca cai no Asaas.
+    // Mercado Pago (POST com card_token_id).
     if ($subscriptionController !== null) {
         $subscriptionController->create();
     } else {
@@ -311,7 +265,7 @@ if ($action === 'register') {
         header('Location: /?action=meu_plano&error=mp_not_configured'); exit;
     }
 } elseif ($action === 'subscription_cancel') {
-    // Mercado Pago (POST). Nunca cai no Asaas.
+    // Mercado Pago (POST).
     if ($subscriptionController !== null) {
         $subscriptionController->cancel();
     } else {

@@ -1,6 +1,5 @@
 <?php
 require_once __DIR__ . '/../services/MercadoPagoService.php';
-require_once __DIR__ . '/../services/AsaasService.php';
 require_once __DIR__ . '/../services/CpfValidator.php';
 
 class ProfileController
@@ -122,8 +121,6 @@ class ProfileController
         $userId = (int)($_SESSION['user_id'] ?? 0);
         $user = $this->userModel->findById($userId);
         if (!$user) { header('Location: /?action=login'); exit; }
-
-        $hasAsaas = AsaasService::isConfigured();
 
         $planSvc = new PlanService($this->db);
         $currentPlanSlug = $planSvc->getUserPlanSlug($userId);
