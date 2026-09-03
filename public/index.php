@@ -73,7 +73,6 @@ require_once __DIR__ . '/../src/services/WebhookService.php';
 require_once __DIR__ . '/../src/controllers/SubscriptionController.php';
 require_once __DIR__ . '/../src/services/AsaasService.php';
 require_once __DIR__ . '/../src/services/AsaasWebhookService.php';
-require_once __DIR__ . '/../src/controllers/AsaasSubscriptionController.php';
 
 $db = getDBConnection();
 require_once __DIR__ . '/../src/db_bootstrap.php';
@@ -120,9 +119,6 @@ $subscriptionController = $mpService !== null
 $asaasService = AsaasService::isConfigured()
     ? new AsaasService()
     : null;
-$asaasSubscriptionController = $asaasService !== null
-    ? new AsaasSubscriptionController($db, $userModel, $planService, $subscriptionModel, $asaasService)
-    : null;
 
 $action = $_GET['action'] ?? null;
 
@@ -135,7 +131,6 @@ $csrfProtectedActions = [
     'update_password', 'feedback_create', 'reportar', 'reportar_create',
     'admin_bug_update', 'admin_feedback_update', 'ai_chat', 'logout',
     'subscription_create', 'subscription_cancel',
-    'asaas_subscription_create', 'asaas_subscription_cancel',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -321,18 +316,6 @@ if ($action === 'register') {
         $subscriptionController->cancel();
     } else {
         header('Location: /?action=meu_plano&error=mp_not_configured'); exit;
-    }
-} elseif ($action === 'asaas_subscription_create') {
-    if ($asaasSubscriptionController !== null) {
-        $asaasSubscriptionController->create();
-    } else {
-        header('Location: /?action=meu_plano&error=asaas_not_configured'); exit;
-    }
-} elseif ($action === 'asaas_subscription_cancel') {
-    if ($asaasSubscriptionController !== null) {
-        $asaasSubscriptionController->cancel();
-    } else {
-        header('Location: /?action=meu_plano&error=asaas_not_configured'); exit;
     }
 } elseif ($action === 'update_profile') {
     $profileController->updateProfile();

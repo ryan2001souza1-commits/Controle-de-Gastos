@@ -5,7 +5,6 @@
  *
  * Aplicado em:
  *   - ProfileController::updateProfile (ao salvar no perfil)
- *   - AsaasSubscriptionController::create (defesa antes de chamar Asaas)
  *
  * Algoritmo oficial:
  *   - 11 dígitos
