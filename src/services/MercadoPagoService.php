@@ -110,7 +110,56 @@ class MercadoPagoService
         if ($reason !== null && $reason !== '') {
             $payload['reason'] = $reason;
         }
-        return $this->request('POST', '/preapproval', $payload);
+
+        /* =====================================================
+           DIAGNOSTICO TEMPORARIO — remover apos identificar erro
+           ===================================================== */
+        $diagPayload = [
+            'preapproval_plan_id' => $payload['preapproval_plan_id'],
+            'payer_email' => substr($payload['payer_email'], 0, 3) . '***',
+            'card_token_present' => ($payload['card_token_id'] !== ''),
+            'card_token_length' => strlen($payload['card_token_id']),
+            'card_token_prefix' => strlen($payload['card_token_id']) >= 4
+                ? substr($payload['card_token_id'], 0, 4) . '***'
+                : '[short]',
+            'status' => $payload['status'],
+            'reason' => $payload['reason'] ?? '[null]',
+            'back_url_present' => ($payload['back_url'] !== ''),
+            'external_reference' => $payload['external_reference'],
+        ];
+        error_log('[MP-DIAG] createPreapproval ENVIANDO: ' . json_encode($diagPayload));
+
+        $resp = $this->request('POST', '/preapproval', $payload);
+
+        /* =====================================================
+           DIAGNOSTICO TEMPORARIO — remover apos identificar erro
+           ===================================================== */
+        $diagResp = [
+            'ok' => $resp['ok'],
+            'http' => $resp['status'],
+            'message' => $resp['data']['message'] ?? '[no_message]',
+            'code' => $resp['data']['code'] ?? '[no_code]',
+        ];
+        $causeKeys = [];
+        if (isset($resp['data']['cause']) && is_array($resp['data']['cause'])) {
+            foreach ($resp['data']['cause'] as $i => $c) {
+                if (is_array($c)) {
+                    $causeKeys[] = [
+                        'code' => $c['code'] ?? '[no_code]',
+                        'description' => isset($c['description']) ? substr($c['description'], 0, 100) : '[no_desc]',
+                    ];
+                }
+            }
+        }
+        if ($causeKeys !== []) {
+            $diagResp['cause'] = $causeKeys;
+        }
+        error_log('[MP-DIAG] createPreapproval RESP: ' . json_encode($diagResp));
+        /* =====================================================
+           FIM DO DIAGNOSTICO TEMPORARIO
+           ===================================================== */
+
+        return $resp;
     }
 
     /**
