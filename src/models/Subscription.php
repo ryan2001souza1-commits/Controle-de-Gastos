@@ -55,14 +55,12 @@ class Subscription
     public function updateStatusById(
         int $id,
         string $newStatus,
-        ?string $rawStatus,
         ?string $nextBillingDate,
         ?string $gracePeriodEnd
     ): bool {
         $stmt = $this->db->prepare(
             'UPDATE subscriptions
                 SET status = :status,
-                    raw_status = :raw_status,
                     next_billing_date = COALESCE(:next_billing_date, next_billing_date),
                     grace_period_end = COALESCE(:grace_period_end, grace_period_end),
                     cancelled_at = CASE WHEN :status_cancelled THEN NOW() ELSE cancelled_at END,
@@ -74,7 +72,6 @@ class Subscription
         );
         $stmt->execute([
             ':status' => $newStatus,
-            ':raw_status' => $rawStatus,
             ':next_billing_date' => $nextBillingDate,
             ':grace_period_end' => $gracePeriodEnd,
             ':status_cancelled' => $newStatus === self::STATUS_CANCELLED ? 1 : 0,
