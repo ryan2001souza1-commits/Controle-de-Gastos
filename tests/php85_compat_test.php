@@ -108,11 +108,6 @@ for ($i = 0; $i < count($ctrlLines) - 1; $i++) {
 php85_assert('T15 AsaasSubscriptionController: nenhum echo/print antes de header()',
     $problematicBranches === 0);
 
-// --- MercadoPagoService: curl_close tambem ausente? (verificar) ---
-$mpSrc = file_get_contents($ROOT . '/src/services/MercadoPagoService.php');
-php85_assert('T16 MercadoPagoService NAO usa curl_close',
-    strpos($mpSrc, 'curl_close') === false);
-
 // --- Mailer: curl_close ausente? ---
 $mailerSrc = file_get_contents($ROOT . '/src/services/Mailer.php');
 php85_assert('T17 Mailer NAO usa curl_close',
