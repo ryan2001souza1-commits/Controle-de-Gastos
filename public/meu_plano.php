@@ -272,8 +272,8 @@ $errText = $errMessages[$errKey] ?? null;
 
 <?php if (!empty($mpPublicKey)): ?>
 <!-- Modal de checkout Mercado Pago (tokenizacao no navegador) -->
-<div id="mp-checkout-modal" hidden style="position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-start;justify-content:center;z-index:9999;padding:var(--space-3);overflow-y:auto">
-    <div style="background:var(--color-surface-1);border-radius:16px;max-width:460px;width:100%;max-height:90vh;overflow-y:auto;padding:var(--space-5);border:1px solid var(--color-border);position:relative">
+<div id="mp-checkout-modal" hidden style="position:fixed;inset:0;background:rgba(15,23,42,.75);display:none;align-items:flex-start;justify-content:center;z-index:2147483646;padding:var(--space-3);overflow-y:auto;isolation:isolate">
+    <div style="background:var(--color-surface-1);background-color:var(--color-surface-1,#1e293b);border-radius:16px;max-width:460px;width:100%;max-height:90vh;overflow-y:auto;padding:var(--space-5);border:1px solid var(--color-border);position:relative;z-index:1;box-shadow:0 25px 50px rgba(0,0,0,.5);opacity:1">
         <button type="button" id="mp-close" aria-label="Fechar" style="position:absolute;top:12px;right:12px;background:transparent;border:0;cursor:pointer;font-size:20px;color:var(--color-text-3)">×</button>
         <div style="font-size:18px;font-weight:700;color:var(--color-text-1);letter-spacing:-.02em;margin-bottom:4px">
             Assinar plano <span id="mp-plan-name">Pro</span>
@@ -317,11 +317,11 @@ $errText = $errMessages[$errKey] ?? null;
                 <div class="mp-doc-group">
                     <div class="mp-field">
                         <label class="mp-label" for="mp-card-doc-type">Tipo de documento</label>
-                        <div id="mp-card-doc-type" class="mp-field-frame mp-field-frame-select"></div>
+                        <select id="mp-card-doc-type" class="mp-input"></select>
                     </div>
                     <div class="mp-field">
                         <label class="mp-label" for="mp-card-doc">CPF / CNPJ do titular</label>
-                        <div id="mp-card-doc" class="mp-field-frame"></div>
+                        <input type="text" id="mp-card-doc" class="mp-input" placeholder="000.000.000-00" inputmode="numeric">
                     </div>
                 </div>
 
@@ -357,14 +357,12 @@ $errText = $errMessages[$errKey] ?? null;
 
 .mp-field-group { display: flex; flex-direction: column; gap: 12px; }
 .mp-field { display: flex; flex-direction: column; gap: 6px; }
-.mp-label { display: block; font-size: 12px; font-weight: 600; color: var(--color-text-2); }
-.mp-input { width: 100%; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-2); color: var(--color-text-1); font-size: 14px; box-sizing: border-box; }
+.mp-label { display: block; font-size: 12px; font-weight: 600; color: var(--color-text-2); line-height: 1.2; }
+.mp-input { width: 100%; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-2); color: var(--color-text-1); font-size: 14px; box-sizing: border-box; min-height: 44px; }
 .mp-input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(124,58,237,.15); }
-.mp-field-frame { width: 100%; height: 44px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-2); box-sizing: border-box; overflow: hidden; }
-.mp-field-frame-select { height: 44px; }
-.mp-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.mp-doc-group { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; }
-.mp-doc-group .mp-field-frame { flex: 1; }
+.mp-field-frame { width: 100%; height: 44px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-2); box-sizing: border-box; overflow: hidden; position: relative; }
+.mp-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+.mp-doc-group { display: grid; grid-template-columns: 140px 1fr; gap: 12px; align-items: start; }
 .mp-form-error { display: none; margin-top: 12px; padding: 10px 12px; background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.3); border-radius: 8px; color: #fca5a5; font-size: 13px; }
 .mp-form-error[data-visible="1"] { display: block; }
 .mp-actions { display: flex; gap: 8px; margin-top: 16px; }
@@ -376,6 +374,7 @@ $errText = $errMessages[$errKey] ?? null;
 @media (max-width: 400px) {
     .mp-row { grid-template-columns: 1fr; }
     .mp-doc-group { grid-template-columns: 1fr; }
+    #mp-checkout-modal > div { max-width: 100%; }
 }
 </style>
 
