@@ -105,6 +105,7 @@ class MercadoPagoService
             'card_token_id' => $cardTokenId,
             'external_reference' => $externalReference,
             'back_url' => $backUrl,
+            'status' => 'authorized',
         ];
         if ($reason !== null && $reason !== '') {
             $payload['reason'] = $reason;
@@ -121,7 +122,7 @@ class MercadoPagoService
             'card_token_prefix' => strlen($payload['card_token_id']) >= 4
                 ? substr($payload['card_token_id'], 0, 4) . '***'
                 : '[short]',
-            'status' => $payload['status'],
+            'status' => $payload['status'] ?? '[null]',
             'reason' => $payload['reason'] ?? '[null]',
             'back_url_present' => ($payload['back_url'] !== ''),
             'external_reference' => $payload['external_reference'],

@@ -88,19 +88,9 @@ class SubscriptionController
         $appUrl = rtrim((string)(getenv('APP_URL') ?: 'https://example.com'), '/');
         $backUrl = $appUrl . '/mercadopago_return.php?ref=' . urlencode($extRef);
 
-        /* =====================================================
-           DIAGNOSTICO TEMPORARIO — testar payer_email em sandbox
-           Somente quando MERCADOPAGO_MODE=sandbox.
-           Em producao, mantem $user->email.
-           ===================================================== */
-        $mpMode = strtolower((string)(getenv('MERCADOPAGO_MODE') ?: 'production'));
-        $payerEmailForMp = ($mpMode === 'sandbox')
-            ? 'test@testuser.com'
-            : $user->email;
-
         $resp = $this->mp->createPreapproval(
             $planId,
-            $payerEmailForMp,
+            $user->email,
             $cardTokenId,
             $extRef,
             $backUrl,

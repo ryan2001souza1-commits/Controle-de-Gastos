@@ -51,9 +51,9 @@ mp_assert('T02 createPreapproval aceita parametro cardTokenId',
 mp_assert('T03 payload inclui card_token_id no POST /preapproval',
     str_contains($src, "'card_token_id' => \$cardTokenId"));
 
-// T04: status=authorized NAO enviado quando ha preapproval_plan_id
-mp_assert('T04 payload NAO usa status=authorized (plano define o comportamento)',
-    strpos($src, "'status' => 'authorized'") === false);
+// T04: status=authorized (assinatura com plano associado)
+mp_assert('T04 payload usa status=authorized (assinatura com plano)',
+    str_contains($src, "'status' => 'authorized'"));
 
 // T05: PRO e PREMIUM suportados
 $ctrl = file_get_contents($ROOT . '/src/controllers/SubscriptionController.php');
