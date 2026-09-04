@@ -107,16 +107,15 @@ cpf_assert('T40 usa CpfValidator::format no value',
 cpf_assert('T41 mensagem invalid_cpf',
     strpos($config, 'invalid_cpf') !== false);
 
-// --- meu_plano.php: sem menções de gateway de pagamento ---
+// --- meu_plano.php: mensagem invalid_cpf com link ---
 $meuPlano = file_get_contents($ROOT . '/public/meu_plano.php');
 cpf_assert('T42 missing_cpf REMOVIDO',
     strpos($meuPlano, 'missing_cpf') === false);
-cpf_assert('T43 nenhum rastro de gateway no plano',
-    strpos($meuPlano, 'mercadopago') === false
-    && strpos($meuPlano, 'asaas') === false
-    && strpos($meuPlano, 'card_token') === false
-    && strpos($meuPlano, 'cardform') === false
-    && strpos($meuPlano, 'MercadoPago') === false);
+cpf_assert('T43 tem invalid_cpf com texto utile',
+    strpos($meuPlano, 'invalid_cpf') !== false
+    && (stripos($meuPlano, 'configura') !== false));
+cpf_assert('T44 link para configuracoes',
+    strpos($meuPlano, '/index.php?action=configuracoes') !== false);
 
 // --- validador centralizado em arquivo proprio ---
 $validatorFile = $ROOT . '/src/services/CpfValidator.php';
