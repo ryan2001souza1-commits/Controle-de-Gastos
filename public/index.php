@@ -119,7 +119,15 @@ $csrfProtectedActions = [
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Valida apenas ações que precisam de CSRF
     if (in_array($action, $csrfProtectedActions, true)) {
+        // Tenta token via POST (form-encoded) ou JSON body
         $csrfToken = $_POST['csrf_token'] ?? '';
+        if ($csrfToken === '' && strpos($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') !== false) {
+            $rawBody = file_get_contents('php://input');
+            $jsonData = json_decode($rawBody, true);
+            if (is_array($jsonData) && isset($jsonData['csrf_token'])) {
+                $csrfToken = (string)$jsonData['csrf_token'];
+            }
+        }
         $userId = $_SESSION['user_id'] ?? 0;
         if (empty($csrfToken) || !$csrfService->validateToken($userId, $csrfToken)) {
             http_response_code(403);

@@ -218,10 +218,16 @@
     status.textContent = '';
 
     try {
+      const csrfField = form.querySelector('input[name="csrf_token"]');
+      const payload = { message: text, history: history.slice(-8) };
+      if (csrfField && csrfField.value) {
+        payload.csrf_token = csrfField.value;
+      }
+
       const res = await fetch('/index.php?action=ai_chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, history: history.slice(-8) }),
+        body: JSON.stringify(payload),
         credentials: 'same-origin',
       });
 
