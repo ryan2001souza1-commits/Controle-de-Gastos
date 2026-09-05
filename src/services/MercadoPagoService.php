@@ -329,7 +329,15 @@ class MercadoPagoService
         $httpStatus = 0;
         $body = '';
         $curlErr = '';
-        $this->curlPut($url, $headers, $payload, $body, $httpStatus, $curlErr, 30);
+        $startMs = (int)(microtime(true) * 1000);
+        $this->curlPut($url, $headers, $payload, $body, $httpStatus, $curlErr, 8);
+        $elapsedMs = (int)(microtime(true) * 1000) - $startMs;
+
+        $mpIdTag = substr($mpPreapprovalId, -8);
+        error_log(sprintf(
+            '[cancel.mp_call_result] mp_id_suffix=%s http=%d elapsed_ms=%d body_len=%d curl_err=%s',
+            $mpIdTag, $httpStatus, $elapsedMs, strlen($body), $curlErr === '' ? '-' : substr($curlErr, 0, 40)
+        ));
 
         if ($body === '' && $curlErr !== '') {
             error_log('[MercadoPagoService] cancelPreapproval curl error: ' . $curlErr);
