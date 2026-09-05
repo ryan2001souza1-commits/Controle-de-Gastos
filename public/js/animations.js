@@ -180,10 +180,16 @@
             });
         }, { threshold: 0.05, rootMargin: '0px 0px -50px 0px' });
 
-        document.querySelectorAll('.section, .charts-grid, .panel, .chart-card').forEach(function (el) {
+        document.querySelectorAll('.section, .charts-grid').forEach(function (el) {
             el.classList.add('reveal-on-scroll');
             observer.observe(el);
         });
+
+        setTimeout(function () {
+            document.querySelectorAll('.reveal-on-scroll:not(.is-revealed)').forEach(function (el) {
+                el.classList.add('is-revealed');
+            });
+        }, 3000);
     }
 
     /* ============================================================
