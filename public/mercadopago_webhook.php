@@ -46,7 +46,7 @@ if (is_file($envFile) && getenv('VERCEL_ENV') === false) {
 try {
     $db = getDBConnection();
 } catch (Throwable $e) {
-    error_log('[MPWebhook] Falha ao conectar ao banco');
+    error_log('[MPWebhook] Falha ao conectar ao banco: ' . get_class($e));
     http_response_code(503);
     header('Content-Type: application/json');
     echo json_encode(['error' => 'Database unavailable']);
@@ -113,15 +113,23 @@ if ($webhookSecret !== '') {
 try {
     $mpService = new MercadoPagoService();
 } catch (Throwable $e) {
-    error_log('[MPWebhook] MercadoPagoService init failed');
+    error_log('[MPWebhook] MercadoPagoService init failed: ' . get_class($e));
     http_response_code(503);
     header('Content-Type: application/json');
     echo json_encode(['error' => 'Service unavailable']);
     exit;
 }
 
-$webhookService = new MercadoPagoWebhookService($db, $mpService);
-$result = $webhookService->process($mpPreapprovalId);
+try {
+    $webhookService = new MercadoPagoWebhookService($db, $mpService);
+    $result = $webhookService->process($mpPreapprovalId);
+} catch (Throwable $e) {
+    error_log('[MPWebhook] processamento falhou: ' . get_class($e));
+    http_response_code(500);
+    header('Content-Type: application/json');
+    echo json_encode(['received' => false, 'action' => 'internal_error']);
+    exit;
+}
 
 http_response_code($result['http_status']);
 header('Content-Type: application/json');

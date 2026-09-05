@@ -305,6 +305,41 @@ assert_test(
     'HMAC valido com ID diferente → valido'
 );
 
+echo "\n--- Simulação oficial Mercado Pago (data.id=123456) ---\n";
+
+$simulationBody = [
+    'action'         => 'updated',
+    'application_id' => '2826051069207072',
+    'data'           => ['id' => '123456'],
+    'date'           => '2021-11-01T02:02:02Z',
+    'entity'         => 'preapproval',
+    'id'             => '123456',
+    'type'           => 'subscription_preapproval',
+    'version'        => 8,
+];
+
+$extractedFromBody = MercadoPagoWebhookService::extractPreapprovalId([], $simulationBody, []);
+assert_test($extractedFromBody === '123456', 'data.id=123456 extraido da body da simulacao');
+
+$extractedFromQuery = MercadoPagoWebhookService::extractPreapprovalId(
+    ['data' => ['id' => '123456']],
+    [],
+    []
+);
+assert_test($extractedFromQuery === '123456', 'data.id=123456 extraido da query string da simulacao');
+
+$extractedFromHeaders = MercadoPagoWebhookService::extractPreapprovalId(
+    [],
+    [],
+    ['HTTP_X_DATA_ID' => '123456']
+);
+assert_test($extractedFromHeaders === '123456', 'X-Data-Id=123456 extraido dos headers da simulacao');
+
+if ($extractedFromBody !== null) {
+    $validation = preg_match('/^[a-zA-Z0-9_\-]{1,80}$/', $extractedFromBody);
+    assert_test($validation === 1, 'id 123456 passa na regex de validacao');
+}
+
 echo "\n--- Cenário C: inconsistencia de plano ---\n";
 putenv('MERCADOPAGO_PLAN_ID_PRO=plan_pro_123');
 putenv('MERCADOPAGO_PLAN_ID_PREMIUM=plan_premium_456');
