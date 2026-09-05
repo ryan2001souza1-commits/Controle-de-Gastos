@@ -5,6 +5,11 @@
  * Remove colunas, indices e tabelas legadas dos gateways de pagamento
  * Asaas e Mercado Pago que foram descontinuados.
  *
+ * IMPORTANTE: mp_preapproval_id NAO deve ser removido — e usado pelo
+ * fluxo ativo de assinaturas via Mercado Pago (checkout hospedado).
+ * A coluna e adicionada pela migration principal (migrations.php) e
+ * mantida por este arquivo.
+ *
  * Executado automaticamente no boot do app (via runMigrations em migrations.php).
  * Idempotente: IF EXISTS em todos os DROP.
  */
@@ -18,8 +23,7 @@ function run_remove_legacy_payment_gateways(PDO $db): void
     $alreadyRan = true;
 
     $statements = [
-        // Remove colunas MP/Asaas da tabela subscriptions
-        "ALTER TABLE subscriptions DROP COLUMN IF EXISTS mp_preapproval_id",
+        // Asaas: colunas legadas da tabela subscriptions
         "ALTER TABLE subscriptions DROP COLUMN IF EXISTS mp_plan_id",
         "ALTER TABLE subscriptions DROP COLUMN IF EXISTS mp_payer_id",
         "ALTER TABLE subscriptions DROP COLUMN IF EXISTS asaas_customer_id",
@@ -27,17 +31,17 @@ function run_remove_legacy_payment_gateways(PDO $db): void
         "ALTER TABLE subscriptions DROP COLUMN IF EXISTS provider",
         "ALTER TABLE subscriptions DROP COLUMN IF EXISTS provider_status",
 
-        // Remove colunas MP/Asaas da tabela usuarios
+        // Asaas: colunas legadas da tabela usuarios
         "ALTER TABLE usuarios DROP COLUMN IF EXISTS mercadopago_payer_id",
         "ALTER TABLE usuarios DROP COLUMN IF EXISTS asaas_customer_id",
 
-        // Remove indices legados
+        // Asaas: indices legados
         "DROP INDEX IF EXISTS idx_subscriptions_asaas_subscription",
         "DROP INDEX IF EXISTS idx_usuarios_asaas_customer",
         "DROP INDEX IF EXISTS idx_usuarios_mp_payer",
         "DROP INDEX IF EXISTS idx_subscriptions_provider",
 
-        // Remove tabela payment_webhooks (exclusiva MP)
+        // Asaas: tabela legada
         "DROP TABLE IF EXISTS payment_webhooks",
     ];
 
