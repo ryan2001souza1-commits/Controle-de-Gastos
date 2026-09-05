@@ -43,10 +43,33 @@ if (is_file($envFile) && getenv('VERCEL_ENV') === false) {
     }
 }
 
+require_once $ROOT . '/src/config/config.php';
+
 try {
     $db = getDBConnection();
 } catch (Throwable $e) {
-    error_log('[MPWebhook] Falha ao conectar ao banco: ' . get_class($e));
+    $hasUrl = getenv('DATABASE_URL') !== false && getenv('DATABASE_URL') !== '';
+    $parsed = $hasUrl ? @parse_url(getenv('DATABASE_URL')) : false;
+    $hasHost = is_array($parsed) && !empty($parsed['host']);
+    $hasScheme = is_array($parsed) && !empty($parsed['scheme']);
+    $sslMode = (is_array($parsed) && !empty($parsed['query']))
+        ? (function (string $q): ?string {
+            parse_str($q, $r);
+            return $r['sslmode'] ?? null;
+        })($parsed['query'])
+        : null;
+    $pdoAvailable = in_array('pgsql', PDO::getAvailableDrivers(), true);
+
+    error_log(sprintf(
+        '[MPWebhook] DB fail: class=%s code=%s msg_safe=defined url=%s scheme=%s host=%s sslmode=%s pdo_pgsql=%s',
+        get_class($e),
+        (string)$e->getCode(),
+        $hasUrl ? 'yes' : 'no',
+        $hasScheme ? 'yes' : 'no',
+        $hasHost ? 'yes' : 'no',
+        $sslMode ?? 'none',
+        $pdoAvailable ? 'yes' : 'no'
+    ));
     http_response_code(503);
     header('Content-Type: application/json');
     echo json_encode(['error' => 'Database unavailable']);
