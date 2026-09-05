@@ -2,15 +2,27 @@
 /**
  * Mercado Pago Return — pagina para onde o MP redireciona apos o checkout.
  *
+ * FLUXO:
+ *  1. Antes do redirect (action=subscribe): cria pending local com user_id + plan_slug
+ *  2. Usuario paga no checkout do MP
+ *  3. MP redireciona para ca com ?preapproval_id=...
+ *  4. Este arquivo: reconcilia via API do MP (fonte confiavel)
+ *     a. preapproval_plan_id valido contra .env
+ *     b. Busca pending local por user_id + plan_slug
+ *     c. Vincula preapproval_id ao pending
+ *     d. Ativa plano se status=authorized
+ *
  * SEGURANCA:
- * - NUNCA ativa plano apenas com parametros da URL.
- * - Usa SubscriptionReconciler para consultar a API do MP (fonte confiavel).
- * - A reconciliacao so ativa o plano quando:
- *     1. preapproval existe no MP e status = authorized
- *     2. preapproval_plan_id corresponde a um plano configurado
- *     3. external_reference da preapproval corresponde ao usuario autenticado
- * - Se o webhook chegar antes, a subscription ja esta atualizada (idempotente).
- * - Se o webhook ainda nao chegou, este return faz a reconciliacao.
+ *  - NUNCA ativa plano apenas com parametros da URL.
+ *  - Consulta sempre a API do MP antes de qualquer modificacao.
+ *  - Valida preapproval_plan_id contra .env.
+ *  - Usuario precisa estar autenticado.
+ *
+ * CONDICAO DE CORRIDA:
+ *  - Webhook pode chegar ANTES do return.
+ *  - Webhook nao encontra por mp_preapproval_id (ainda NULL no pending).
+ *  - Webhook retorna 200 sem alterar nada.
+ *  - Return faz a reconciliacao normalmente.
  */
 
 require_once __DIR__ . '/../src/config/config.php';
@@ -96,10 +108,9 @@ if ($isLoggedIn && $sessionUserId > 0 && $mpPreapprovalId !== null) {
             $db = getDBConnection();
             $mpService = new MercadoPagoService();
             $reconciler = new SubscriptionReconciler($db, $mpService);
-            $reconcileResult = $reconciler->reconcile(
+            $reconcileResult = $reconciler->reconcileFromReturn(
                 (string)$mpPreapprovalId,
-                $sessionUserId,
-                true
+                $sessionUserId
             );
         } catch (Throwable $e) {
             error_log('[mercadopago_return] reconciliacao: ' . $e->getMessage());
@@ -135,16 +146,16 @@ if ($isLoggedIn && $sessionUserId > 0 && $mpPreapprovalId !== null) {
     <?php
     $showSuccess = $reconcileResult !== null
         && ($reconcileResult['ok'] ?? false) === true
-        && ($reconcileResult['action'] ?? '') === 'created';
-    $showAlreadyActive = $reconcileResult !== null
-        && ($reconcileResult['ok'] ?? false) === true
-        && ($reconcileResult['action'] ?? '') === 'updated';
+        && in_array($reconcileResult['action'] ?? '', ['created', 'activated', 'already_linked', 'updated'], true);
     $showPending = $reconcileResult !== null
         && ($reconcileResult['ok'] ?? false) === false
         && ($reconcileResult['action'] ?? '') === 'not_authorized';
     $showError = $reconcileResult !== null
         && ($reconcileResult['ok'] ?? false) === false
         && ($reconcileResult['action'] ?? '') === 'transient_error';
+    $showMismatch = $reconcileResult !== null
+        && ($reconcileResult['ok'] ?? false) === false
+        && in_array($reconcileResult['action'] ?? '', ['unknown_plan', 'plan_mismatch', 'user_mismatch', 'user_not_found'], true);
     ?>
     <?php if ($showSuccess): ?>
     <div style="margin:0 auto var(--space-5);width:72px;height:72px;border-radius:50%;background:rgba(34,197,94,0.1);border:2px solid rgba(34,197,94,0.25);display:flex;align-items:center;justify-content:center">
@@ -158,19 +169,6 @@ if ($isLoggedIn && $sessionUserId > 0 && $mpPreapprovalId !== null) {
     <p style="font-size:14px;color:var(--color-text-2);max-width:420px;margin:0 auto var(--space-5);line-height:1.6">
         Sua assinatura foi confirmada e ativada com sucesso.<br>
         Aproveite todos os recursos do seu plano.
-    </p>
-    <?php elseif ($showAlreadyActive): ?>
-    <div style="margin:0 auto var(--space-5);width:72px;height:72px;border-radius:50%;background:rgba(34,197,94,0.1);border:2px solid rgba(34,197,94,0.25);display:flex;align-items:center;justify-content:center">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polyline points="20 6 9 17 4 12"/>
-        </svg>
-    </div>
-    <h2 style="font-size:20px;font-weight:700;color:var(--color-text-1);margin-bottom:var(--space-3);letter-spacing:-.02em">
-        Assinatura ja esta ativa
-    </h2>
-    <p style="font-size:14px;color:var(--color-text-2);max-width:420px;margin:0 auto var(--space-5);line-height:1.6">
-        Sua assinatura ja estava ativa. Tudo certo!<br>
-        O pr&#243;ximo pagamento sera cobrado automaticamente.
     </p>
     <?php elseif ($showPending): ?>
     <div style="margin:0 auto var(--space-5);width:72px;height:72px;border-radius:50%;background:rgba(245,158,11,0.1);border:2px solid rgba(245,158,11,0.25);display:flex;align-items:center;justify-content:center">
@@ -244,7 +242,7 @@ if ($isLoggedIn && $sessionUserId > 0 && $mpPreapprovalId !== null) {
             style="width:100%;justify-content:center;text-decoration:none;display:flex;align-items:center;gap:8px"
             title="Voltar para Meu Plano">
             <?= render_icon('star', 15) ?>
-            <?php if ($showSuccess || $showAlreadyActive): ?>
+            <?php if ($showSuccess): ?>
             Ver meu plano
             <?php else: ?>
             Voltar para Meu Plano

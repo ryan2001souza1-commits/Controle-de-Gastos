@@ -219,4 +219,176 @@ class SubscriptionReconciler
             ],
         ];
     }
+
+    /**
+     * Reconciliação chamada pelo mercadopago_return.php.
+     *
+     * Fluxo: o usuario conclui o checkout e volta ao site com preapproval_id na URL.
+     * O webhook pode ter chegado antes (e feito nada por falta de external_reference)
+     * ou ainda nao ter chegado. Este metodo faz a reconciliacao segura.
+     *
+     * Seguranca三重:
+     *  1. Consultar sempre a API do MP (fonte confiavel)
+     *  2. Validar preapproval_plan_id contra .env
+     *  3. Encontrar pending local por userId + plan_slug
+     *  4. Rejeitar se o pending nao pertence ao usuario autenticado
+     *
+     * @param string $mpPreapprovalId  ID da preapproval na URL
+     * @param int    $userId          ID do usuario autenticado (da sessao)
+     * @return array{ok:bool, action:string, http_status:int, details?:array}
+     */
+    public function reconcileFromReturn(string $mpPreapprovalId, int $userId): array
+    {
+        if (!preg_match('/^[a-zA-Z0-9_\-]{1,80}$/', $mpPreapprovalId)) {
+            return ['ok' => false, 'action' => 'invalid_id', 'http_status' => 400];
+        }
+        if ($userId <= 0) {
+            return ['ok' => false, 'action' => 'invalid_user', 'http_status' => 400];
+        }
+
+        $result = $this->mpService->getPreapproval($mpPreapprovalId);
+        if ($result['ok'] === false) {
+            $http = (int)($result['status'] ?? 0);
+            if ($http === 404) {
+                return ['ok' => false, 'action' => 'not_found', 'http_status' => 404];
+            }
+            if ($http === 0 || $http >= 500) {
+                return ['ok' => false, 'action' => 'transient_error', 'http_status' => 503];
+            }
+            return ['ok' => false, 'action' => 'mp_error', 'http_status' => 502];
+        }
+
+        $data = $result['data'];
+        $mpStatus = strtolower(trim((string)($data['status'] ?? '')));
+        $mpPlanId = (string)($data['preapproval_plan_id'] ?? '');
+        $nextBillingDate = isset($data['next_payment_date']) ? (string)$data['next_payment_date'] : null;
+
+        if ($mpStatus === '' || $mpPlanId === '') {
+            return [
+                'ok' => false,
+                'action' => 'incomplete_payload',
+                'http_status' => 422,
+                'details' => ['reason' => 'mp_missing_fields'],
+            ];
+        }
+
+        $planSlug = MercadoPagoWebhookService::resolvePlanSlugFromMpPlanId($mpPlanId);
+        if ($planSlug === null) {
+            return [
+                'ok' => false,
+                'action' => 'unknown_plan',
+                'http_status' => 200,
+                'details' => ['preapproval_plan_id' => $mpPlanId],
+            ];
+        }
+
+        $stmt = $this->db->prepare('SELECT id FROM usuarios WHERE id = :uid LIMIT 1');
+        $stmt->execute([':uid' => $userId]);
+        if ($stmt->fetchColumn() === false) {
+            return ['ok' => false, 'action' => 'user_not_found', 'http_status' => 200];
+        }
+
+        $internalStatus = MercadoPagoWebhookService::mapMpStatusToInternal($mpStatus);
+        if ($internalStatus === null) {
+            return ['ok' => false, 'action' => 'unmapped_status', 'http_status' => 200];
+        }
+
+        if ($internalStatus !== 'active') {
+            return [
+                'ok' => false,
+                'action' => 'not_authorized',
+                'http_status' => 200,
+                'details' => ['mp_status' => $mpStatus],
+            ];
+        }
+
+        $existingByMpId = $this->subscriptionModel->findByMpId($mpPreapprovalId);
+        if ($existingByMpId !== null) {
+            $ownerUserId = (int)($existingByMpId['user_id'] ?? 0);
+            if ($ownerUserId !== $userId) {
+                return [
+                    'ok' => false,
+                    'action' => 'user_mismatch',
+                    'http_status' => 200,
+                    'details' => ['expected_user_id' => $userId, 'owner_user_id' => $ownerUserId],
+                ];
+            }
+            $previousStatus = (string)$existingByMpId['status'];
+            $this->subscriptionModel->updateMpData(
+                (int)$existingByMpId['id'],
+                $mpPreapprovalId,
+                $mpStatus,
+                $nextBillingDate
+            );
+            $this->subscriptionModel->updateStatusById(
+                (int)$existingByMpId['id'],
+                $internalStatus,
+                $mpStatus,
+                $nextBillingDate,
+                null
+            );
+            if ($previousStatus !== $internalStatus) {
+                $fresh = $this->subscriptionModel->findById((int)$existingByMpId['id']);
+                if ($fresh !== null) {
+                    $this->subscriptionModel->applyStatusToUser($fresh);
+                }
+            }
+            return [
+                'ok' => true,
+                'action' => 'already_linked',
+                'http_status' => 200,
+                'details' => [
+                    'subscription_id' => (int)$existingByMpId['id'],
+                    'user_id' => $userId,
+                    'plan_slug' => $planSlug,
+                    'status' => $internalStatus,
+                ],
+            ];
+        }
+
+        $pending = $this->subscriptionModel->findActiveOrPendingByUserAndPlan($userId, $planSlug);
+        if ($pending === null) {
+            return [
+                'ok' => false,
+                'action' => 'no_pending_for_user',
+                'http_status' => 200,
+                'details' => [
+                    'user_id' => $userId,
+                    'plan_slug' => $planSlug,
+                    'mp_preapproval_id' => $mpPreapprovalId,
+                ],
+            ];
+        }
+        $previousStatus = (string)$pending['status'];
+        $subscriptionId = (int)$pending['id'];
+        $this->subscriptionModel->attachMpPreapprovalId($subscriptionId, $mpPreapprovalId);
+        $this->subscriptionModel->updateMpData($subscriptionId, $mpPreapprovalId, $mpStatus, $nextBillingDate);
+
+        $this->subscriptionModel->updateStatusById(
+            $subscriptionId,
+            $internalStatus,
+            $mpStatus,
+            $nextBillingDate,
+            null
+        );
+
+        if ($previousStatus !== $internalStatus) {
+            $fresh = $this->subscriptionModel->findById($subscriptionId);
+            if ($fresh !== null) {
+                $this->subscriptionModel->applyStatusToUser($fresh);
+            }
+        }
+
+        return [
+            'ok' => true,
+            'action' => $previousStatus === '' ? 'created' : ($previousStatus !== $internalStatus ? 'activated' : 'updated'),
+            'http_status' => 200,
+            'details' => [
+                'subscription_id' => $subscriptionId,
+                'user_id'       => $userId,
+                'plan_slug'     => $planSlug,
+                'status'        => $internalStatus,
+            ],
+        ];
+    }
 }

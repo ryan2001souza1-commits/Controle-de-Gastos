@@ -247,28 +247,28 @@ if ($action === 'register') {
     if ($existing !== null) {
         $existingMpId = (string)($existing['mp_preapproval_id'] ?? '');
         if ($existingMpId !== '') {
+            $mpService = new MercadoPagoService();
             $reuse = $mpService->getPreapproval($existingMpId);
             if ($reuse['ok'] === true && is_array($reuse['data'])) {
                 $status = strtolower((string)($reuse['data']['status'] ?? ''));
                 $init = $reuse['data']['init_point'] ?? null;
-                if ($status === 'pending' && is_string($init) && $init !== '') {
-                    header('Location: ' . $init, true, 302);
-                    exit;
-                }
                 if ($status === 'authorized') {
                     header('Location: /index.php?action=meu_plano&subscribed=1', true, 302);
+                    exit;
+                }
+                if ($status === 'pending' && is_string($init) && $init !== '') {
+                    header('Location: ' . $init, true, 302);
                     exit;
                 }
             }
         }
     }
 
-    $created = $subscriptionModel->createPending($userId, $slug, $planId, $externalReference);
-    $localSubscriptionId = $created['id'];
+    $subscriptionModel->createPending($userId, $slug, $planId, $externalReference);
 
     try {
         $mpService = new MercadoPagoService();
-        $result = $mpService->createPreapproval($slug, $userId, $email, $externalReference);
+        $result = $mpService->getInitPointForPlan($slug, $userId, $email);
     } catch (Throwable $e) {
         error_log('[subscribe] ' . $e->getMessage());
         header('Location: /index.php?action=meu_plano&error=service_error');
@@ -276,17 +276,20 @@ if ($action === 'register') {
     }
 
     if ($result['ok'] === false) {
-        error_log('[subscribe] createPreapproval falhou: ' . ($result['error'] ?? 'unknown'));
-        header('Location: /index.php?action=meu_plano&error=' . rawurlencode((string)($result['error'] ?? 'service_error')));
+        $errMap = [
+            'plan_not_found'    => 'plan_not_found',
+            'invalid_user'      => 'invalid_plan',
+            'invalid_email'     => 'invalid_plan',
+            'network_error'     => 'service_error',
+            'invalid_response'  => 'service_error',
+            'missing_init_point'=> 'service_error',
+        ];
+        $err = $errMap[$result['error']] ?? 'service_error';
+        header('Location: /index.php?action=meu_plano&error=' . rawurlencode($err));
         exit;
     }
 
-    $subscriptionModel->attachMpPreapprovalId(
-        $localSubscriptionId,
-        (string)$result['preapproval_id']
-    );
-
-    $initPoint = (string)$result['init_point'];
+    $initPoint = (string)($result['init_point'] ?? '');
     if ($initPoint === '') {
         header('Location: /index.php?action=meu_plano&error=service_error');
         exit;
