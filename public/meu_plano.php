@@ -58,6 +58,7 @@ $errMessages = [
     'already_subscribed'    => 'Você já possui uma assinatura ativa.',
     'no_active_subscription'=> 'Você não possui uma assinatura ativa.',
     'method'                => 'Método não permitido.',
+    'service_error'         => 'Não foi possível iniciar o pagamento. Tente novamente.',
 ];
 $errText = $errMessages[$errKey] ?? null;
 ?>
@@ -235,18 +236,17 @@ $errText = $errMessages[$errKey] ?? null;
                     </div>
 
                     <div style="width:100%">
-                        <button
-                            type="button"
+                        <a
+                            href="/index.php?action=subscribe&plan=<?= htmlspecialchars($slug) ?>"
                             class="btn"
-                            style="width:100%;justify-content:center;border:0;cursor:not-allowed;font:inherit;color:var(--color-text-3);background:var(--color-surface-2);color:var(--color-text-3);opacity:0.6"
-                            disabled
-                            title="Pagamento temporariamente indisponível">
+                            style="width:100%;justify-content:center;text-decoration:none;display:flex;align-items:center;gap:6px"
+                            title="Atualizar para <?= htmlspecialchars($planName) ?>">
                             <?= render_icon('zap', 15) ?>
                             Atualizar para <?= htmlspecialchars($planName) ?>
-                        </button>
+                        </a>
                     </div>
                     <div style="margin-top:var(--space-2);font-size:11px;color:var(--color-text-3);text-align:center">
-                        Pagamento indisponível no momento
+                        Clique para iniciar a assinatura
                     </div>
                 </div>
             </div>

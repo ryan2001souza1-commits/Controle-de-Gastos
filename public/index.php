@@ -66,6 +66,7 @@ require_once __DIR__ . '/../src/controllers/BugReportController.php';
 require_once __DIR__ . '/../src/controllers/FeedbackController.php';
 require_once __DIR__ . '/../src/services/AiFinanceContext.php';
 require_once __DIR__ . '/../src/services/AiService.php';
+require_once __DIR__ . '/../src/services/MercadoPagoService.php';
 require_once __DIR__ . '/../src/controllers/AiController.php';
 
 
@@ -205,6 +206,47 @@ if ($action === 'register') {
     $profileController->index();
 } elseif ($action === 'meu_plano') {
     $profileController->meuPlano();
+} elseif ($action === 'subscribe') {
+    requireLogin();
+    $userId = (int)($_SESSION['user_id'] ?? 0);
+    $email  = $_SESSION['user_email'] ?? '';
+    $slug   = strtolower(trim($_GET['plan'] ?? ''));
+
+    if (!in_array($slug, ['pro', 'premium'], true)) {
+        header('Location: /index.php?action=meu_plano&error=invalid_plan');
+        exit;
+    }
+
+    try {
+        $mpService = new MercadoPagoService();
+        $result = $mpService->getInitPointForPlan($slug, $userId, $email);
+    } catch (Throwable $e) {
+        error_log('[subscribe] ' . $e->getMessage());
+        header('Location: /index.php?action=meu_plano&error=service_error');
+        exit;
+    }
+
+    if ($result['ok'] === false) {
+        $errMap = [
+            'plan_not_found'   => 'plan_not_found',
+            'invalid_user'     => 'invalid_plan',
+            'invalid_email'    => 'invalid_plan',
+            'network_error'    => 'service_error',
+            'invalid_response' => 'service_error',
+            'missing_init_point' => 'service_error',
+        ];
+        $err = $errMap[$result['error']] ?? 'service_error';
+        header('Location: /index.php?action=meu_plano&error=' . $err);
+        exit;
+    }
+
+    $initPoint = $result['init_point'];
+    if (!is_string($initPoint) || $initPoint === '') {
+        header('Location: /index.php?action=meu_plano&error=service_error');
+        exit;
+    }
+    header('Location: ' . $initPoint, true, 302);
+    exit;
 } elseif ($action === 'update_profile') {
     $profileController->updateProfile();
 } elseif ($action === 'update_password') {
