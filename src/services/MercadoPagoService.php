@@ -358,7 +358,7 @@ class MercadoPagoService
                 return [
                     'ok' => true,
                     'status' => $httpStatus,
-                    'data' => is_array($data) ? $data : ['status' => 'cancelled'],
+                    'data' => ['status' => 'cancelled'],
                     'already_cancelled' => true,
                 ];
             }
@@ -410,5 +410,48 @@ class MercadoPagoService
         $httpStatus = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlErr = curl_error($ch);
         $body = is_string($resp) ? $resp : '';
+    }
+
+    /**
+     * Status semanticos validos de preapproval no Mercado Pago.
+     * Qualquer outro valor (inteiro, HTTP code, vazio, desconhecido)
+     * NAO deve ser gravado em subscription.raw_status.
+     */
+    private const VALID_RAW_STATUSES = [
+        'authorized', 'active', 'paused', 'cancelled', 'canceled',
+        'expired', 'pending', 'in_process', 'rejected', 'failure',
+    ];
+
+    /**
+     * Normaliza um valor bruto vindo do body da resposta MP para uso
+     * em subscription.raw_status. Retorna:
+     * - valor normalizado (lowercase, trim) se for status semantico conhecido;
+     * - 'cancelled' se for codigo HTTP de sucesso (2xx) numa chamada de cancel;
+     * - null se nao puder ser usado (int, codigo HTTP, vazio, desconhecido).
+     *
+     * @param mixed $rawValue  Valor bruto (pode ser string, int, null)
+     * @param bool  $isCancelPath  Se true, normaliza HTTP 2xx para 'cancelled'
+     *                             (chamada de cancelPreapproval com sucesso).
+     */
+    public static function sanitizeRawStatus($rawValue, bool $isCancelPath = false): ?string
+    {
+        if ($rawValue === null) return null;
+        if (is_int($rawValue)) {
+            if ($isCancelPath && $rawValue >= 200 && $rawValue < 300) return 'cancelled';
+            return null;
+        }
+        if (!is_string($rawValue)) return null;
+        $normalized = strtolower(trim($rawValue));
+        if ($normalized === '') return null;
+        if (is_numeric($normalized)) {
+            $n = (int)$normalized;
+            if ($isCancelPath && $n >= 200 && $n < 300) return 'cancelled';
+            return null;
+        }
+        if (in_array($normalized, self::VALID_RAW_STATUSES, true)) return $normalized;
+        if ($isCancelPath) {
+            return 'cancelled';
+        }
+        return null;
     }
 }

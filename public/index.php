@@ -462,7 +462,11 @@ if ($action === 'register') {
 
         error_log(sprintf('[cancel.local_sync_start] user_id=%d subscription_id=%d result=%s', $userId, $subId, $resultType));
 
-        $mpStatus = strtolower(trim((string)($cancelResult['data']['status'] ?? '')));
+        $rawStatus = MercadoPagoService::sanitizeRawStatus(
+            $cancelResult['data']['status'] ?? null,
+            true
+        );
+        $mpStatus = $rawStatus ?? 'cancelled';
         $internalStatus = MercadoPagoWebhookService::mapMpStatusToInternal($mpStatus);
 
         $subscriptionModel->updateStatusById(

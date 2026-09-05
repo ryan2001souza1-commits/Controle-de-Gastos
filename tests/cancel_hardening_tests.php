@@ -363,7 +363,8 @@ function runCancelFlow_R(TracedPDOH $db, THMpService $mp, $userId) {
         if ($mpId === '') return ['redirect' => 'no_active_subscription', 'result' => 'no_mp_id'];
         $cancelResult = $mp->cancelPreapproval($mpId);
         if ($cancelResult['ok'] === false) return ['redirect' => 'cancel_service_error', 'result' => 'mp_error'];
-        $mpStatus = strtolower(trim((string)($cancelResult['data']['status'] ?? '')));
+        $rawStatus = MercadoPagoService::sanitizeRawStatus($cancelResult['data']['status'] ?? null, true);
+        $mpStatus = $rawStatus ?? 'cancelled';
         $internalStatus = MercadoPagoWebhookService::mapMpStatusToInternal($mpStatus);
         $subscriptionModel->updateStatusById($subId, $internalStatus ?? Subscription::STATUS_CANCELLED, $mpStatus, null, null);
         $fresh = $subscriptionModel->findById($subId);
@@ -402,7 +403,76 @@ $excR2 = null; $rR2 = runCancelFlow_R($dbR2, $mpR2, 5);
 ($rR2['result'] !== 'exception') ? pass("R2b: fluxo executou sem exception") : fail("R2b", $rR2['exception']->getMessage());
 ($rR2['redirect'] === 'cancelled=1') ? pass("R2c: redirect cancelled=1") : fail("R2c", $rR2['redirect']);
 ($dbR2->users[5]['plano'] === 'gratuito') ? pass("R2d: plano do user 5 = gratuito") : fail("R2d", $dbR2->users[5]['plano']);
+($dbR1->subs[2]['status'] === 'cancelled') ? pass("R1e: subscription 2 status = cancelled") : fail("R1e", $dbR1->subs[2]['status']);
+($dbR1->subs[2]['raw_status'] === 'cancelled') ? pass("R1f: raw_status = 'cancelled' (NAO 400)") : fail("R1f", $dbR1->subs[2]['raw_status']);
+
+echo "\n=== R2: REGRESSAO - user 5 Pro + already_cancelled ===\n";
+$dbR2 = new TracedPDOH();
+$dbR2->users[5] = ['id'=>5,'plano'=>'pro','plano_status'=>'ativo','active_subscription_id'=>3];
+$dbR2->subs[3] = ['id'=>3,'user_id'=>5,'plan_slug'=>'pro','status'=>'active','raw_status'=>'authorized','mp_preapproval_id'=>'mp_pro_5','external_reference'=>'user_5_pro','grace_period_end'=>null,'next_billing_date'=>null,'start_date'=>null,'cancelled_at'=>null,'paused_at'=>null,'expired_at'=>null];
+
+$mpR2 = new THMpService();
+$mpR2->curlQueue = [['status'=>400, 'body'=>json_encode(['status'=>'cancelled','message'=>'You can not modify a cancelled preapproval.'])]];
+
+$excR2 = null; $rR2 = runCancelFlow_R($dbR2, $mpR2, 5);
+(!isset($rR2['exception'])) ? pass("R2a: MercadoPagoWebhookService disponivel - sem Class not found") : fail("R2a", 'Class not found: ' . $rR2['exception']->getMessage());
+($rR2['result'] !== 'exception') ? pass("R2b: fluxo executou sem exception") : fail("R2b", $rR2['exception']->getMessage());
+($rR2['redirect'] === 'cancelled=1') ? pass("R2c: redirect cancelled=1") : fail("R2c", $rR2['redirect']);
+($dbR2->users[5]['plano'] === 'gratuito') ? pass("R2d: plano do user 5 = gratuito") : fail("R2d", $dbR2->users[5]['plano']);
 ($dbR2->subs[3]['status'] === 'cancelled') ? pass("R2e: subscription 3 status = cancelled") : fail("R2e", $dbR2->subs[3]['status']);
+($dbR2->subs[3]['raw_status'] === 'cancelled') ? pass("R2f: raw_status = 'cancelled' (NAO 400)") : fail("R2f", $dbR2->subs[3]['raw_status']);
+
+echo "\n=== R3: HTTP 200 + body status='cancelled' ===\n";
+$dbR3 = new TracedPDOH();
+$dbR3->users[7] = ['id'=>7,'plano'=>'premium','plano_status'=>'ativo','active_subscription_id'=>4];
+$dbR3->subs[4] = ['id'=>4,'user_id'=>7,'plan_slug'=>'premium','status'=>'active','raw_status'=>'authorized','mp_preapproval_id'=>'mp_premium_7','external_reference'=>'user_7_premium','grace_period_end'=>null,'next_billing_date'=>null,'start_date'=>null,'cancelled_at'=>null,'paused_at'=>null,'expired_at'=>null];
+
+$mpR3 = new THMpService();
+$mpR3->curlQueue = [['status'=>200, 'body'=>json_encode(['status'=>'cancelled','id'=>'mp_premium_7'])]];
+
+$excR3 = null; $rR3 = runCancelFlow_R($dbR3, $mpR3, 7);
+($rR3['result'] !== 'exception') ? pass("R3a: fluxo executou sem exception") : fail("R3a", $rR3['exception']->getMessage());
+($rR3['redirect'] === 'cancelled=1') ? pass("R3b: redirect cancelled=1") : fail("R3c", $rR3['redirect']);
+($dbR3->subs[4]['raw_status'] === 'cancelled') ? pass("R3c: raw_status='cancelled'") : fail("R3c", $dbR3->subs[4]['raw_status']);
+
+echo "\n=== R4: HTTP 200 + body status=200 (inteiro) -> raw_status='cancelled' ===\n";
+$dbR4 = new TracedPDOH();
+$dbR4->users[8] = ['id'=>8,'plano'=>'premium','plano_status'=>'ativo','active_subscription_id'=>5];
+$dbR4->subs[5] = ['id'=>5,'user_id'=>8,'plan_slug'=>'premium','status'=>'active','raw_status'=>'authorized','mp_preapproval_id'=>'mp_premium_8','external_reference'=>'user_8_premium','grace_period_end'=>null,'next_billing_date'=>null,'start_date'=>null,'cancelled_at'=>null,'paused_at'=>null,'expired_at'=>null];
+
+$mpR4 = new THMpService();
+$mpR4->curlQueue = [['status'=>200, 'body'=>json_encode(['status'=>200,'id'=>'mp_premium_8'])]];
+
+$excR4 = null; $rR4 = runCancelFlow_R($dbR4, $mpR4, 8);
+($rR4['result'] !== 'exception') ? pass("R4a: fluxo executou sem exception") : fail("R4a", $rR4['exception']->getMessage());
+($rR4['redirect'] === 'cancelled=1') ? pass("R4b: redirect cancelled=1") : fail("R4b", $rR4['redirect']);
+($dbR4->subs[5]['raw_status'] === 'cancelled') ? pass("R4c: raw_status='cancelled' (NAO 200)") : fail("R4c", $dbR4->subs[5]['raw_status']);
+($dbR4->subs[5]['raw_status'] !== '200') ? pass("R4d: raw_status NUNCA = '200' (codigo HTTP)") : fail("R4d", $dbR4->subs[5]['raw_status']);
+
+echo "\n=== R5: sanitizeRawStatus() - testes unitarios ===\n";
+$sanitize = function($v, $cancel=false) {
+    return MercadoPagoService::sanitizeRawStatus($v, $cancel);
+};
+($sanitize('cancelled', true) === 'cancelled') ? pass("R5a: 'cancelled' -> 'cancelled'") : fail("R5a", $sanitize('cancelled', true));
+($sanitize('authorized', false) === 'authorized') ? pass("R5b: 'authorized' (sem cancel) -> preservado") : fail("R5b", $sanitize('authorized', false));
+($sanitize(400, true) === null) ? pass("R5c: int 400 -> null (HTTP code rejeitado)") : fail("R5c", $sanitize(400, true));
+($sanitize(200, true) === 'cancelled') ? pass("R5d: int 200 em cancel -> 'cancelled'") : fail("R5d", $sanitize(200, true));
+($sanitize('400', true) === null) ? pass("R5e: '400' (string) -> null") : fail("R5e", $sanitize('400', true));
+($sanitize('200', true) === 'cancelled') ? pass("R5f: '200' (string) em cancel -> 'cancelled'") : fail("R5f", $sanitize('200', true));
+($sanitize(null) === null) ? pass("R5g: null -> null") : fail("R5g", $sanitize(null));
+($sanitize('') === null) ? pass("R5h: '' -> null") : fail("R5h", $sanitize(''));
+($sanitize('paused', false) === 'paused') ? pass("R5i: 'paused' em n-cancel -> 'paused'") : fail("R5i", $sanitize('paused', false));
+($sanitize('invalid_status', true) === 'cancelled') ? pass("R5j: 'invalid_status' em cancel -> 'cancelled' (fallback)") : fail("R5j", $sanitize('invalid_status', true));
+
+echo "\n=== R6: MercadoPagoService cancelPreapproval forca data.status='cancelled' no already_cancelled ===\n";
+$mpR6 = new THMpService();
+$mpR6->curlQueue = [['status'=>400, 'body'=>json_encode(['message'=>'You can not modify a cancelled preapproval.','status'=>400])]];
+$res6 = $mpR6->cancelPreapproval('mp_test_123');
+($res6['ok'] === true) ? pass("R6a: ok=true") : fail("R6a", $res6['ok'] ?? 'MISSING');
+($res6['already_cancelled'] === true) ? pass("R6b: already_cancelled=true") : fail("R6b");
+(($res6['data']['status'] ?? 'MISSING') === 'cancelled') ? pass("R6c: data.status='cancelled' (forcado, nao 400)") : fail("R6c", $res6['data']['status'] ?? 'MISSING');
+($res6['data']['status'] !== '400') ? pass("R6d: data.status NAO e '400'") : fail("R6d");
+(($res6['data']['status'] ?? '') !== '200') ? pass("R6e: data.status NAO e '200'") : fail("R6e");
 
 
 echo "\n=== RESUMO FINAL ===\n";
