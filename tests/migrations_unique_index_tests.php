@@ -91,19 +91,19 @@ assert_test(
     'MG07a: UNIQUE INDEX criado sobre mp_preapproval_id (mesma coluna do nao-unique existente)'
 );
 
-echo "\n--- MG08: validacao COALESCE no storeInitPoint ---\n";
+echo "\n--- MG08: validacao checkout_url no storeInitPoint ---\n";
 $subSrc = file_get_contents($ROOT . '/src/models/Subscription.php');
 assert_test(
-    strpos($subSrc, "COALESCE(raw_status, '') || '|init:'") !== false,
-    "MG08a: storeInitPoint usa COALESCE + || (correção 42P18)"
+    strpos($subSrc, 'checkout_url') !== false,
+    "MG08a: storeInitPoint usa checkout_url"
 );
 assert_test(
-    strpos($subSrc, "CAST(:init AS text)") !== false,
-    "MG08b: storeInitPoint usa CAST(:init AS text)"
+    strpos($subSrc, 'SET checkout_url = :init') !== false,
+    "MG08b: storeInitPoint usa SET checkout_url = :init"
 );
 assert_test(
-    strpos($subSrc, "raw_status NOT LIKE '%|init:%'") !== false,
-    'MG08c: storeInitPoint idempotente (NOT LIKE guarda)'
+    strpos($subSrc, 'raw_status NOT LIKE \'%|init:%\'') === false,
+    "MG08c: storeInitPoint NAO usa mais NOT LIKE %|init:%"
 );
 
 echo "\n=== RESUMO ===\n";

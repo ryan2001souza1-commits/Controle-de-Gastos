@@ -1,17 +1,11 @@
 <?php
 /**
- * TESTES DE REGRESSÃO PARA Subscription::storeInitPoint()
+ * TESTES DE REGRESSAO PARA Subscription::storeInitPoint() + checkout_url
  *
- * SQLSTATE[42P18] em produção: CONCAT(COALESCE(raw_status,''),'|init:',:init)
- * causava "could not determine data type of parameter $1" no PostgreSQL
- * quando :init era enviado como unknown em posição variádica de concat().
+ * Corrigido: storeInitPoint agora usa checkout_url (TEXT) em vez de raw_status (VARCHAR(40)).
+ * getStoredInitPoint prioriza checkout_url com fallback para raw_status legado.
  *
- * Correção: COALESCE(raw_status,'') || '|init:' || CAST(:init AS text)
- * Elimina o unknown do placeholder e tipa explicitamente como text.
- *
- * Estes testes verificam:
- * 1. S1-S8: storeInitPoint isolado (diversos raw_status e URLs)
- * 2. F1-F4: action=subscribe completo (criação + storeInitPoint)
+ * T1-T14: storeInitPoint/getStoredInitPoint isolados
  */
 
 $ROOT = dirname(__DIR__);
@@ -22,48 +16,53 @@ require_once $ROOT . '/src/models/Plan.php';
 ini_set('display_errors', '1');
 error_reporting(E_ALL);
 
-/** Cria um mock PDO com tabela subscriptions inicializável */
+$passed = 0; $failed = 0;
+function pass(string $n): void { global $passed; $passed++; echo "  \033[32m✓\033[0m $n\n"; }
+function fail(string $n, string $d = ''): void { global $failed; $failed++; echo "  \033[31m✗\033[0m $n" . ($d ? " [$d]" : "") . "\n"; }
+
+function emptySub(int $id, int $uid, string $slug, ?string $raw = null, ?string $checkout = null): array {
+    return [
+        'id'=>$id,'user_id'=>$uid,'plan_slug'=>$slug,'status'=>'pending',
+        'raw_status'=>$raw,'checkout_url'=>$checkout,'mp_preapproval_id'=>'','external_reference'=>"user_{$uid}_{$slug}",
+        'next_billing_date'=>null,'grace_period_end'=>null,'start_date'=>null,
+        'cancelled_at'=>null,'paused_at'=>null,'expired_at'=>null,
+    ];
+}
+
+/** Cria mock PDO que retorna rowCount real baseado em mudanca de estado */
 function makeMockDb(array $subscriptions = [], array $usuarios = []): object {
     return new class($subscriptions, $usuarios) {
         public array $queries = [];
         public array $params = [];
         public array $tables;
         public function __construct(array $subs, array $us) {
-            $this->tables = [
-                'subscriptions' => $subs,
-                'usuarios' => $us,
-            ];
+            $this->tables = ['subscriptions' => $subs, 'usuarios' => $us];
         }
         public function prepare(string $sql) {
             return new class($this, $sql) {
-                private $pdo;
-                private $sql;
-                private $result = null;
+                private $pdo; private $sql; private $result = null; private int $rc = 1;
                 public function __construct($p, $s) { $this->pdo = $p; $this->sql = $s; }
                 public function execute(array $params = []): bool {
                     $this->pdo->queries[] = $this->sql;
                     $this->pdo->params[] = $params;
                     $s = strtolower(trim($this->sql));
 
-                    if (str_starts_with($s, 'update') && str_contains($s, 'subscriptions') && str_contains($s, 'raw_status') && !str_contains($s, '|init:')) {
+                    if (str_starts_with($s, 'update') && str_contains($s, 'subscriptions') && str_contains($s, 'checkout_url')) {
                         $id = (int)($params[':id'] ?? 0);
-                        if (!isset($this->pdo->tables['subscriptions'][$id])) return true;
-                        if (isset($params[':raw_status'])) {
-                            $this->pdo->tables['subscriptions'][$id]['raw_status'] = $params[':raw_status'];
-                        }
-                        if (isset($params[':status'])) {
-                            $this->pdo->tables['subscriptions'][$id]['status'] = $params[':status'];
-                        }
+                        if (!isset($this->pdo->tables['subscriptions'][$id])) { $this->rc = 0; return true; }
+                        $cur = $this->pdo->tables['subscriptions'][$id]['checkout_url'] ?? null;
+                        if ($cur !== null) { $this->rc = 0; return true; }
+                        $this->pdo->tables['subscriptions'][$id]['checkout_url'] = $params[':init'] ?? '';
                         return true;
                     }
-                    if (str_starts_with($s, 'update') && str_contains($s, 'subscriptions') && str_contains($s, 'raw_status') && str_contains($s, '|init:')) {
+                    if (str_starts_with($s, 'update') && str_contains($s, 'subscriptions') && str_contains($s, 'raw_status') && !str_contains($s, 'checkout_url')) {
                         $id = (int)($params[':id'] ?? 0);
-                        if (!isset($this->pdo->tables['subscriptions'][$id])) return true;
-                        $raw = $params[':init'] ?? '';
-                        $current = $this->pdo->tables['subscriptions'][$id]['raw_status'] ?? '';
-                        $current = $current === null ? '' : $current;
-                        if (strpos($current, '|init:') !== false) return true;
-                        $this->pdo->tables['subscriptions'][$id]['raw_status'] = $current . '|init:' . $raw;
+                        if (isset($this->pdo->tables['subscriptions'][$id])) {
+                            $changed = 0;
+                            if (isset($params[':raw_status']) && $this->pdo->tables['subscriptions'][$id]['raw_status'] !== $params[':raw_status']) { $this->pdo->tables['subscriptions'][$id]['raw_status'] = $params[':raw_status']; $changed = 1; }
+                            if (isset($params[':status']) && $this->pdo->tables['subscriptions'][$id]['status'] !== $params[':status']) { $this->pdo->tables['subscriptions'][$id]['status'] = $params[':status']; $changed = 1; }
+                            $this->rc = $changed;
+                        } else { $this->rc = 0; }
                         return true;
                     }
                     if (str_starts_with($s, 'update') && str_contains($s, 'usuarios')) {
@@ -80,6 +79,12 @@ function makeMockDb(array $subscriptions = [], array $usuarios = []): object {
                         } unset($u);
                         return true;
                     }
+                    if (str_starts_with($s, 'select') && str_contains($s, 'checkout_url') && isset($params[':id']) && !str_contains($s, 'from usuarios')) {
+                        $id = (int)$params[':id'];
+                        $url = $this->pdo->tables['subscriptions'][$id]['checkout_url'] ?? null;
+                        $this->result = new class($url) { private $v; public function __construct($v){$this->v=$v;} public function fetch(){return $this->v;} public function fetchColumn(){return $this->v;} public function fetchAll(){return [$this->v];} public function rowCount(){return $this->v===null?0:1;} };
+                        return true;
+                    }
                     if (str_starts_with($s, 'select') && str_contains($s, 'raw_status') && isset($params[':id']) && !str_contains($s, 'active_subscription_id') && !str_contains($s, 'from usuarios')) {
                         $id = (int)$params[':id'];
                         $raw = $this->pdo->tables['subscriptions'][$id]['raw_status'] ?? null;
@@ -89,9 +94,7 @@ function makeMockDb(array $subscriptions = [], array $usuarios = []): object {
                     if (str_starts_with($s, 'select') && str_contains($s, 'from subscriptions') && isset($params[':uid']) && !isset($params[':id']) && !isset($params[':slug'])) {
                         $row = null;
                         foreach ($this->pdo->tables['subscriptions'] as $sub) {
-                            if ((int)$sub['user_id'] === (int)$params[':uid'] && in_array($sub['status'], ['pending','active','paused'], true)) {
-                                $row = $sub; break;
-                            }
+                            if ((int)$sub['user_id'] === (int)$params[':uid'] && in_array($sub['status'], ['pending','active','paused'], true)) { $row = $sub; break; }
                         }
                         $this->result = new class($row) { private $r; public function __construct($r){$this->r=$r;} public function fetch(){return $this->r;} public function fetchColumn(){return $this->r['id']??null;} public function fetchAll(){return $this->r?[$this->r]:[];} public function rowCount(){return $this->r?1:0;} };
                         return true;
@@ -105,9 +108,7 @@ function makeMockDb(array $subscriptions = [], array $usuarios = []): object {
                     if (str_starts_with($s, 'select') && str_contains($s, 'from subscriptions') && isset($params[':uid']) && isset($params[':slug'])) {
                         $row = null;
                         foreach ($this->pdo->tables['subscriptions'] as $sub) {
-                            if ((int)$sub['user_id'] === (int)$params[':uid'] && $sub['plan_slug'] === $params[':slug'] && in_array($sub['status'], ['pending','active','paused'], true)) {
-                                $row = $sub; break;
-                            }
+                            if ((int)$sub['user_id'] === (int)$params[':uid'] && $sub['plan_slug'] === $params[':slug'] && in_array($sub['status'], ['pending','active','paused'], true)) { $row = $sub; break; }
                         }
                         $this->result = new class($row) { private $r; public function __construct($r){$this->r=$r;} public function fetch(){return $this->r;} public function fetchColumn(){return $this->r['id']??null;} public function fetchAll(){return $this->r?[$this->r]:[];} public function rowCount(){return $this->r?1:0;} };
                         return true;
@@ -115,9 +116,7 @@ function makeMockDb(array $subscriptions = [], array $usuarios = []): object {
                     if (str_starts_with($s, 'select') && str_contains($s, 'from subscriptions') && isset($params[':uid']) && !isset($params[':slug'])) {
                         $row = null;
                         foreach ($this->pdo->tables['subscriptions'] as $sub) {
-                            if ((int)$sub['user_id'] === (int)$params[':uid'] && in_array($sub['status'], ['active','paused'], true) && ($sub['mp_preapproval_id'] ?? '') !== '') {
-                                $row = $sub; break;
-                            }
+                            if ((int)$sub['user_id'] === (int)$params[':uid'] && in_array($sub['status'], ['active','paused'], true) && ($sub['mp_preapproval_id'] ?? '') !== '') { $row = $sub; break; }
                         }
                         $this->result = new class($row) { private $r; public function __construct($r){$this->r=$r;} public function fetch(){return $this->r;} public function fetchColumn(){return $this->r['id']??null;} public function fetchAll(){return $this->r?[$this->r]:[];} public function rowCount(){return $this->r?1:0;} };
                         return true;
@@ -137,7 +136,7 @@ function makeMockDb(array $subscriptions = [], array $usuarios = []): object {
                         $nextId = count($this->pdo->tables['subscriptions']) > 0 ? max(array_keys($this->pdo->tables['subscriptions'])) + 1 : 1;
                         $this->pdo->tables['subscriptions'][$nextId] = [
                             'id'=>$nextId,'user_id'=>$uid,'plan_slug'=>$slug,'status'=>$status,
-                            'raw_status'=>$raw,'mp_preapproval_id'=>'','external_reference'=>$extRef,
+                            'raw_status'=>$raw,'checkout_url'=>null,'mp_preapproval_id'=>'','external_reference'=>$extRef,
                             'next_billing_date'=>null,'grace_period_end'=>null,'start_date'=>null,
                             'cancelled_at'=>null,'paused_at'=>null,'expired_at'=>null,
                         ];
@@ -150,7 +149,7 @@ function makeMockDb(array $subscriptions = [], array $usuarios = []): object {
                 public function fetchColumn() { return $this->result ? $this->result->fetchColumn() : null; }
                 public function fetch(int $mode = 5) { return $this->result ? $this->result->fetch() : null; }
                 public function fetchAll(): array { return $this->result ? $this->result->fetchAll() : []; }
-                public function rowCount(): int { return $this->result ? $this->result->rowCount() : 0; }
+                public function rowCount(): int { return $this->rc; }
                 public function bindValue($k, $v, $t = null) {}
                 public function bindParam($k, &$v, $t = null) {}
                 public function setAttribute(int $a, $v) { return true; }
@@ -163,177 +162,209 @@ function makeMockDb(array $subscriptions = [], array $usuarios = []): object {
     };
 }
 
-$passed = 0; $failed = 0;
-function pass(string $n): void { global $passed; $passed++; echo "  \033[32m✓\033[0m $n\n"; }
-function fail(string $n, string $d = ''): void { global $failed; $failed++; echo "  \033[31m✗\033[0m $n" . ($d ? " [$d]" : "") . "\n"; }
-
-function wouldFail42P18(string $sql): bool {
-    if (str_contains($sql, 'CONCAT(') && preg_match('/CONCAT\([^)]+:\w+/', $sql)) return true;
-    return false;
-}
-
-function emptySub(int $id, int $uid, string $slug, ?string $raw = null): array {
-    return [
-        'id'=>$id,'user_id'=>$uid,'plan_slug'=>$slug,'status'=>'pending',
-        'raw_status'=>$raw,'mp_preapproval_id'=>'','external_reference'=>"user_{$uid}_{$slug}",
-        'next_billing_date'=>null,'grace_period_end'=>null,'start_date'=>null,
-        'cancelled_at'=>null,'paused_at'=>null,'expired_at'=>null,
-    ];
-}
-
 // =============================================================================
-// S1: storeInitPoint com raw_status NULL — REPRODUTOR DO 42P18
+// T1: storeInitPoint com checkout_url=NULL — URL pequena
 // =============================================================================
-echo "\n=== S1: storeInitPoint raw_status=NULL (reprodutor 42P18) ===\n";
-$db1 = makeMockDb([4 => emptySub(4, 1, 'pro', null)]);
-$url1 = 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_id=abc123xyz&back_url=https%3A%2F%2Fapp.com%2Freturn';
+echo "\n=== T1: storeInitPoint checkout_url=NULL, URL pequena ===\n";
+$db1 = makeMockDb([4 => emptySub(4, 1, 'pro', null, null)]);
+$url1 = 'https://mp.com/checkout/abc123';
 
 $sub1 = new Subscription($db1);
-$sub1->storeInitPoint(4, $url1);
+$ok1 = $sub1->storeInitPoint(4, $url1);
 
 $sql1 = $db1->queries[0] ?? '';
 $params1 = $db1->params[0] ?? [];
-$rawAfter1 = $db1->tables['subscriptions'][4]['raw_status'] ?? null;
+$checkout1 = $db1->tables['subscriptions'][4]['checkout_url'] ?? null;
+$raw1 = $db1->tables['subscriptions'][4]['raw_status'] ?? null;
 
-(!wouldFail42P18($sql1)) ? pass("S1a: SQL NAO contem CONCAT problemático (42P18 corrigido)") : fail("S1a", $sql1);
-(str_contains($sql1, 'CAST(:init AS text)')) ? pass("S1b: SQL contem CAST(:init AS text)") : fail("S1b", $sql1);
-($params1[':init'] ?? '') === $url1 ? pass("S1c: :init recebeu URL completa") : fail("S1c", $params1[':init'] ?? 'MISSING');
-(strpos($rawAfter1 ?? '', '|init:') !== false) ? pass("S1d: raw_status contém |init:") : fail("S1d", $rawAfter1 ?? 'null');
-(strpos($rawAfter1 ?? '', $url1) !== false) ? pass("S1e: raw_status contém URL completa") : fail("S1e", substr($rawAfter1 ?? '', 0, 80));
+(str_contains($sql1, 'checkout_url')) ? pass("T1a: SQL usa checkout_url") : fail("T1a", $sql1);
+(!str_contains($sql1, 'raw_status')) ? pass("T1b: SQL NAO toca raw_status") : fail("T1b");
+(!str_contains($sql1, 'CONCAT')) ? pass("T1c: SQL NAO usa CONCAT") : fail("T1c");
+($checkout1 === $url1) ? pass("T1d: checkout_url = URL") : fail("T1d", $checkout1);
+($raw1 === null) ? pass("T1e: raw_status NAO modificado") : fail("T1e", $raw1);
+($ok1 === true) ? pass("T1f: rowCount > 0") : fail("T1f", var_export($ok1,true));
 
 // =============================================================================
-// S2: storeInitPoint com raw_status vazio
+// T2: storeInitPoint com checkout_url ja preenchido
 // =============================================================================
-echo "\n=== S2: storeInitPoint raw_status='' (vazio) ===\n";
-$db2 = makeMockDb([5 => emptySub(5, 1, 'premium', '')]);
-$url2 = 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_id=def456';
+echo "\n=== T2: storeInitPoint checkout_url ja existe — idempotente ===\n";
+$db2 = makeMockDb([5 => emptySub(5, 1, 'premium', 'authorized', 'https://mp.com/old')]);
+$url2 = 'https://mp.com/new';
 
 $sub2 = new Subscription($db2);
-$sub2->storeInitPoint(5, $url2);
-$rawAfter2 = $db2->tables['subscriptions'][5]['raw_status'] ?? null;
+$ok2 = $sub2->storeInitPoint(5, $url2);
+$checkout2 = $db2->tables['subscriptions'][5]['checkout_url'] ?? null;
 
-($rawAfter2 === '|init:' . $url2) ? pass("S2a: raw_status='|init:URL'") : fail("S2a", $rawAfter2);
+($ok2 === false) ? pass("T2a: rowCount=0 (no-op)") : fail("T2a", var_export($ok2,true));
+($checkout2 === 'https://mp.com/old') ? pass("T2b: checkout_url original preservado") : fail("T2b", $checkout2);
 
 // =============================================================================
-// S3: storeInitPoint com raw_status='authorized'
+// T3: URL > 50 chars
 // =============================================================================
-echo "\n=== S3: storeInitPoint raw_status='authorized' ===\n";
-$db3 = makeMockDb([6 => emptySub(6, 2, 'pro', 'authorized')]);
-$url3 = 'https://mp.com/checkout/pro-long-url-abc123def456ghi789jkl012mno345pq';
+echo "\n=== T3: URL > 50 chars ===\n";
+$db3 = makeMockDb([6 => emptySub(6, 2, 'pro', null, null)]);
+$url3 = 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_id=abc123def456';
 
 $sub3 = new Subscription($db3);
 $sub3->storeInitPoint(6, $url3);
-$rawAfter3 = $db3->tables['subscriptions'][6]['raw_status'] ?? null;
+$checkout3 = $db3->tables['subscriptions'][6]['checkout_url'] ?? null;
 
-($rawAfter3 === 'authorized|init:' . $url3) ? pass("S3a: raw_status='authorized|init:URL'") : fail("S3a", $rawAfter3);
+(strlen($url3) > 50) ? pass("T3a: URL > 50 chars") : fail("T3a", strlen($url3));
+($checkout3 === $url3) ? pass("T3b: URL longa armazenada integralmente") : fail("T3b", $checkout3);
 
 // =============================================================================
-// S4: URL longa com caracteres especiais
+// T4: URL > 500 chars
 // =============================================================================
-echo "\n=== S4: URL longa com ?, &, =, percent-encoding ===\n";
-$db4 = makeMockDb([7 => emptySub(7, 3, 'premium', null)]);
-$longUrl = 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_id=abc123def456ghi789jkl012mno&back_url=https%3A%2F%2Fmyapp.com%2Freturn%3Fid%3D123%26ref%3Duser_3_premium';
+echo "\n=== T4: URL > 500 chars ===\n";
+$db4 = makeMockDb([7 => emptySub(7, 3, 'premium', null, null)]);
+$url4 = 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_id=abc123def456ghi789jkl012mno345pqr678stu901vwx234yz567abc890def123ghi456jkl789mno012pqr345stu678vwx901yz234abc567def890ghi123jkl456mno789pqr012stu345vwx678yz901abc234def567ghi890jkl123mno456pqr789stu012vwx345yz678abc901def234ghi567jkl890mno123pqr456stu789vwx012yz345abc678def901ghi234jkl567mno890pqr123stu456vwx789yz012abc345def678ghi901jkl234mno567pqr890stu123vwx456yz789abc012def345ghi678jkl901mno234pqr567stu890vwx123yz456abc789def012ghi345jkl678mno901pqr234stu567vwx890yz123abc456def789ghi012jkl345mno678pqr901stu234vwx567yz890abc123def456ghi789jkl012mno345pqr678stu901vwx234yz567abc890def123ghi456jkl789mno012pqr345stu678vwx901yz234abc567def890ghi123jkl456mno789pqr012stu345vwx678yz901abc234def567ghi890jkl123mno456pqr789stu012vwx345yz678abc901def234ghi567jkl890mno123pqr456stu789vwx012yz345abc678def901ghi234jkl567mno890pqr123stu456vwx789yz012abc345def678ghi901jkl234mno567pqr890stu123vwx456yz789abc012def345ghi678jkl901mno234pqr567stu890vwx123yz456&back_url=https%3A%2F%2Fmyapp.com%2Freturn%3Fid%3D123%26ref%3Duser_3_premium%26plan%3Dpremium%26ts%3D1700000000';
 
 $sub4 = new Subscription($db4);
-$sub4->storeInitPoint(7, $longUrl);
-$rawAfter4 = $db4->tables['subscriptions'][7]['raw_status'] ?? null;
+$sub4->storeInitPoint(7, $url4);
+$checkout4 = $db4->tables['subscriptions'][7]['checkout_url'] ?? null;
 
-(strpos($rawAfter4 ?? '', $longUrl) !== false) ? pass("S4a: URL longa preservada integralmente") : fail("S4a", substr($rawAfter4 ?? '', 0, 100));
+(strlen($url4) > 500) ? pass("T4a: URL > 500 chars (" . strlen($url4) . ")") : fail("T4a", strlen($url4));
+($checkout4 === $url4) ? pass("T4b: URL > 500 chars armazenada integralmente") : fail("T4b", substr($checkout4 ?? '',0,80));
 
 // =============================================================================
-// S5: URL com percent-encoding (%2F, %3A, %20)
+// T5: URL com ?, &, = e percent-encoding
 // =============================================================================
-echo "\n=== S5: URL com percent-encoding (%2F, %3A, %20) ===\n";
-$db5 = makeMockDb([8 => emptySub(8, 4, 'pro', null)]);
-$encodedUrl = 'https://mp.com/return?ref=user_4_pro&back=https%3A%2F%2Fapp.com%2Fpath%20one';
+echo "\n=== T5: URL com caracteres especiais ===\n";
+$db5 = makeMockDb([8 => emptySub(8, 4, 'pro', null, null)]);
+$url5 = 'https://mp.com/checkout?a=1&b=2&c=%2F%3A%20&d=%C3%A9%C3%A0';
 
 $sub5 = new Subscription($db5);
-$sub5->storeInitPoint(8, $encodedUrl);
-$rawAfter5 = $db5->tables['subscriptions'][8]['raw_status'] ?? null;
+$sub5->storeInitPoint(8, $url5);
+$checkout5 = $db5->tables['subscriptions'][8]['checkout_url'] ?? null;
 
-(strpos($rawAfter5 ?? '', $encodedUrl) !== false) ? pass("S5a: URL encoded preservada") : fail("S5a", $rawAfter5);
-(strpos($rawAfter5 ?? '', '%2F') !== false) ? pass("S5b: %2F preservado") : fail("S5b", $rawAfter5);
-(strpos($rawAfter5 ?? '', '%3A') !== false) ? pass("S5c: %3A preservado") : fail("S5c", $rawAfter5);
+($checkout5 === $url5) ? pass("T5a: URL especial preservada") : fail("T5a", $checkout5);
+(strpos($checkout5, '%2F') !== false) ? pass("T5b: %2F preservado") : fail("T5b");
+(strpos($checkout5, '%3A') !== false) ? pass("T5c: %3A preservado") : fail("T5c");
 
 // =============================================================================
-// S6: segunda chamada não duplica |init:
+// T6: 3 chamadas — apenas 1a grava
 // =============================================================================
-echo "\n=== S6: idempotência — 2ª chamada não duplica |init: ===\n";
-$db6 = makeMockDb([9 => emptySub(9, 5, 'premium', null)]);
+echo "\n=== T6: 3 chamadas — idempotencia ===\n";
+$db6 = makeMockDb([9 => emptySub(9, 5, 'premium', null, null)]);
 $url6a = 'https://mp.com/first';
 $url6b = 'https://mp.com/second';
+$url6c = 'https://mp.com/third';
 
 $sub6 = new Subscription($db6);
-$sub6->storeInitPoint(9, $url6a);
-$sub6->storeInitPoint(9, $url6b);
-$rawAfter6 = $db6->tables['subscriptions'][9]['raw_status'] ?? null;
-$countInit6 = substr_count($rawAfter6 ?? '', '|init:');
+$ok6a = $sub6->storeInitPoint(9, $url6a);
+$ok6b = $sub6->storeInitPoint(9, $url6b);
+$ok6c = $sub6->storeInitPoint(9, $url6c);
+$checkout6 = $db6->tables['subscriptions'][9]['checkout_url'] ?? null;
 
-($rawAfter6 === '|init:' . $url6a) ? pass("S6a: raw_status = |init:URL da 1ª chamada") : fail("S6a", $rawAfter6);
-($countInit6 === 1) ? pass("S6b: apenas 1 |init: (2ª chamada não duplicou)") : fail("S6b", "count=$countInit6");
+($ok6a === true) ? pass("T6a: 1a chamada gravou") : fail("T6a", var_export($ok6a,true));
+($ok6b === false) ? pass("T6b: 2a chamada no-op") : fail("T6b", var_export($ok6b,true));
+($ok6c === false) ? pass("T6c: 3a chamada no-op") : fail("T6c", var_export($ok6c,true));
+($checkout6 === $url6a) ? pass("T6d: checkout_url = URL da 1a chamada") : fail("T6d", $checkout6);
 
 // =============================================================================
-// S7: getStoredInitPoint após storeInitPoint
+// T7: getStoredInitPoint com checkout_url populated
 // =============================================================================
-echo "\n=== S7: getStoredInitPoint retorna URL exata ===\n";
-$db7 = makeMockDb([10 => emptySub(10, 6, 'pro', null)]);
-$url7 = 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_id=stored123';
-
+echo "\n=== T7: getStoredInitPoint — checkout_url populated ===\n";
+$db7 = makeMockDb([10 => emptySub(10, 6, 'pro', 'authorized', 'https://mp.com/stored')]);
 $sub7 = new Subscription($db7);
-$sub7->storeInitPoint(10, $url7);
-$stored = $sub7->getStoredInitPoint(10);
+$stored7 = $sub7->getStoredInitPoint(10);
 
-($stored === $url7) ? pass("S7a: getStoredInitPoint retorna URL exata") : fail("S7a", $stored ?? 'null');
-
-// =============================================================================
-// S8: código-fonte contém CAST(:init AS text)
-// =============================================================================
-echo "\n=== S8: fonte contém CAST(:init AS text) ===\n";
-$src = file_get_contents($ROOT . '/src/models/Subscription.php');
-(str_contains($src, 'CAST(:init AS text)')) ? pass("S8a: fonte contém CAST(:init AS text)") : fail("S8a");
-(!str_contains($src, 'CONCAT(COALESCE(raw_status, \'\'), \'|init:\', :init)')) ? pass("S8b: CONCAT problemático removido") : fail("S8b", "ainda presente no fonte");
+($stored7 === 'https://mp.com/stored') ? pass("T7a: getStoredInitPoint retorna checkout_url") : fail("T7a", $stored7 ?? 'null');
+(count($db7->queries) >= 1) ? pass("T7b: query executada") : fail("T7b");
 
 // =============================================================================
-// F1-F4: action=subscribe — fluxo completo
+// T8: getStoredInitPoint — fallback legacy em raw_status
 // =============================================================================
-echo "\n=== F1: action=subscribe — novo usuário (sem assinatura ativa) ===\n";
-$dbF1 = makeMockDb([]);
-$subF1 = new Subscription($dbF1);
-$resultF1 = $subF1->createPending(10, 'pro', 1, 'user_10_pro');
+echo "\n=== T8: getStoredInitPoint — fallback legacy ===\n";
+$db8 = makeMockDb([11 => emptySub(11, 7, 'premium', 'authorized|init:https://mp.com/legacy', null)]);
+$sub8 = new Subscription($db8);
+$stored8 = $sub8->getStoredInitPoint(11);
 
-(substr_count(implode(' ', $dbF1->queries), '|init:') === 0) ? pass("F1a: createPending não grava |init:") : fail("F1a");
-($dbF1->tables['subscriptions'][1]['raw_status'] ?? '') === 'pending' ? pass("F1b: raw_status='pending' após createPending") : fail("F1b", $dbF1->tables['subscriptions'][1]['raw_status'] ?? '');
+($stored8 === 'https://mp.com/legacy') ? pass("T8a: fallback extrai URL de raw_status") : fail("T8a", $stored8 ?? 'null');
+(count($db8->queries) >= 2) ? pass("T8b: fallback query executada (checkout_url null)") : fail("T8b", count($db8->queries));
 
-echo "\n=== F2: action=subscribe — storeInitPoint após createPending ===\n";
-$urlF2 = 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_id=sub_new_10';
-$subF2 = new Subscription($dbF1);
-$subF2->storeInitPoint(1, $urlF2);
-$rawF2 = $dbF1->tables['subscriptions'][1]['raw_status'] ?? null;
+// =============================================================================
+// T9: getStoredInitPoint — raw_status sem |init:
+// =============================================================================
+echo "\n=== T9: getStoredInitPoint — raw_status sem |init: ===\n";
+$db9 = makeMockDb([12 => emptySub(12, 8, 'pro', 'authorized', null)]);
+$sub9 = new Subscription($db9);
+$stored9 = $sub9->getStoredInitPoint(12);
 
-(!wouldFail42P18($dbF1->queries[1] ?? '')) ? pass("F2a: storeInitPoint SQL sem CONCAT problemático") : fail("F2a");
-(strpos($rawF2 ?? '', $urlF2) !== false) ? pass("F2b: raw_status contém URL do Mercado Pago") : fail("F2b", $rawF2);
+($stored9 === null) ? pass("T9a: retorna null quando sem checkout_url e sem |init:") : fail("T9a", $stored9 ?? 'null');
 
-echo "\n=== F3: action=subscribe — upgrade (pro→premium) com cancelamento da assinatura antiga ===\n";
-$dbF3 = makeMockDb([3 => emptySub(3, 5, 'pro', 'authorized')]);
-$dbF3->tables['subscriptions'][3]['status'] = 'active';
-$subF3 = new Subscription($dbF3);
-$subF3->updateStatusById(3, Subscription::STATUS_CANCELLED, 'cancelled', null, null);
-$rawF3 = $dbF3->tables['subscriptions'][3]['raw_status'] ?? null;
+// =============================================================================
+// T10: getStoredInitPoint — ambos NULL
+// =============================================================================
+echo "\n=== T10: getStoredInitPoint — checkout_url NULL, raw_status NULL ===\n";
+$db10 = makeMockDb([13 => emptySub(13, 9, 'premium', null, null)]);
+$sub10 = new Subscription($db10);
+$stored10 = $sub10->getStoredInitPoint(13);
 
-($rawF3 === 'cancelled') ? pass("F3a: assinatura antiga com raw_status='cancelled'") : fail("F3a", $rawF3);
-(!wouldFail42P18($dbF3->queries[0] ?? '')) ? pass("F3b: updateStatusById SQL sem CONCAT problemático") : fail("F3b");
+($stored10 === null) ? pass("T10a: retorna null quando ambos NULL") : fail("T10a", $stored10 ?? 'null');
 
-echo "\n=== F4: storeInitPoint + getStoredInitPoint integrados ===\n";
-$dbF4 = makeMockDb([11 => emptySub(11, 7, 'premium', null)]);
-$urlF4 = 'https://mp.com/checkout/premium-xyz-abc-123';
+// =============================================================================
+// T11: storeInitPoint NAO escreve em raw_status
+// =============================================================================
+echo "\n=== T11: storeInitPoint nunca escreve |init: em raw_status ===\n";
+$db11 = makeMockDb([14 => emptySub(14, 10, 'pro', 'authorized', null)]);
+$url11 = 'https://mp.com/new-checkout';
 
-$subF4 = new Subscription($dbF4);
-$subF4->storeInitPoint(11, $urlF4);
-$retrieved = $subF4->getStoredInitPoint(11);
+$sub11 = new Subscription($db11);
+$sub11->storeInitPoint(14, $url11);
+$raw11 = $db11->tables['subscriptions'][14]['raw_status'] ?? null;
 
-($retrieved === $urlF4) ? pass("F4a: store+get roundtrip preserva URL") : fail("F4a", $retrieved ?? 'null');
-(strpos($dbF4->queries[0] ?? '', 'CAST(:init AS text)') !== false) ? pass("F4b: SQL corrigido com CAST(:init AS text)") : fail("F4b", $dbF4->queries[0] ?? '');
+($raw11 === 'authorized') ? pass("T11a: raw_status preservado (nao contem |init:)") : fail("T11a", $raw11 ?? 'null');
+(strpos($raw11 ?? '', '|init:') === false) ? pass("T11b: raw_status NAO contem |init:") : fail("T11b", $raw11);
 
+// =============================================================================
+// T12: subscribe fluxo
+// =============================================================================
+echo "\n=== T12: action=subscribe — createPending + storeInitPoint + getStoredInitPoint ===\n";
+$db12 = makeMockDb([]);
+$sub12 = new Subscription($db12);
+$sub12->createPending(20, 'premium', 2, 'user_20_premium');
+
+$url12 = 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_id=sub_new_20';
+$sub12->storeInitPoint(1, $url12);
+$checkout12 = $db12->tables['subscriptions'][1]['checkout_url'] ?? null;
+$stored12 = $sub12->getStoredInitPoint(1);
+
+($checkout12 === $url12) ? pass("T12a: checkout_url armazenado") : fail("T12a", $checkout12);
+($stored12 === $url12) ? pass("T12b: getStoredInitPoint retorna URL") : fail("T12b", $stored12);
+
+// =============================================================================
+// T13: clique duplo
+// =============================================================================
+echo "\n=== T13: clique duplo reutiliza checkout_url ===\n";
+$db13 = makeMockDb([15 => emptySub(15, 11, 'pro', 'pending', null)]);
+$url13a = 'https://mp.com/first';
+$url13b = 'https://mp.com/second';
+
+$sub13 = new Subscription($db13);
+$ok13a = $sub13->storeInitPoint(15, $url13a);
+$stored13a = $sub13->getStoredInitPoint(15);
+$ok13b = $sub13->storeInitPoint(15, $url13b);
+$stored13b = $sub13->getStoredInitPoint(15);
+
+($ok13a === true) ? pass("T13a: 1o clique gravou") : fail("T13a", var_export($ok13a,true));
+($ok13b === false) ? pass("T13b: 2o clique no-op") : fail("T13b", var_export($ok13b,true));
+($stored13a === $url13a) ? pass("T13c: 1o getStoredInitPoint retorna URL correta") : fail("T13c", $stored13a);
+($stored13b === $url13a) ? pass("T13d: 2o getStoredInitPoint retorna URL do 1o clique") : fail("T13d", $stored13b);
+
+// =============================================================================
+// T14: checkout_url novo > fallback legacy
+// =============================================================================
+echo "\n=== T14: checkout_url novo > fallback legacy ===\n";
+$db14 = makeMockDb([16 => emptySub(16, 12, 'premium', 'authorized|init:https://mp.com/legacy', 'https://mp.com/new')]);
+$sub14 = new Subscription($db14);
+$stored14 = $sub14->getStoredInitPoint(16);
+
+($stored14 === 'https://mp.com/new') ? pass("T14a: checkout_url novo tem prioridade") : fail("T14a", $stored14);
+
+// =============================================================================
+// RESUMO
+// =============================================================================
 echo "\n=== RESUMO FINAL ===\n";
 $total = $passed + $failed;
 echo "Total: $total | \033[32mPassed: $passed\033[0m | \033[31mFailed: $failed\033[0m\n";

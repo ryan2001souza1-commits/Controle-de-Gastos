@@ -128,16 +128,17 @@ class Subscription
      * @return array{id:int,created:bool} id da assinatura + se foi criada agora
      */
     /**
-     * Armazena o init_point de MP em raw_status (prefixado) para reutilizacao
+     * Armazena o init_point de MP em checkout_url para reutilizacao
      * em cliques subsequentes. Evita criar multiplas preapprovals no MP.
+     * Idempotente: segunda chamada nao sobrescreve checkout_url existente.
      */
     public function storeInitPoint(int $subscriptionId, string $initPoint): bool
     {
         $stmt = $this->db->prepare(
             "UPDATE subscriptions
-                SET raw_status = COALESCE(raw_status, '') || '|init:' || CAST(:init AS text)
+                SET checkout_url = :init
               WHERE id = :id
-                AND (raw_status NOT LIKE '%|init:%' OR raw_status IS NULL)"
+                AND checkout_url IS NULL"
         );
         $stmt->execute([':init' => $initPoint, ':id' => $subscriptionId]);
         return $stmt->rowCount() > 0;
@@ -145,10 +146,22 @@ class Subscription
 
     /**
      * Recupera o init_point armazenado via storeInitPoint.
+     * Prioriza checkout_url; fallback para raw_status legado.
      */
     public function getStoredInitPoint(int $subscriptionId): ?string
     {
-        $stmt = $this->db->prepare('SELECT raw_status FROM subscriptions WHERE id = :id LIMIT 1');
+        $stmt = $this->db->prepare(
+            'SELECT checkout_url FROM subscriptions WHERE id = :id LIMIT 1'
+        );
+        $stmt->execute([':id' => $subscriptionId]);
+        $url = $stmt->fetchColumn();
+        if (is_string($url) && $url !== '') {
+            return $url;
+        }
+
+        $stmt = $this->db->prepare(
+            'SELECT raw_status FROM subscriptions WHERE id = :id LIMIT 1'
+        );
         $stmt->execute([':id' => $subscriptionId]);
         $raw = $stmt->fetchColumn();
         if (!is_string($raw)) return null;

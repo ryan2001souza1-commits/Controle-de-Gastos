@@ -258,10 +258,32 @@ function runMigrations(PDO $db): void
         "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS external_reference VARCHAR(120)",
         // raw_status: status original retornado pelo Mercado Pago (auditoria)
         "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS raw_status VARCHAR(40) DEFAULT NULL",
+        // checkout_url: URL de checkout/init_point do Mercado Pago
+        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS checkout_url TEXT NULL",
     ];
 
     foreach ($addColumnIfMissing as $sql) {
         $db->exec($sql);
+    }
+
+    // Migration de dados legados: extrair init_point de raw_status para checkout_url.
+    // Idempotente: so preenche checkout_url quando NULL e raw_status contem |init:.
+    // Nao modifica raw_status.
+    $legacyMigration = <<<'SQL'
+        UPDATE subscriptions
+           SET checkout_url = SUBSTRING(
+                  raw_status,
+                  POSITION('|init:' IN raw_status) + 6,
+                  LENGTH(raw_status)
+              )
+         WHERE checkout_url IS NULL
+           AND raw_status IS NOT NULL
+           AND raw_status LIKE '%|init:%'
+SQL;
+    try {
+        $db->exec($legacyMigration);
+    } catch (Throwable $e) {
+        error_log('[migration] falha ao extrair checkout_url legado: ' . $e->getMessage());
     }
 
     require_once __DIR__ . '/migrations/remove_legacy_payment_gateways.php';
