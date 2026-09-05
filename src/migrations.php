@@ -220,6 +220,12 @@ function runMigrations(PDO $db): void
         // cron de renovacoes futuras
         "CREATE INDEX IF NOT EXISTS idx_subscriptions_status_renewal
             ON subscriptions(status, next_billing_date) WHERE status = 'active'",
+        // Mercado Pago: busca por ID do MP
+        "CREATE INDEX IF NOT EXISTS idx_subscriptions_mp_id
+            ON subscriptions(mp_preapproval_id)",
+        // Mercado Pago: busca por external_reference
+        "CREATE INDEX IF NOT EXISTS idx_subscriptions_external_ref
+            ON subscriptions(external_reference)",
     ];
     foreach ($extraIndexes as $sql) {
         try { $db->exec($sql); } catch (Throwable $e) {}
@@ -246,6 +252,12 @@ function runMigrations(PDO $db): void
         // Relacionamento com assinatura ativa
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS active_subscription_id
             INTEGER REFERENCES subscriptions(id) ON DELETE SET NULL",
+        // Mercado Pago: correlacionar com a assinatura externa
+        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS mp_preapproval_id VARCHAR(80)",
+        // external_reference: rastreio do formato user_{ID}_{plano}
+        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS external_reference VARCHAR(120)",
+        // raw_status: status original retornado pelo Mercado Pago (auditoria)
+        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS raw_status VARCHAR(40) DEFAULT NULL",
     ];
 
     foreach ($addColumnIfMissing as $sql) {

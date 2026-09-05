@@ -49,6 +49,83 @@ class Subscription
     }
 
     /**
+     * Busca assinatura mais recente para um usuario, independente do status.
+     */
+    public function findLatestByUserId(int $userId): ?array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT * FROM subscriptions WHERE user_id = :uid ORDER BY id DESC LIMIT 1'
+        );
+        $stmt->execute([':uid' => $userId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
+     * Busca assinatura pelo mp_preapproval_id (ID retornado pelo Mercado Pago).
+     * Retorna null se nao encontrada.
+     */
+    public function findByMpId(string $mpPreapprovalId): ?array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT * FROM subscriptions WHERE mp_preapproval_id = :mpid ORDER BY id DESC LIMIT 1'
+        );
+        $stmt->execute([':mpid' => $mpPreapprovalId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
+     * Cria uma nova assinatura para o usuario com os dados iniciais.
+     */
+    public function create(array $data): int
+    {
+        $stmt = $this->db->prepare(
+            'INSERT INTO subscriptions
+                (user_id, plan_id, plan_slug, mp_preapproval_id, status,
+                 start_date, next_billing_date, raw_status, external_reference)
+             VALUES
+                (:user_id, :plan_id, :plan_slug, :mp_preapproval_id, :status,
+                 :start_date, :next_billing_date, :raw_status, :external_reference)
+             RETURNING id'
+        );
+        $stmt->execute([
+            ':user_id'           => (int)$data['user_id'],
+            ':plan_id'           => (int)$data['plan_id'],
+            ':plan_slug'         => (string)$data['plan_slug'],
+            ':mp_preapproval_id' => (string)$data['mp_preapproval_id'],
+            ':status'            => (string)($data['status'] ?? self::STATUS_PENDING),
+            ':start_date'        => $data['start_date'] ?? null,
+            ':next_billing_date' => $data['next_billing_date'] ?? null,
+            ':raw_status'        => (string)($data['raw_status'] ?? ''),
+            ':external_reference'=> (string)($data['external_reference'] ?? ''),
+        ]);
+        return (int)$stmt->fetchColumn();
+    }
+
+    /**
+     * Atualiza os dados de MP em uma assinatura existente. Idempotente.
+     */
+    public function updateMpData(int $id, string $mpPreapprovalId, string $rawStatus, ?string $nextBillingDate): bool
+    {
+        $stmt = $this->db->prepare(
+            "UPDATE subscriptions
+                SET mp_preapproval_id = :mpid,
+                    raw_status = :raw_status,
+                    next_billing_date = COALESCE(:next_billing_date, next_billing_date),
+                    updated_at = NOW()
+              WHERE id = :id"
+        );
+        $stmt->execute([
+            ':mpid' => $mpPreapprovalId,
+            ':raw_status' => $rawStatus,
+            ':next_billing_date' => $nextBillingDate,
+            ':id' => $id,
+        ]);
+        return $stmt->rowCount() >= 0;
+    }
+
+    /**
      * Atualiza o status de uma assinatura pelo id local (PK).
      * Retorna true se atualizou.
      */

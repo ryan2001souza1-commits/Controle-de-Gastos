@@ -128,4 +128,57 @@ class MercadoPagoService
             'external_reference' => $externalRef,
         ];
     }
+
+    /**
+     * Consulta os dados oficiais de uma assinatura (preapproval) no Mercado Pago.
+     * Esta é a fonte confiavel — nunca confiar apenas no payload do webhook.
+     *
+     * @param string $mpPreapprovalId ID da assinatura no Mercado Pago
+     * @return array{ok:bool, status?:int, data?:array, error?:string}
+     */
+    public function getPreapproval(string $mpPreapprovalId): array
+    {
+        if ($mpPreapprovalId === '' || !preg_match('/^[a-zA-Z0-9_\-]{1,80}$/', $mpPreapprovalId)) {
+            return ['ok' => false, 'status' => 0, 'error' => 'invalid_id'];
+        }
+
+        $url = self::BASE_URL . '/preapproval/' . urlencode($mpPreapprovalId);
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => [
+                'Authorization: Bearer ' . $this->accessToken,
+                'X-Integrator-Id: dev_controle_de_gastos',
+            ],
+            CURLOPT_TIMEOUT        => 20,
+        ]);
+
+        $body = curl_exec($ch);
+        $httpStatus = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr = curl_error($ch);
+        curl_close($ch);
+
+        if ($body === false) {
+            error_log('[MercadoPagoService] getPreapproval curl error: ' . $curlErr);
+            return ['ok' => false, 'status' => 0, 'error' => 'network_error'];
+        }
+
+        $data = json_decode($body, true);
+        if (!is_array($data)) {
+            error_log('[MercadoPagoService] getPreapproval resposta nao-JSON (status=' . $httpStatus . ')');
+            return ['ok' => false, 'status' => $httpStatus, 'error' => 'invalid_response'];
+        }
+
+        if ($httpStatus === 404) {
+            return ['ok' => false, 'status' => 404, 'error' => 'not_found'];
+        }
+
+        if ($httpStatus !== 200) {
+            $msg = is_string($data['message'] ?? null) ? (string)$data['message'] : 'mp_error';
+            error_log('[MercadoPagoService] getPreapproval erro HTTP ' . $httpStatus . ': ' . $msg);
+            return ['ok' => false, 'status' => $httpStatus, 'error' => $msg];
+        }
+
+        return ['ok' => true, 'status' => 200, 'data' => $data];
+    }
 }
