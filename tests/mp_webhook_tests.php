@@ -230,79 +230,93 @@ echo "\n--- validateSignature() ---\n";
 $secret = 'my_webhook_secret_123';
 $now = 1745436000;
 assert_test(
-    MercadoPagoWebhookService::validateSignature('', 'id123', '1745436000', 'any', $now) === false,
+    MercadoPagoWebhookService::validateSignature('', 'id123', '1745436000', 'any', '', $now) === false,
     'secret vazio → invalido'
 );
 assert_test(
-    MercadoPagoWebhookService::validateSignature($secret, '', '1745436000', 'any', $now) === false,
+    MercadoPagoWebhookService::validateSignature($secret, '', '1745436000', 'any', '', $now) === false,
     'id vazio → invalido'
 );
 assert_test(
-    MercadoPagoWebhookService::validateSignature($secret, 'id123', '', 'any', $now) === false,
+    MercadoPagoWebhookService::validateSignature($secret, 'id123', '', 'any', '', $now) === false,
     'ts vazio → invalido'
 );
 assert_test(
-    MercadoPagoWebhookService::validateSignature($secret, 'id123', 'abc', 'any', $now) === false,
+    MercadoPagoWebhookService::validateSignature($secret, 'id123', 'abc', 'any', '', $now) === false,
     'ts nao numerico → invalido'
 );
 assert_test(
-    MercadoPagoWebhookService::validateSignature($secret, 'id123', '1745436000', '', $now) === false,
+    MercadoPagoWebhookService::validateSignature($secret, 'id123', '1745436000', '', '', $now) === false,
     'v1 vazio → invalido'
 );
 
-$manifest = 'preapproval_test_123;1745436000';
+$manifest = 'id:preapproval_test_123;ts:1745436000;';
 $computedV1 = hash_hmac('sha256', $manifest, $secret);
 assert_test(
-    MercadoPagoWebhookService::validateSignature($secret, 'preapproval_test_123', '1745436000', $computedV1, $now) === true,
-    'HMAC correto → valido (timestamp atual)'
-);
-$computedV1Upper = strtoupper($computedV1);
-assert_test(
-    MercadoPagoWebhookService::validateSignature($secret, 'preapproval_test_123', '1745436000', $computedV1Upper, $now) === true,
-    'HMAC uppercase tambem aceito'
+    MercadoPagoWebhookService::validateSignature($secret, 'preapproval_test_123', '1745436000', $computedV1, '', $now) === true,
+    'HMAC correto sem request-id → valido (manifest: id:X;ts:Y;)'
 );
 
 assert_test(
-    MercadoPagoWebhookService::validateSignature($secret, 'preapproval_test_123', '1745436000', 'wrong_hash', $now) === false,
-    'HMAC errado → invalido'
+    MercadoPagoWebhookService::validateSignature($secret, 'preapproval_test_123', '1745436000', $computedV1, '', $now) === true,
+    'HMAC com ID minusculo (manifest preserva case) → valido'
+);
+
+$manifestWithReqId = 'id:preapproval_test_123;request-id:req_abc_123;ts:1745436000;';
+$computedV1WithReqId = hash_hmac('sha256', $manifestWithReqId, $secret);
+assert_test(
+    MercadoPagoWebhookService::validateSignature($secret, 'preapproval_test_123', '1745436000', $computedV1WithReqId, 'req_abc_123', $now) === true,
+    'HMAC correto com request-id → valido (manifest: id:X;request-id:Y;ts:Z;)'
 );
 
 assert_test(
-    MercadoPagoWebhookService::validateSignature($secret, 'preapproval_test_123', '1745436000', $computedV1, $now) === true,
+    MercadoPagoWebhookService::validateSignature($secret, 'preapproval_test_123', '1745436000', 'wrong_hash', 'req_abc_123', $now) === false,
+    'HMAC errado com request-id → invalido'
+);
+
+assert_test(
+    MercadoPagoWebhookService::validateSignature($secret, 'preapproval_test_123', '1745436000', $computedV1, '', $now) === true,
     'timestamp dentro da tolerancia (0s diff) → valido'
 );
 
 $oldTs = (string)($now - 200);
-$computedOld = hash_hmac('sha256', 'preapproval_test_123;' . $oldTs, $secret);
+$manifestOld = 'id:preapproval_test_123;ts:' . $oldTs . ';';
+$computedOld = hash_hmac('sha256', $manifestOld, $secret);
 assert_test(
-    MercadoPagoWebhookService::validateSignature($secret, 'preapproval_test_123', $oldTs, $computedOld, $now) === true,
+    MercadoPagoWebhookService::validateSignature($secret, 'preapproval_test_123', $oldTs, $computedOld, '', $now) === true,
     'timestamp 200s no passado (dentro de 300s) → valido'
 );
 
 $veryOldTs = (string)($now - 400);
-$computedVeryOld = hash_hmac('sha256', 'preapproval_test_123;' . $veryOldTs, $secret);
+$manifestVeryOld = 'id:preapproval_test_123;ts:' . $veryOldTs . ';';
+$computedVeryOld = hash_hmac('sha256', $manifestVeryOld, $secret);
 assert_test(
-    MercadoPagoWebhookService::validateSignature($secret, 'preapproval_test_123', $veryOldTs, $computedVeryOld, $now) === false,
+    MercadoPagoWebhookService::validateSignature($secret, 'preapproval_test_123', $veryOldTs, $computedVeryOld, '', $now) === false,
     'timestamp 400s no passado (fora de 300s) → invalido'
 );
 
 $futureTs = (string)($now + 200);
-$computedFuture = hash_hmac('sha256', 'preapproval_test_123;' . $futureTs, $secret);
+$manifestFuture = 'id:preapproval_test_123;ts:' . $futureTs . ';';
+$computedFuture = hash_hmac('sha256', $manifestFuture, $secret);
 assert_test(
-    MercadoPagoWebhookService::validateSignature($secret, 'preapproval_test_123', $futureTs, $computedFuture, $now) === true,
+    MercadoPagoWebhookService::validateSignature($secret, 'preapproval_test_123', $futureTs, $computedFuture, '', $now) === true,
     'timestamp 200s no futuro (dentro de 300s) → valido'
 );
 
 $veryFutureTs = (string)($now + 400);
-$computedVeryFuture = hash_hmac('sha256', 'preapproval_test_123;' . $veryFutureTs, $secret);
+$manifestVeryFuture = 'id:preapproval_test_123;ts:' . $veryFutureTs . ';';
+$computedVeryFuture = hash_hmac('sha256', $manifestVeryFuture, $secret);
 assert_test(
-    MercadoPagoWebhookService::validateSignature($secret, 'preapproval_test_123', $veryFutureTs, $computedVeryFuture, $now) === false,
+    MercadoPagoWebhookService::validateSignature($secret, 'preapproval_test_123', $veryFutureTs, $computedVeryFuture, '', $now) === false,
     'timestamp 400s no futuro (fora de 300s) → invalido'
 );
 
+$wrongIdTs = (string)($now - 10);
+$manifestWrongId = 'id:wrong_id;ts:' . $wrongIdTs . ';';
+$computedWrongId = hash_hmac('sha256', $manifestWrongId, $secret);
 assert_test(
-    MercadoPagoWebhookService::validateSignature($secret, 'preapproval_test_123', '1745436000', $computedV1, $now) === true,
-    'HMAC valido com ID diferente → valido'
+    MercadoPagoWebhookService::validateSignature($secret, 'preapproval_test_123', $wrongIdTs, $computedWrongId, '', $now) === false,
+    'HMAC valido com ID diferente → invalido'
 );
 
 echo "\n--- Simulação oficial Mercado Pago (data.id=123456) ---\n";

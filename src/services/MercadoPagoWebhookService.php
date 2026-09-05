@@ -35,25 +35,26 @@ class MercadoPagoWebhookService
     /**
      * Valida o header x-signature enviado pelo Mercado Pago.
      *
-     * Formato atual do header:
+     * Formato do header x-signature:
      *   x-signature: ts=<unix_timestamp>,v1=<hex_sha256_hmac>
      *
-     * O HMAC é computado sobre:
-     *   <id>;<ts>
-     * onde <id> é o data.id recebido (parâmetro ?data.id=... ou body data.id).
+     * Manifesto oficial (SDK mercadopago/dx-php):
+     *   id:{data_id};request-id:{x_request_id};ts:{ts};
      *
-     * @param string $secret   MERCADOPAGO_WEBHOOK_SECRET do .env
-     * @param string $id       ID da assinatura (data.id) recebido
-     * @param string $ts       timestamp unix extraido do header
-     * @param string $v1       valor hex do HMAC extraido do header
-     * @param int    $now      timestamp atual (injetado para testes)
-     * @return bool            true se a assinatura for válida
+     * @param string      $secret     MERCADOPAGO_WEBHOOK_SECRET do .env
+     * @param string      $id         ID da assinatura (data.id) recebido
+     * @param string      $ts         timestamp unix extraido do header
+     * @param string      $v1         valor hex do HMAC extraido do header
+     * @param string      $requestId  x-request-id do header (pode ser '')
+     * @param int         $now        timestamp atual em SEGUNDOS (injetado para testes)
+     * @return bool                    true se a assinatura for válida
      */
     public static function validateSignature(
         string $secret,
         string $id,
         string $ts,
         string $v1,
+        string $requestId = '',
         int $now = 0
     ): bool {
         if ($secret === '' || $id === '' || $ts === '' || $v1 === '') {
@@ -70,9 +71,25 @@ class MercadoPagoWebhookService
         if ($diff > self::SIGNATURE_TOLERANCE_SECONDS || $diff < -self::SIGNATURE_TOLERANCE_SECONDS) {
             return false;
         }
-        $manifest = $id . ';' . $ts;
+        $manifest = self::buildManifest($id, $requestId, $ts);
         $expected = hash_hmac('sha256', $manifest, $secret);
         return hash_equals($expected, strtolower($v1));
+    }
+
+    /**
+     * Monta o manifesto HMAC conforme formato oficial do SDK mercadopago/dx-php.
+     * Formato: id:{data_id};request-id:{x_request_id};ts:{ts};
+     * Campos vazios/null são omitidos.
+     */
+    private static function buildManifest(string $id, string $requestId, string $ts): string
+    {
+        $parts = [];
+        $parts[] = 'id:' . $id;
+        if ($requestId !== '') {
+            $parts[] = 'request-id:' . $requestId;
+        }
+        $parts[] = 'ts:' . $ts;
+        return implode(';', $parts) . ';';
     }
 
     /**
@@ -119,8 +136,11 @@ class MercadoPagoWebhookService
             $candidates[] = $headers['X_DATA_ID'];
         }
 
+        if (isset($query['data.id']) && is_string($query['data.id'])) {
+            $candidates[] = $query['data.id'];
+        }
         if (isset($query['data_id'])) $candidates[] = (string)$query['data_id'];
-        if (isset($query['data']['id']) && is_string($query['data']['id'])) {
+        if (isset($query['data']) && is_array($query['data']) && isset($query['data']['id']) && is_string($query['data']['id'])) {
             $candidates[] = $query['data']['id'];
         }
         if (isset($query['id'])) $candidates[] = (string)$query['id'];

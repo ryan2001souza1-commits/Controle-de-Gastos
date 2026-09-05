@@ -120,9 +120,28 @@ if ($webhookSecret !== '') {
         $sigHeader = $headers['HTTP_X_SIGNATURE'];
     }
 
+    $requestId = '';
+    if (isset($headers['x-request-id']) && is_string($headers['x-request-id'])) {
+        $requestId = $headers['x-request-id'];
+    } elseif (isset($headers['HTTP_X_REQUEST_ID']) && is_string($headers['HTTP_X_REQUEST_ID'])) {
+        $requestId = $headers['HTTP_X_REQUEST_ID'];
+    }
+
     [$sigTs, $sigV1] = MercadoPagoWebhookService::parseSignatureHeader($sigHeader);
+
+    $sigDiag = sprintf(
+        '[MPWebhook] sigdiag: x_signature_present=%s x_request_id_present=%s data_id_present=%s ts_present=%s v1_present=%s data_id_source=%s',
+        $sigHeader !== '' ? 'yes' : 'no',
+        $requestId !== '' ? 'yes' : 'no',
+        $mpPreapprovalId !== null ? 'yes' : 'no',
+        $sigTs !== null ? 'yes' : 'no',
+        $sigV1 !== null ? 'yes' : 'no',
+        $mpPreapprovalId !== null ? 'query' : 'none'
+    );
+    error_log($sigDiag);
+
     $valid = ($sigTs !== null && $sigV1 !== null)
-        && MercadoPagoWebhookService::validateSignature($webhookSecret, $mpPreapprovalId, $sigTs, $sigV1);
+        && MercadoPagoWebhookService::validateSignature($webhookSecret, $mpPreapprovalId, $sigTs, $sigV1, $requestId);
 
     if (!$valid) {
         error_log('[MPWebhook] assinatura invalida para preapproval_id');
