@@ -180,12 +180,13 @@ assert_test(strpos($raw, 'new-checkout') !== false, 'RS07c: nova URL presente');
 
 echo "\n--- RS08: COALESCE no CONCAT — verifica SQL fonte ---\n";
 $sourceFile = file_get_contents($ROOT . '/src/models/Subscription.php');
-$needleFix = "CONCAT(COALESCE(raw_status, ''), '|init:'";
+$needleFix = "COALESCE(raw_status, '') || '|init:'";
 $needleBug  = "CONCAT(raw_status, '|init:'";
 $fixFound   = strpos($sourceFile, $needleFix) !== false;
 $bugRemoved = strpos($sourceFile, $needleBug) === false;
-assert_test($fixFound, "RS08a: source contem CONCAT(COALESCE) para evitar NULL");
+assert_test($fixFound, "RS08a: source contem COALESCE(raw_status,'') || '|init:' (correção 42P18)");
 assert_test($bugRemoved, "RS08b: source NAO contem CONCAT(raw_status) desnudo");
+assert_test(strpos($sourceFile, 'CAST(:init AS text)') !== false, "RS08c: source contem CAST(:init AS text)");
 
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;

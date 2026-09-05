@@ -135,7 +135,7 @@ class Subscription
     {
         $stmt = $this->db->prepare(
             "UPDATE subscriptions
-                SET raw_status = CONCAT(COALESCE(raw_status, ''), '|init:', :init)
+                SET raw_status = COALESCE(raw_status, '') || '|init:' || CAST(:init AS text)
               WHERE id = :id
                 AND (raw_status NOT LIKE '%|init:%' OR raw_status IS NULL)"
         );

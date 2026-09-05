@@ -94,12 +94,16 @@ assert_test(
 echo "\n--- MG08: validacao COALESCE no storeInitPoint ---\n";
 $subSrc = file_get_contents($ROOT . '/src/models/Subscription.php');
 assert_test(
-    strpos($subSrc, "CONCAT(COALESCE(raw_status, '')") !== false,
-    "MG08a: storeInitPoint usa COALESCE para evitar NULL"
+    strpos($subSrc, "COALESCE(raw_status, '') || '|init:'") !== false,
+    "MG08a: storeInitPoint usa COALESCE + || (correção 42P18)"
+);
+assert_test(
+    strpos($subSrc, "CAST(:init AS text)") !== false,
+    "MG08b: storeInitPoint usa CAST(:init AS text)"
 );
 assert_test(
     strpos($subSrc, "raw_status NOT LIKE '%|init:%'") !== false,
-    'MG08b: storeInitPoint idempotente (NOT LIKE guarda)'
+    'MG08c: storeInitPoint idempotente (NOT LIKE guarda)'
 );
 
 echo "\n=== RESUMO ===\n";
