@@ -59,6 +59,7 @@ $errMessages = [
     'no_active_subscription'=> 'Você não possui uma assinatura ativa.',
     'method'                => 'Método não permitido.',
     'service_error'         => 'Não foi possível iniciar o pagamento. Tente novamente.',
+    'upgrade_service_error' => 'Não foi possível trocar de plano. Tente novamente.',
 ];
 $errText = $errMessages[$errKey] ?? null;
 ?>
@@ -174,6 +175,23 @@ $errText = $errMessages[$errKey] ?? null;
         </div>
     </div>
 </section>
+
+    <?php if ($canCancelSubscription): ?>
+<section class="panel" style="margin-bottom:var(--space-5)">
+    <div style="text-align:center;padding:var(--space-5) var(--space-4)">
+        <div style="font-size:14px;color:var(--color-text-2);margin-bottom:var(--space-4)">
+            Deseja cancelar sua assinatura? Você pode reativar a qualquer momento.
+        </div>
+        <form method="POST" action="/index.php?action=cancel" onsubmit="return confirm('Tem certeza que deseja cancelar sua assinatura? Você perderá o acesso aos recursos pagos ao final do ciclo atual.');">
+            <?= csrf_field() ?>
+            <button type="submit" class="btn" style="background:var(--color-surface-2);color:var(--color-text-2);border:1px solid var(--color-border);cursor:pointer">
+                <?= render_icon('x-circle', 15) ?>
+                Cancelar assinatura
+            </button>
+        </form>
+    </div>
+</section>
+<?php endif; ?>
 
 <?php if (!empty($upgrades)): ?>
 <section>

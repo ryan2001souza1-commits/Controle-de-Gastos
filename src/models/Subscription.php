@@ -95,12 +95,69 @@ class Subscription
     }
 
     /**
+     * Busca assinatura ativa de um usuario que JA POSSUI preapproval_id no Mercado Pago.
+     * Exclui pendings sem mp_preapproval_id (que ainda estao no checkout).
+     * Exclui registros cancelados/encerrados.
+     *
+     * Usada para:
+     *  - cancelamento de assinatura
+     *  - protecao contra cobranca dupla em upgrade
+     *
+     * @return array|null Assinatura ativa com mp_preapproval_id, ou null se nao encontrada.
+     */
+    public function findActiveByUser(int $userId): ?array
+    {
+        $stmt = $this->db->prepare(
+            "SELECT * FROM subscriptions
+              WHERE user_id = :uid
+                AND status IN ('active','paused')
+                AND mp_preapproval_id IS NOT NULL
+                AND mp_preapproval_id <> ''
+              ORDER BY id DESC LIMIT 1"
+        );
+        $stmt->execute([':uid' => $userId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
      * Cria uma assinatura pendente (preapproval) para um usuario.
      * Idempotente: se ja existir pendente/ativa/pausada do mesmo plano,
      * retorna a existente sem inserir nova.
      *
      * @return array{id:int,created:bool} id da assinatura + se foi criada agora
      */
+    /**
+     * Armazena o init_point de MP em raw_status (prefixado) para reutilizacao
+     * em cliques subsequentes. Evita criar multiplas preapprovals no MP.
+     */
+    public function storeInitPoint(int $subscriptionId, string $initPoint): bool
+    {
+        $stmt = $this->db->prepare(
+            "UPDATE subscriptions
+                SET raw_status = CONCAT(COALESCE(raw_status, ''), '|init:', :init)
+              WHERE id = :id
+                AND (raw_status NOT LIKE '%|init:%' OR raw_status IS NULL)"
+        );
+        $stmt->execute([':init' => $initPoint, ':id' => $subscriptionId]);
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
+     * Recupera o init_point armazenado via storeInitPoint.
+     */
+    public function getStoredInitPoint(int $subscriptionId): ?string
+    {
+        $stmt = $this->db->prepare('SELECT raw_status FROM subscriptions WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $subscriptionId]);
+        $raw = $stmt->fetchColumn();
+        if (!is_string($raw)) return null;
+        if (preg_match('/\|init:(\S+)/', $raw, $m)) {
+            return $m[1];
+        }
+        return null;
+    }
+
     public function createPending(
         int $userId,
         string $planSlug,
@@ -214,7 +271,7 @@ class Subscription
                 SET status = :status,
                     raw_status = :raw_status,
                     next_billing_date = COALESCE(:next_billing_date, next_billing_date),
-                    grace_period_end = COALESCE(:grace_period_end, grace_period_end),
+                    grace_period_end = CASE WHEN :clear_grace = 1 THEN NULL ELSE COALESCE(:grace_period_end, grace_period_end) END,
                     cancelled_at = CASE WHEN :status_cancelled THEN NOW() ELSE cancelled_at END,
                     paused_at    = CASE WHEN :status_paused    THEN NOW() ELSE paused_at    END,
                     expired_at   = CASE WHEN :status_expired   THEN NOW() ELSE expired_at   END,
@@ -222,11 +279,13 @@ class Subscription
                     updated_at   = NOW()
               WHERE id = :id'
         );
+        $clearGrace = ($newStatus === self::STATUS_ACTIVE || $newStatus === self::STATUS_PAUSED) ? 1 : 0;
         $stmt->execute([
             ':status' => $newStatus,
             ':raw_status' => $rawStatus,
             ':next_billing_date' => $nextBillingDate,
             ':grace_period_end' => $gracePeriodEnd,
+            ':clear_grace' => $clearGrace,
             ':status_cancelled' => $newStatus === self::STATUS_CANCELLED ? 1 : 0,
             ':status_paused'    => $newStatus === self::STATUS_PAUSED    ? 1 : 0,
             ':status_expired'   => $newStatus === self::STATUS_EXPIRED   ? 1 : 0,
@@ -251,14 +310,61 @@ class Subscription
         }
 
         if ($status === self::STATUS_ACTIVE || $status === self::STATUS_PAUSED) {
+            $stmtPlan = $this->db->prepare('SELECT plano FROM usuarios WHERE id = :uid LIMIT 1');
+            $stmtPlan->execute([':uid' => $userId]);
+            $currentPlan = (string)$stmtPlan->fetchColumn();
+            if (in_array($currentPlan, ['pro', 'premium'], true) && $currentPlan !== $planSlug) {
+                return false;
+            }
+            $stmtCheck = $this->db->prepare(
+                'SELECT active_subscription_id FROM usuarios WHERE id = :uid LIMIT 1'
+            );
+            $stmtCheck->execute([':uid' => $userId]);
+            $currentActive = $stmtCheck->fetchColumn();
+            if ((int)$currentActive !== (int)$subscription['id']) {
+                $stmtRestore = $this->db->prepare(
+                    "UPDATE usuarios SET active_subscription_id = :sub_id, updated_at = NOW()
+                       WHERE id = :uid"
+                );
+                $stmtRestore->execute([':sub_id' => $subscription['id'], ':uid' => $userId]);
+            }
+            $this->clearGracePeriod($userId);
             $this->grantAccess($userId, $planSlug, (int)$subscription['id']);
             return true;
         }
+        if ($status === self::STATUS_REJECTED) {
+            $stmtCheck = $this->db->prepare(
+                'SELECT active_subscription_id FROM usuarios WHERE id = :uid LIMIT 1'
+            );
+            $stmtCheck->execute([':uid' => $userId]);
+            $currentActive = $stmtCheck->fetchColumn();
+            if ((int)$currentActive !== (int)$subscription['id']) {
+                return false;
+            }
+            $this->startGracePeriodOrRevoke($userId, $planSlug, (int)$subscription['id'], $subscription);
+            return true;
+        }
         if ($status === self::STATUS_CANCELLED || $status === self::STATUS_EXPIRED) {
+            $stmtCheck = $this->db->prepare(
+                'SELECT active_subscription_id FROM usuarios WHERE id = :uid LIMIT 1'
+            );
+            $stmtCheck->execute([':uid' => $userId]);
+            $currentActive = $stmtCheck->fetchColumn();
+            if ((int)$currentActive !== (int)$subscription['id']) {
+                return false;
+            }
             $this->startGracePeriodOrRevoke($userId, $planSlug, (int)$subscription['id'], $subscription);
             return true;
         }
         return false;
+    }
+
+    private function clearGracePeriod(int $userId): void
+    {
+        $stmt = $this->db->prepare(
+            "UPDATE usuarios SET plano_fim = NULL, updated_at = NOW() WHERE id = :uid"
+        );
+        $stmt->execute([':uid' => $userId]);
     }
 
     private function grantAccess(int $userId, string $planSlug, int $subscriptionId): void
@@ -268,7 +374,6 @@ class Subscription
                 SET plano = :plan,
                     plano_status = 'ativo',
                     plano_inicio = COALESCE(plano_inicio, NOW()),
-                    plano_fim = NULL,
                     active_subscription_id = :sub_id,
                     updated_at = NOW()
               WHERE id = :uid"

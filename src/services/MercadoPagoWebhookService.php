@@ -271,6 +271,15 @@ class MercadoPagoWebhookService
             return ['ok' => true, 'action' => 'unmapped_status', 'http_status' => 200];
         }
 
+        $gracePeriodEnd = null;
+        if ($internalStatus === Subscription::STATUS_REJECTED) {
+            if ($nextBillingDate !== null) {
+                $gracePeriodEnd = $nextBillingDate;
+            } else {
+                $gracePeriodEnd = date('Y-m-d H:i:s', time() + 7 * 24 * 60 * 60);
+            }
+        }
+
         $planRow = $this->planModel->findBySlug($planFromMp);
         if ($planRow === null) {
             return ['ok' => true, 'action' => 'plan_not_in_db', 'http_status' => 200];
@@ -284,31 +293,25 @@ class MercadoPagoWebhookService
         }
 
         $existing = $this->subscriptionModel->findByMpId($mpPreapprovalId);
-        $isNew = false;
         if ($existing === null) {
-            $existingByRef = $this->subscriptionModel->findLatestByUserId($userId);
-            if ($existingByRef !== null && $existingByRef['plan_slug'] === $planFromMp) {
-                $this->subscriptionModel->updateMpData(
-                    (int)$existingByRef['id'],
-                    $mpPreapprovalId,
-                    $mpStatus,
-                    $nextBillingDate
-                );
-                $subscriptionId = (int)$existingByRef['id'];
-            } else {
-                $subscriptionId = $this->subscriptionModel->create([
-                    'user_id'           => $userId,
-                    'plan_id'           => $planId,
-                    'plan_slug'         => $planFromMp,
-                    'mp_preapproval_id' => $mpPreapprovalId,
-                    'status'            => $internalStatus,
-                    'raw_status'        => $mpStatus,
-                    'start_date'        => null,
-                    'next_billing_date' => $nextBillingDate,
-                    'external_reference'=> $externalRef,
-                ]);
-                $isNew = true;
+            $pending = $this->subscriptionModel->findActiveOrPendingByUserAndPlan($userId, $planFromMp);
+            $pendingIsLinkable = (
+                $pending !== null
+                && in_array($pending['status'], [Subscription::STATUS_PENDING, Subscription::STATUS_ACTIVE], true)
+                && (empty($pending['mp_preapproval_id']) || $pending['mp_preapproval_id'] === null)
+            );
+            if (!$pendingIsLinkable) {
+                error_log('[MPWebhook] orphan_preapproval_ignored: ' . $mpPreapprovalId
+                    . ' user_id=' . $userId . ' plan=' . $planFromMp);
+                return ['ok' => true, 'action' => 'orphan_preapproval_ignored', 'http_status' => 200];
             }
+            $this->subscriptionModel->updateMpData(
+                (int)$pending['id'],
+                $mpPreapprovalId,
+                $mpStatus,
+                $nextBillingDate
+            );
+            $subscriptionId = (int)$pending['id'];
         } else {
             $subscriptionId = (int)$existing['id'];
             $this->subscriptionModel->updateMpData(
@@ -330,10 +333,10 @@ class MercadoPagoWebhookService
             $internalStatus,
             $mpStatus,
             $nextBillingDate,
-            null
+            $gracePeriodEnd
         );
 
-        if ($previousStatus !== $internalStatus || $isNew) {
+        if ($previousStatus !== $internalStatus) {
             $fresh = $this->subscriptionModel->findById($subscriptionId);
             if ($fresh !== null) {
                 $this->subscriptionModel->applyStatusToUser($fresh);

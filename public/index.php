@@ -115,7 +115,7 @@ $csrfProtectedActions = [
     'update_category', 'delete_category', 'store_budget', 'delete_budget',
     'store_goal', 'update_goal', 'delete_goal', 'update_profile',
     'update_password', 'feedback_create', 'reportar', 'reportar_create',
-    'admin_bug_update', 'admin_feedback_update', 'ai_chat', 'logout',
+    'admin_bug_update', 'admin_feedback_update', 'ai_chat', 'logout', 'cancel',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -264,10 +264,80 @@ if ($action === 'register') {
         }
     }
 
+    if ($slug === 'premium' || $slug === 'pro') {
+        $mpService = new MercadoPagoService();
+        $activeSub = $subscriptionModel->findActiveByUser($userId);
+        if ($activeSub !== null) {
+            $oldMpId = (string)($activeSub['mp_preapproval_id'] ?? '');
+            $oldPlanSlug = (string)($activeSub['plan_slug'] ?? '');
+            $shouldCancel = ($oldMpId !== '')
+                && (
+                    ($slug === 'premium' && $oldPlanSlug === 'pro')
+                    || ($slug === 'pro' && $oldPlanSlug === 'premium')
+                );
+            if ($shouldCancel) {
+                $check = $mpService->getPreapproval($oldMpId);
+                $oldMpStatus = 'unknown';
+                if ($check['ok'] === true && is_array($check['data'])) {
+                    $oldMpStatus = strtolower((string)($check['data']['status'] ?? ''));
+                }
+                if ($oldMpStatus === 'authorized' || $oldMpStatus === 'pending') {
+                    $cancelResult = $mpService->cancelPreapproval($oldMpId);
+                    if ($cancelResult['ok'] === false) {
+                        $http = (int)($cancelResult['status'] ?? 0);
+                        if ($http === 0 || $http >= 500) {
+                            header('Location: /index.php?action=meu_plano&error=upgrade_service_error');
+                            exit;
+                        }
+                        if ($http === 404) {
+                            $subscriptionModel->updateStatusById(
+                                (int)$activeSub['id'],
+                                Subscription::STATUS_CANCELLED,
+                                'cancelled',
+                                null,
+                                null
+                            );
+                            $fresh = $subscriptionModel->findById((int)$activeSub['id']);
+                            if ($fresh !== null) {
+                                $subscriptionModel->applyStatusToUser($fresh);
+                            }
+                        } else {
+                            header('Location: /index.php?action=meu_plano&error=upgrade_service_error');
+                            exit;
+                        }
+                    } else {
+                        $cancelMpStatus = strtolower(trim((string)($cancelResult['data']['status'] ?? '')));
+                        $internalCancel = MercadoPagoWebhookService::mapMpStatusToInternal($cancelMpStatus);
+                        $subscriptionModel->updateStatusById(
+                            (int)$activeSub['id'],
+                            $internalCancel ?? Subscription::STATUS_CANCELLED,
+                            $cancelMpStatus,
+                            null,
+                            null
+                        );
+                        $fresh = $subscriptionModel->findById((int)$activeSub['id']);
+                        if ($fresh !== null) {
+                            $subscriptionModel->applyStatusToUser($fresh);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     $subscriptionModel->createPending($userId, $slug, $planId, $externalReference);
 
+    $pendingSub = $subscriptionModel->findActiveOrPendingByUserAndPlan($userId, $slug);
+    $storedInitPoint = null;
+    if ($pendingSub !== null) {
+        $storedInitPoint = $subscriptionModel->getStoredInitPoint((int)$pendingSub['id']);
+    }
+    if ($storedInitPoint !== null && $storedInitPoint !== '') {
+        header('Location: ' . $storedInitPoint, true, 302);
+        exit;
+    }
+
     try {
-        $mpService = new MercadoPagoService();
         $result = $mpService->getInitPointForPlan($slug, $userId, $email);
     } catch (Throwable $e) {
         error_log('[subscribe] ' . $e->getMessage());
@@ -294,7 +364,83 @@ if ($action === 'register') {
         header('Location: /index.php?action=meu_plano&error=service_error');
         exit;
     }
+    if ($pendingSub !== null) {
+        $subscriptionModel->storeInitPoint((int)$pendingSub['id'], $initPoint);
+    }
     header('Location: ' . $initPoint, true, 302);
+    exit;
+} elseif ($action === 'cancel') {
+    requireLogin();
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        header('Location: /index.php?action=meu_plano&error=method');
+        exit;
+    }
+
+    $userId = (int)($_SESSION['user_id'] ?? 0);
+    if ($userId <= 0) {
+        header('Location: /index.php?action=login');
+        exit;
+    }
+
+    $subscriptionModel = new Subscription($db);
+    $active = $subscriptionModel->findActiveByUser($userId);
+
+    if ($active === null) {
+        header('Location: /index.php?action=meu_plano&error=no_active_subscription');
+        exit;
+    }
+
+    $mpId = (string)($active['mp_preapproval_id'] ?? '');
+    if ($mpId === '') {
+        header('Location: /index.php?action=meu_plano&error=no_active_subscription');
+        exit;
+    }
+
+    $mpService = new MercadoPagoService();
+    $cancelResult = $mpService->cancelPreapproval($mpId);
+
+    if ($cancelResult['ok'] === false) {
+        $http = (int)($cancelResult['status'] ?? 0);
+        if ($http === 0 || $http >= 500) {
+            header('Location: /index.php?action=meu_plano&error=service_error');
+            exit;
+        }
+        if ($http === 404) {
+            $subscriptionModel->updateStatusById(
+                (int)$active['id'],
+                Subscription::STATUS_CANCELLED,
+                'cancelled',
+                null,
+                null
+            );
+            $fresh = $subscriptionModel->findById((int)$active['id']);
+            if ($fresh !== null) {
+                $subscriptionModel->applyStatusToUser($fresh);
+            }
+            header('Location: /index.php?action=meu_plano&cancelled=1');
+            exit;
+        }
+        header('Location: /index.php?action=meu_plano&error=service_error');
+        exit;
+    }
+
+    $mpStatus = strtolower(trim((string)($cancelResult['data']['status'] ?? '')));
+    $internalStatus = MercadoPagoWebhookService::mapMpStatusToInternal($mpStatus);
+
+    $subscriptionModel->updateStatusById(
+        (int)$active['id'],
+        $internalStatus ?? Subscription::STATUS_CANCELLED,
+        $mpStatus,
+        null,
+        null
+    );
+
+    $fresh = $subscriptionModel->findById((int)$active['id']);
+    if ($fresh !== null) {
+        $subscriptionModel->applyStatusToUser($fresh);
+    }
+
+    header('Location: /index.php?action=meu_plano&cancelled=1');
     exit;
 } elseif ($action === 'update_profile') {
     $profileController->updateProfile();

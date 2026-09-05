@@ -302,4 +302,69 @@ class MercadoPagoService
 
         return ['ok' => true, 'status' => 200, 'data' => $data];
     }
+
+    /**
+     * Cancela uma assinatura recorrente no Mercado Pago via PUT /preapproval/{id}.
+     *
+     * A API exige o corpo com { "status": "cancelled" }.
+     * Idempotente: se a assinatura ja estiver cancelled, retorna ok=true.
+     *
+     * @param string $mpPreapprovalId ID da assinatura no Mercado Pago
+     * @return array{ok:bool, status?:int, data?:array, error?:string}
+     */
+    public function cancelPreapproval(string $mpPreapprovalId): array
+    {
+        if ($mpPreapprovalId === '' || !preg_match('/^[a-zA-Z0-9_\-]{1,80}$/', $mpPreapprovalId)) {
+            return ['ok' => false, 'status' => 0, 'error' => 'invalid_id'];
+        }
+
+        $url = self::BASE_URL . '/preapproval/' . urlencode($mpPreapprovalId);
+        $payload = json_encode(['status' => 'cancelled']);
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST  => 'PUT',
+            CURLOPT_POSTFIELDS    => $payload,
+            CURLOPT_HTTPHEADER    => [
+                'Authorization: Bearer ' . $this->accessToken,
+                'Content-Type: application/json',
+                'X-Integrator-Id: dev_controle_de_gastos',
+            ],
+            CURLOPT_TIMEOUT       => 30,
+        ]);
+
+        $body = curl_exec($ch);
+        $httpStatus = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr = curl_error($ch);
+        curl_close($ch);
+
+        if ($body === false) {
+            error_log('[MercadoPagoService] cancelPreapproval curl error: ' . $curlErr);
+            return ['ok' => false, 'status' => 0, 'error' => 'network_error'];
+        }
+
+        $data = json_decode($body, true);
+        if (!is_array($data)) {
+            error_log('[MercadoPagoService] cancelPreapproval resposta nao-JSON (status=' . $httpStatus . ')');
+            return ['ok' => false, 'status' => $httpStatus, 'error' => 'invalid_response'];
+        }
+
+        if ($httpStatus === 404) {
+            return ['ok' => false, 'status' => 404, 'error' => 'not_found'];
+        }
+
+        if ($httpStatus >= 400) {
+            $msg = is_string($data['message'] ?? null) ? (string)$data['message'] : 'mp_error';
+            error_log('[MercadoPagoService] cancelPreapproval erro HTTP ' . $httpStatus . ': ' . $msg);
+            return ['ok' => false, 'status' => $httpStatus, 'error' => $msg];
+        }
+
+        $currentStatus = strtolower(trim((string)($data['status'] ?? '')));
+        if ($currentStatus === 'cancelled') {
+            return ['ok' => true, 'status' => 200, 'data' => $data, 'already_cancelled' => true];
+        }
+
+        return ['ok' => true, 'status' => $httpStatus, 'data' => $data];
+    }
 }

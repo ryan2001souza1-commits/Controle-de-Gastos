@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../services/CpfValidator.php';
+require_once __DIR__ . '/../models/Subscription.php';
 
 class ProfileController
 {
@@ -145,6 +146,13 @@ class ProfileController
                 'features' => $planSvc->getAllFeatures($slug),
                 'limits'   => $planSvc->getAllLimits($slug),
             ];
+        }
+
+        $canCancelSubscription = false;
+        if ($currentPlanSlug !== 'gratuito') {
+            $subscriptionModel = new Subscription($this->db);
+            $activeSub = $subscriptionModel->findActiveByUser($userId);
+            $canCancelSubscription = ($activeSub !== null);
         }
 
         $featureLabels = [

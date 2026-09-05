@@ -349,6 +349,33 @@ function runMigrations(PDO $db): void
     }
 
     try {
+        $dupStmt = $db->query(
+            "SELECT mp_preapproval_id, COUNT(*) as cnt
+               FROM subscriptions
+              WHERE mp_preapproval_id IS NOT NULL
+                AND mp_preapproval_id <> ''
+              GROUP BY mp_preapproval_id
+             HAVING COUNT(*) > 1"
+        );
+        $duplicates = $dupStmt->fetchAll(PDO::FETCH_ASSOC);
+        if (count($duplicates) === 0) {
+            $db->exec(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_subscriptions_mp_preapproval_id
+                    ON subscriptions(mp_preapproval_id)
+                   WHERE mp_preapproval_id IS NOT NULL
+                     AND mp_preapproval_id <> ''"
+            );
+        } else {
+            error_log(
+                '[migrations] mp_preapproval_id tem duplicatas — UNIQUE index nao criado: '
+                . json_encode($duplicates)
+            );
+        }
+    } catch (Throwable $e) {
+        error_log('[migrations] falha ao criar uq_subscriptions_mp_preapproval_id: ' . $e->getMessage());
+    }
+
+    try {
         $db->exec("ALTER TABLE password_resets
                    ADD CONSTRAINT fk_password_resets_user
                    FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE");
