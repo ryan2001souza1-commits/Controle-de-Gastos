@@ -82,7 +82,6 @@ class MercadoPagoService
         $body = curl_exec($ch);
         $httpStatus = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlErr = curl_error($ch);
-        curl_close($ch);
 
         if ($body === false) {
             error_log('[MercadoPagoService] curl error: ' . $curlErr);
@@ -208,7 +207,6 @@ class MercadoPagoService
         $body = curl_exec($ch);
         $httpStatus = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlErr = curl_error($ch);
-        curl_close($ch);
 
         if ($body === false) {
             error_log('[MercadoPagoService] createPreapproval curl error: ' . $curlErr);
@@ -277,7 +275,6 @@ class MercadoPagoService
         $body = curl_exec($ch);
         $httpStatus = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlErr = curl_error($ch);
-        curl_close($ch);
 
         if ($body === false) {
             error_log('[MercadoPagoService] getPreapproval curl error: ' . $curlErr);
@@ -412,7 +409,6 @@ class MercadoPagoService
         $resp = curl_exec($ch);
         $httpStatus = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlErr = curl_error($ch);
-        curl_close($ch);
         $body = is_string($resp) ? $resp : '';
     }
 }

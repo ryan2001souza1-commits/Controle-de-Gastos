@@ -68,6 +68,7 @@ require_once __DIR__ . '/../src/controllers/FeedbackController.php';
 require_once __DIR__ . '/../src/services/AiFinanceContext.php';
 require_once __DIR__ . '/../src/services/AiService.php';
 require_once __DIR__ . '/../src/services/MercadoPagoService.php';
+require_once __DIR__ . '/../src/services/MercadoPagoWebhookService.php';
 require_once __DIR__ . '/../src/controllers/AiController.php';
 
 

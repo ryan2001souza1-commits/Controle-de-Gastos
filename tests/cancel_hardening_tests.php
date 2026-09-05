@@ -308,7 +308,104 @@ $cancelBlock = substr($indexPhp, $cancelStart, $cancelEnd);
 (str_contains($cancelBlock, 'catch (Throwable')) ? pass("H12b: catch Throwable presente") : fail("H12b: catch ausente");
 (str_contains($cancelBlock, 'cancel_service_error')) ? pass("H12c: redirect cancel_service_error presente") : fail("H12c");
 
-echo "\n=== RESUMO ===\n";
+
+/**
+ * REGRESSÃO: Class MercadoPagoWebhookService not found
+ * Quando MP retorna already_cancelled, o local sync tenta usar
+ * MercadoPagoWebhookService::mapMpStatusToInternal() — que falhava
+ * com "Class not found" porque o require_once estava ausente no index.php.
+ */
+
+class THStmt_R {
+    private $pdo; private string $sql; public array $params = [];
+    public function __construct($pdo, string $sql) { $this->pdo = $pdo; $this->sql = strtolower($sql); }
+    public function execute(array $p=[]): bool {
+        $this->params = $p;
+        $s = $this->sql;
+        if (str_starts_with(trim($s), 'update') && str_contains($s, 'usuarios')) {
+            $uid = (int)($p[':uid'] ?? 0);
+            foreach ($this->pdo->users as &$u) if ((int)$u['id'] === $uid) {
+                if (str_contains($s, "plano = 'gratuito'")) $u['plano'] = 'gratuito';
+                if (str_contains($s, "'cancelado'")) $u['plano_status'] = 'cancelado';
+                if (isset($p[':grace'])) $u['plano_status'] = 'pendente';
+            } unset($u);
+        }
+        if (strpos($s, 'subscriptions') !== false && str_starts_with(trim($s), 'update')) {
+            $id = (int)($p[':id'] ?? 0);
+            foreach ($this->pdo->subs as &$sub) if ((int)$sub['id'] === $id) {
+                if (isset($p[':status'])) $sub['status'] = $p[':status'];
+            } unset($sub);
+        }
+        return true;
+    }
+    public function rowCount(): int { return 1; }
+    public function fetch(int $mode=5) {
+        $s = $this->sql;
+        if (str_starts_with(trim($s), 'select') && str_contains($s, 'subscriptions') && str_contains($s, 'user_id')) {
+            $uid = (int)($this->params[':uid'] ?? $this->params['user_id'] ?? 0);
+            foreach ($this->pdo->subs as $sub) if ((int)$sub['user_id'] === $uid) return $sub;
+        }
+        if (str_starts_with(trim($s), 'select') && str_contains($s, 'subscriptions') && (str_contains($s, 'where id') || str_contains($s, 'where s.id'))) {
+            $id = (int)($this->params[':id'] ?? $this->params['sub_id'] ?? 0);
+            foreach ($this->pdo->subs as $sub) if ((int)$sub['id'] === $id) return $sub;
+        }
+        return null;
+    }
+}
+
+function runCancelFlow_R(TracedPDOH $db, THMpService $mp, $userId) {
+    try {
+        $subscriptionModel = new Subscription($db);
+        $active = $subscriptionModel->findActiveByUser($userId);
+        if ($active === null) return ['redirect' => 'no_active_subscription', 'result' => 'no_active'];
+        $subId = (int)($active['id'] ?? 0);
+        $mpId = (string)($active['mp_preapproval_id'] ?? '');
+        if ($mpId === '') return ['redirect' => 'no_active_subscription', 'result' => 'no_mp_id'];
+        $cancelResult = $mp->cancelPreapproval($mpId);
+        if ($cancelResult['ok'] === false) return ['redirect' => 'cancel_service_error', 'result' => 'mp_error'];
+        $mpStatus = strtolower(trim((string)($cancelResult['data']['status'] ?? '')));
+        $internalStatus = MercadoPagoWebhookService::mapMpStatusToInternal($mpStatus);
+        $subscriptionModel->updateStatusById($subId, $internalStatus ?? Subscription::STATUS_CANCELLED, $mpStatus, null, null);
+        $fresh = $subscriptionModel->findById($subId);
+        if ($fresh !== null) $subscriptionModel->applyStatusToUser($fresh);
+        return ['redirect' => 'cancelled=1', 'result' => 'success'];
+    } catch (Throwable $e) {
+        return ['redirect' => 'cancel_service_error', 'result' => 'exception', 'exception' => $e];
+    }
+}
+
+echo "\n=== R1: REGRESSAO - user 12 Premium + already_cancelled ===\n";
+$dbR1 = new TracedPDOH();
+$dbR1->users[12] = ['id'=>12,'plano'=>'premium','plano_status'=>'ativo','active_subscription_id'=>2];
+$dbR1->subs[2] = ['id'=>2,'user_id'=>12,'plan_slug'=>'premium','status'=>'active','raw_status'=>'authorized','mp_preapproval_id'=>'mp_premium_12','external_reference'=>'user_12_premium','grace_period_end'=>null,'next_billing_date'=>null,'start_date'=>null,'cancelled_at'=>null,'paused_at'=>null,'expired_at'=>null];
+
+$mpR1 = new THMpService();
+$mpR1->curlQueue = [['status'=>400, 'body'=>json_encode(['status'=>'cancelled','message'=>'You can not modify a cancelled preapproval.'])]];
+
+$excR1 = null; $rR1 = runCancelFlow_R($dbR1, $mpR1, 12);
+(!isset($rR1['exception'])) ? pass("R1a: MercadoPagoWebhookService disponivel - sem Class not found") : fail("R1a", 'Class not found: ' . $rR1['exception']->getMessage());
+($rR1['result'] !== 'exception') ? pass("R1b: fluxo executou sem exception") : fail("R1b", $rR1['exception']->getMessage());
+($rR1['redirect'] === 'cancelled=1') ? pass("R1c: redirect cancelled=1") : fail("R1c", $rR1['redirect']);
+($dbR1->users[12]['plano'] === 'gratuito') ? pass("R1d: plano do user 12 = gratuito") : fail("R1d", $dbR1->users[12]['plano']);
+($dbR1->subs[2]['status'] === 'cancelled') ? pass("R1e: subscription 2 status = cancelled") : fail("R1e", $dbR1->subs[2]['status']);
+
+echo "\n=== R2: REGRESSAO - user 5 Pro + already_cancelled ===\n";
+$dbR2 = new TracedPDOH();
+$dbR2->users[5] = ['id'=>5,'plano'=>'pro','plano_status'=>'ativo','active_subscription_id'=>3];
+$dbR2->subs[3] = ['id'=>3,'user_id'=>5,'plan_slug'=>'pro','status'=>'active','raw_status'=>'authorized','mp_preapproval_id'=>'mp_pro_5','external_reference'=>'user_5_pro','grace_period_end'=>null,'next_billing_date'=>null,'start_date'=>null,'cancelled_at'=>null,'paused_at'=>null,'expired_at'=>null];
+
+$mpR2 = new THMpService();
+$mpR2->curlQueue = [['status'=>400, 'body'=>json_encode(['status'=>'cancelled','message'=>'You can not modify a cancelled preapproval.'])]];
+
+$excR2 = null; $rR2 = runCancelFlow_R($dbR2, $mpR2, 5);
+(!isset($rR2['exception'])) ? pass("R2a: MercadoPagoWebhookService disponivel - sem Class not found") : fail("R2a", 'Class not found: ' . $rR2['exception']->getMessage());
+($rR2['result'] !== 'exception') ? pass("R2b: fluxo executou sem exception") : fail("R2b", $rR2['exception']->getMessage());
+($rR2['redirect'] === 'cancelled=1') ? pass("R2c: redirect cancelled=1") : fail("R2c", $rR2['redirect']);
+($dbR2->users[5]['plano'] === 'gratuito') ? pass("R2d: plano do user 5 = gratuito") : fail("R2d", $dbR2->users[5]['plano']);
+($dbR2->subs[3]['status'] === 'cancelled') ? pass("R2e: subscription 3 status = cancelled") : fail("R2e", $dbR2->subs[3]['status']);
+
+
+echo "\n=== RESUMO FINAL ===\n";
 $total = $passed + $failed;
 echo "Total: $total | \033[32mPassed: $passed\033[0m | \033[31mFailed: $failed\033[0m\n";
 exit($failed > 0 ? 1 : 0);
