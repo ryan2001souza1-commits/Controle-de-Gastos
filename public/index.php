@@ -390,6 +390,11 @@ if ($action === 'register') {
         exit;
     }
 
+    if ((int)($active['status'] ?? '') === Subscription::STATUS_CANCELLED) {
+        header('Location: /index.php?action=meu_plano&cancelled=1');
+        exit;
+    }
+
     $mpId = (string)($active['mp_preapproval_id'] ?? '');
     if ($mpId === '') {
         header('Location: /index.php?action=meu_plano&error=no_active_subscription');
@@ -402,7 +407,7 @@ if ($action === 'register') {
     if ($cancelResult['ok'] === false) {
         $http = (int)($cancelResult['status'] ?? 0);
         if ($http === 0 || $http >= 500) {
-            header('Location: /index.php?action=meu_plano&error=service_error');
+            header('Location: /index.php?action=meu_plano&error=cancel_service_error');
             exit;
         }
         if ($http === 404) {
@@ -420,7 +425,7 @@ if ($action === 'register') {
             header('Location: /index.php?action=meu_plano&cancelled=1');
             exit;
         }
-        header('Location: /index.php?action=meu_plano&error=service_error');
+        header('Location: /index.php?action=meu_plano&error=cancel_service_error');
         exit;
     }
 
@@ -438,6 +443,10 @@ if ($action === 'register') {
     $fresh = $subscriptionModel->findById((int)$active['id']);
     if ($fresh !== null) {
         $subscriptionModel->applyStatusToUser($fresh);
+    }
+
+    if (!empty($cancelResult['already_cancelled'])) {
+        error_log('[cancel] already_cancelled detected, synced to cancelled');
     }
 
     header('Location: /index.php?action=meu_plano&cancelled=1');

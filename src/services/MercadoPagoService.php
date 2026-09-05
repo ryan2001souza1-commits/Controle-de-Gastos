@@ -320,26 +320,18 @@ class MercadoPagoService
 
         $url = self::BASE_URL . '/preapproval/' . urlencode($mpPreapprovalId);
         $payload = json_encode(['status' => 'cancelled']);
+        $headers = [
+            'Authorization: Bearer ' . $this->accessToken,
+            'Content-Type: application/json',
+            'X-Integrator-Id: dev_controle_de_gastos',
+        ];
 
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_CUSTOMREQUEST  => 'PUT',
-            CURLOPT_POSTFIELDS    => $payload,
-            CURLOPT_HTTPHEADER    => [
-                'Authorization: Bearer ' . $this->accessToken,
-                'Content-Type: application/json',
-                'X-Integrator-Id: dev_controle_de_gastos',
-            ],
-            CURLOPT_TIMEOUT       => 30,
-        ]);
+        $httpStatus = 0;
+        $body = '';
+        $curlErr = '';
+        $this->curlPut($url, $headers, $payload, $body, $httpStatus, $curlErr, 30);
 
-        $body = curl_exec($ch);
-        $httpStatus = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlErr = curl_error($ch);
-        curl_close($ch);
-
-        if ($body === false) {
+        if ($body === '' && $curlErr !== '') {
             error_log('[MercadoPagoService] cancelPreapproval curl error: ' . $curlErr);
             return ['ok' => false, 'status' => 0, 'error' => 'network_error'];
         }
@@ -356,6 +348,15 @@ class MercadoPagoService
 
         if ($httpStatus >= 400) {
             $msg = is_string($data['message'] ?? null) ? (string)$data['message'] : 'mp_error';
+            if ($httpStatus === 400 && $this->isAlreadyCancelledMessage($msg, $data)) {
+                error_log('[MercadoPagoService] cancelPreapproval already_cancelled via 400: ' . $msg);
+                return [
+                    'ok' => true,
+                    'status' => $httpStatus,
+                    'data' => is_array($data) ? $data : ['status' => 'cancelled'],
+                    'already_cancelled' => true,
+                ];
+            }
             error_log('[MercadoPagoService] cancelPreapproval erro HTTP ' . $httpStatus . ': ' . $msg);
             return ['ok' => false, 'status' => $httpStatus, 'error' => $msg];
         }
@@ -366,5 +367,44 @@ class MercadoPagoService
         }
 
         return ['ok' => true, 'status' => $httpStatus, 'data' => $data];
+    }
+
+    private function isAlreadyCancelledMessage(string $msg, array $data): bool
+    {
+        $cancelledPatterns = [
+            'cannot modify a cancelled',
+            'cannot update a cancelled',
+            'cannot change a cancelled',
+            'cancelled preapproval',
+            'preapproval already cancelled',
+            'subscription already cancelled',
+        ];
+        $msgLower = strtolower($msg);
+        foreach ($cancelledPatterns as $p) {
+            if (str_contains($msgLower, strtolower($p))) {
+                return true;
+            }
+        }
+        if (isset($data['status']) && strtolower((string)$data['status']) === 'cancelled') {
+            return true;
+        }
+        return false;
+    }
+
+    protected function curlPut(string $url, array $headers, string $payload, string &$body, int &$httpStatus, string &$curlErr, int $timeout = 30): void
+    {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST  => 'PUT',
+            CURLOPT_POSTFIELDS     => $payload,
+            CURLOPT_HTTPHEADER     => $headers,
+            CURLOPT_TIMEOUT        => $timeout,
+        ]);
+        $resp = curl_exec($ch);
+        $httpStatus = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr = curl_error($ch);
+        curl_close($ch);
+        $body = is_string($resp) ? $resp : '';
     }
 }
