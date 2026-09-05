@@ -2,9 +2,9 @@
 
 class PasswordReset
 {
-    private PDO $db;
+    private $db;
 
-    public function __construct(PDO $db)
+    public function __construct($db)
     {
         $this->db = $db;
     }

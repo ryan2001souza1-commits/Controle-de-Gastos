@@ -25,9 +25,9 @@ class User
     public ?string $plano_inicio = null;
     public ?string $plano_fim = null;
 
-    private PDO $db;
+    private $db;
 
-    public function __construct(PDO $db)
+    public function __construct($db)
     {
         $this->db = $db;
     }

@@ -8,9 +8,9 @@ class Category
     public ?int $user_id = null;
     public ?string $created_at = null;
 
-    private PDO $db;
+    private $db;
 
-    public function __construct(PDO $db)
+    public function __construct($db)
     {
         $this->db = $db;
     }

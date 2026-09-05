@@ -1,9 +1,9 @@
 <?php
 class Feedback
 {
-    private PDO $db;
+    private $db;
 
-    public function __construct(PDO $db)
+    public function __construct($db)
     {
         $this->db = $db;
     }

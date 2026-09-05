@@ -1,8 +1,8 @@
 <?php
 class BugReport
 {
-    private PDO $db;
-    public function __construct(PDO $db) { $this->db = $db; }
+    private $db;
+    public function __construct($db) { $this->db = $db; }
 
     public function create(array $data): int
     {

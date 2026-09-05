@@ -30,9 +30,7 @@ class MercadoPagoWebhookService
         $this->mpService = $mpService;
         $this->planModel = new Plan($db);
         $this->subscriptionModel = new Subscription($db);
-    }
-
-    /**
+    }    /**
      * Valida o header x-signature enviado pelo Mercado Pago.
      *
      * Formato do header x-signature:

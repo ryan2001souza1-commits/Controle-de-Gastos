@@ -15,9 +15,9 @@ class Subscription
     public const STATUS_EXPIRED   = 'expired';
     public const STATUS_REJECTED  = 'rejected';
 
-    private PDO $db;
+    private $db;
 
-    public function __construct(PDO $db)
+    public function __construct($db)
     {
         $this->db = $db;
     }
@@ -27,8 +27,8 @@ class Subscription
      */
     public function findById(int $id): ?array
     {
-        $stmt = $this->db->prepare('SELECT * FROM subscriptions WHERE id = ? LIMIT 1');
-        $stmt->execute([$id]);
+        $stmt = $this->db->prepare('SELECT * FROM subscriptions WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
     }
@@ -73,6 +73,79 @@ class Subscription
         $stmt->execute([':mpid' => $mpPreapprovalId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ?: null;
+    }
+
+    /**
+     * Busca assinatura ativa ou pendente de um usuario para um plano especifico.
+     * Util para idempotencia no checkout: evita criar multiplas preapprovals
+     * para o mesmo usuario/plano quando o usuario clica repetidamente.
+     */
+    public function findActiveOrPendingByUserAndPlan(int $userId, string $planSlug): ?array
+    {
+        $stmt = $this->db->prepare(
+            "SELECT * FROM subscriptions
+              WHERE user_id = :uid
+                AND plan_slug = :slug
+                AND status IN ('pending','active','paused')
+              ORDER BY id DESC LIMIT 1"
+        );
+        $stmt->execute([':uid' => $userId, ':slug' => $planSlug]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
+     * Cria uma assinatura pendente (preapproval) para um usuario.
+     * Idempotente: se ja existir pendente/ativa/pausada do mesmo plano,
+     * retorna a existente sem inserir nova.
+     *
+     * @return array{id:int,created:bool} id da assinatura + se foi criada agora
+     */
+    public function createPending(
+        int $userId,
+        string $planSlug,
+        int $planId,
+        string $externalReference
+    ): array {
+        $existing = $this->findActiveOrPendingByUserAndPlan($userId, $planSlug);
+        if ($existing !== null) {
+            return ['id' => (int)$existing['id'], 'created' => false];
+        }
+
+        $stmt = $this->db->prepare(
+            'INSERT INTO subscriptions
+                (user_id, plan_id, plan_slug, status, raw_status, external_reference)
+             VALUES
+                (:user_id, :plan_id, :plan_slug, :status, :raw_status, :external_reference)
+             RETURNING id'
+        );
+        $stmt->execute([
+            ':user_id'            => $userId,
+            ':plan_id'            => $planId,
+            ':plan_slug'          => $planSlug,
+            ':status'             => self::STATUS_PENDING,
+            ':raw_status'         => 'pending',
+            ':external_reference' => $externalReference,
+        ]);
+        $id = (int)$stmt->fetchColumn();
+        return ['id' => $id, 'created' => true];
+    }
+
+    /**
+     * Vincula o preapproval_id do Mercado Pago a uma assinatura pendente.
+     * Idempotente: se o mp_preapproval_id ja estiver vinculado, nao sobrescreve.
+     */
+    public function attachMpPreapprovalId(int $subscriptionId, string $mpPreapprovalId): bool
+    {
+        $stmt = $this->db->prepare(
+            "UPDATE subscriptions
+                SET mp_preapproval_id = :mpid,
+                    updated_at = NOW()
+              WHERE id = :id
+                AND (mp_preapproval_id IS NULL OR mp_preapproval_id = '')"
+        );
+        $stmt->execute([':mpid' => $mpPreapprovalId, ':id' => $subscriptionId]);
+        return $stmt->rowCount() > 0;
     }
 
     /**

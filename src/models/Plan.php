@@ -1,8 +1,8 @@
 <?php
 class Plan
 {
-    private PDO $db;
-    public function __construct(PDO $db) { $this->db = $db; }
+    private $db;
+    public function __construct($db) { $this->db = $db; }
     public function findAll(): array
     {
         $stmt = $this->db->query("SELECT * FROM planos ORDER BY preco ASC");

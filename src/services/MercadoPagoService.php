@@ -15,7 +15,7 @@ class MercadoPagoService
 {
     private const BASE_URL = 'https://api.mercadopago.com';
 
-    private string $accessToken;
+    protected string $accessToken;
 
     public function __construct()
     {
@@ -126,6 +126,127 @@ class MercadoPagoService
             'init_point' => $initPointWithRef,
             'plan_id'    => $planId,
             'external_reference' => $externalRef,
+        ];
+    }
+
+    /**
+     * Cria uma assinatura (preapproval) via POST /preapproval na API do Mercado Pago.
+     *
+     * Diferenca critica do fluxo antigo (checkout hospedado por plano):
+     * - O MP NAO persiste external_reference/payer_email/back_url enviados
+     *   como query string no init_point do plano.
+     * - Para que o webhook receba o external_reference, a subscription
+     *   precisa ser criada na API com esses campos no CORPO do POST.
+     * - A API devolve o init_point e o id (preapproval_id) que devem ser
+     *   usados para o redirect do usuario.
+     *
+     * @param string $planSlug          'pro' ou 'premium' (validado contra .env)
+     * @param int    $userId            id do usuario autenticado
+     * @param string $email             email do pagador
+     * @param string $externalReference ex: 'user_15_pro'
+     * @return array{ok:bool, preapproval_id?:string, init_point?:string,
+     *               external_reference?:string, plan_id?:string, status?:int, error?:string}
+     */
+    public function createPreapproval(
+        string $planSlug,
+        int $userId,
+        string $email,
+        string $externalReference
+    ): array {
+        $planSlug = strtolower(trim($planSlug));
+        if (!in_array($planSlug, ['pro', 'premium'], true)) {
+            return ['ok' => false, 'status' => 0, 'error' => 'invalid_plan'];
+        }
+        $planId = self::getPlanIdForSlug($planSlug);
+        if ($planId === null || $planId === '') {
+            return ['ok' => false, 'status' => 0, 'error' => 'plan_not_found'];
+        }
+        if ($userId <= 0) {
+            return ['ok' => false, 'status' => 0, 'error' => 'invalid_user'];
+        }
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return ['ok' => false, 'status' => 0, 'error' => 'invalid_email'];
+        }
+        if (!preg_match('/^user_\d+_(pro|premium)$/', $externalReference)) {
+            return ['ok' => false, 'status' => 0, 'error' => 'invalid_external_reference'];
+        }
+
+        $reason = $planSlug === 'pro'
+            ? 'Controle de Gastos - Pro'
+            : 'Controle de Gastos - Premium';
+
+        $backUrl = rtrim((string)(getenv('APP_URL') ?: 'https://controle-de-gastos-one-silk.vercel.app'), '/')
+            . '/mercadopago_return.php';
+
+        $payload = [
+            'preapproval_plan_id' => $planId,
+            'reason'              => $reason,
+            'external_reference'  => $externalReference,
+            'payer_email'         => $email,
+            'back_url'            => $backUrl,
+            'auto_recurring'      => (object)[
+                'frequency'         => 1,
+                'frequency_type'    => 'months',
+            ],
+            'status'              => 'pending',
+        ];
+
+        $url = self::BASE_URL . '/preapproval';
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            CURLOPT_HTTPHEADER     => [
+                'Authorization: Bearer ' . $this->accessToken,
+                'Content-Type: application/json',
+                'X-Integrator-Id: dev_controle_de_gastos',
+            ],
+            CURLOPT_TIMEOUT => 20,
+        ]);
+
+        $body = curl_exec($ch);
+        $httpStatus = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr = curl_error($ch);
+        curl_close($ch);
+
+        if ($body === false) {
+            error_log('[MercadoPagoService] createPreapproval curl error: ' . $curlErr);
+            return ['ok' => false, 'status' => 0, 'error' => 'network_error'];
+        }
+
+        $data = json_decode($body, true);
+        if (!is_array($data)) {
+            error_log('[MercadoPagoService] createPreapproval resposta nao-JSON (status=' . $httpStatus . ')');
+            return ['ok' => false, 'status' => $httpStatus, 'error' => 'invalid_response'];
+        }
+
+        if ($httpStatus < 200 || $httpStatus >= 300) {
+            $msg = is_string($data['message'] ?? null) ? (string)$data['message'] : 'mp_error';
+            error_log('[MercadoPagoService] createPreapproval erro HTTP ' . $httpStatus . ': ' . $msg);
+            return ['ok' => false, 'status' => $httpStatus, 'error' => $msg];
+        }
+
+        $preapprovalId = $data['id'] ?? null;
+        $initPoint     = $data['init_point'] ?? null;
+
+        if (!is_string($preapprovalId) || $preapprovalId === '' ||
+            !is_string($initPoint)     || $initPoint     === '') {
+            error_log('[MercadoPagoService] createPreapproval sem id/init_point');
+            return ['ok' => false, 'status' => $httpStatus, 'error' => 'missing_fields'];
+        }
+
+        if (!preg_match('/^[a-zA-Z0-9_\-]{1,80}$/', $preapprovalId)) {
+            return ['ok' => false, 'status' => $httpStatus, 'error' => 'invalid_id'];
+        }
+
+        return [
+            'ok'                 => true,
+            'status'             => $httpStatus,
+            'preapproval_id'     => $preapprovalId,
+            'init_point'         => $initPoint,
+            'external_reference' => $externalReference,
+            'plan_id'            => $planId,
         ];
     }
 
