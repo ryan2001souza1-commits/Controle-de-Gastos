@@ -236,14 +236,18 @@ $errText = $errMessages[$errKey] ?? null;
                     </div>
 
                     <div style="width:100%">
-                        <a
-                            href="/index.php?action=subscribe&plan=<?= htmlspecialchars($slug) ?>"
-                            class="btn"
-                            style="width:100%;justify-content:center;text-decoration:none;display:flex;align-items:center;gap:6px"
-                            title="Atualizar para <?= htmlspecialchars($planName) ?>">
-                            <?= render_icon('zap', 15) ?>
-                            Atualizar para <?= htmlspecialchars($planName) ?>
-                        </a>
+                        <form method="POST" action="/index.php?action=subscribe" style="width:100%">
+                            <input type="hidden" name="plan" value="<?= htmlspecialchars($slug) ?>">
+                            <?= csrf_field() ?>
+                            <button
+                                type="submit"
+                                class="btn"
+                                style="width:100%;justify-content:center;display:flex;align-items:center;gap:6px;cursor:pointer"
+                                title="Atualizar para <?= htmlspecialchars($planName) ?>">
+                                <?= render_icon('zap', 15) ?>
+                                Atualizar para <?= htmlspecialchars($planName) ?>
+                            </button>
+                        </form>
                     </div>
                     <div style="margin-top:var(--space-2);font-size:11px;color:var(--color-text-3);text-align:center">
                         Clique para iniciar a assinatura
