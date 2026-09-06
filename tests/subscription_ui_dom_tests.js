@@ -147,8 +147,9 @@ function loadApp({ subscribeResponses, pollScript }) {
     };
 
     require('../public/js/mp_subscribe.js');
+    const api = require('../public/js/mp_subscribe.js');
     return {
-        nodes, parent, uiLogs, fetches, T,
+        nodes, parent, uiLogs, fetches, T, api,
         submit: () => capturedSubmit({ preventDefault: () => {} }),
         polls: () => fetches.filter((u) => u.includes('subscription_status')).length,
         retryBtn: () => parent.children.find((c) => c.type === 'button'),
@@ -360,6 +361,49 @@ const PENDING = { ok: true, status: 'pending', outcome: 'processing', linked: tr
         ok(app.nodes['mp-checkout-error'].textContent.includes('Verifique os dados do cartão'), 'msg adequada, sem spinner infinito');
         ok(app.nodes['mp-pay-button'].disabled === false, 'botão reabilitado para corrigir e tentar de novo');
         ok(app.T.timers.size === 0, 'zero timers');
+        app.cleanup();
+    }
+
+    // ---- D12: abort no meio do voo + stale ignorado no wiring ----
+    console.log('--- D12 abort mid-flight ---');
+    {
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING] });
+        await app.submit();
+        await new Promise((r) => setImmediate(r));
+        await new Promise((r) => setImmediate(r));
+        // Poll #1 em voo (fetch pendente). Para tudo e resolve como ACTIVE:
+        // deve ser ignorado (geração morta), sem redirect.
+        ok(app.polls() === 1, 'poll em voo iniciado');
+        app.api.__wiring.stopSubscriptionPolling();
+        ok(app.T.timers.size === 0, 'stop limpa timers com fetch em voo');
+        app.cleanup();
+    }
+
+    // ---- D13: renderTerminalError é atômico ----
+    console.log('--- D13 terminal atômico ---');
+    {
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING] });
+        // Simula processing visível e então terminal direto:
+        app.nodes['mp-checkout-loading'].style.display = 'block';
+        app.nodes['mp-pay-button'].disabled = true;
+        app.api.__wiring.renderTerminalError('Msg terminal X');
+        ok(app.nodes['mp-checkout-loading'].style.display === 'none', 'spinner escondido');
+        ok(app.nodes['mp-checkout-error'].style.display === 'block', 'erro visível');
+        ok(app.nodes['mp-checkout-error'].textContent === 'Msg terminal X', 'texto terminal aplicado');
+        ok(app.nodes['mp-pay-button'].disabled === false, 'botão reabilitado');
+        ok(app.T.timers.size === 0, 'zero timers');
+        app.cleanup();
+    }
+
+    // ---- D14: log inequívoco action/error separados ----
+    console.log('--- D14 log inequívoco ---');
+    {
+        const app = loadApp({ subscribeResponses: [{ http: 400, body: { ok: false, error: 'invalid_card' } }], pollScript: [] });
+        await app.submit();
+        await app.T.drain(20);
+        const line = app.uiLogs.find((l) => l.includes('source=initial'));
+        ok(!!line && line.includes('action=show_error') && line.includes('error=invalid_card'), 'action e error em campos separados (linha: ' + (line || '?').slice(0, 120) + ')');
+        ok(!/show_errorinvalid|remova/i.test(line || ''), 'sem fusão ambígua (regressão do "removalid_card")');
         app.cleanup();
     }
 

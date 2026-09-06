@@ -469,6 +469,9 @@ $consoleLeak = preg_match('/console\.(info|log|debug|warn|error)\s*\([^)]*(ATTEM
 assert_test($consoleLeak === 0, 'P17f: nenhum log de console com token/cartão/email/chave');
 assert_test(str_contains($jsSrc, 'attempt_suffix'), 'P17g: logs usam sufixo, nunca correlator completo');
 assert_test(str_contains($jsSrc, 'Verificar novamente'), 'P17h: retry controlado após timeout/abort');
+assert_test(str_contains($jsSrc, 'function renderTerminalError'), 'P17i: renderização terminal única e atômica');
+assert_test(str_contains($jsSrc, 'AbortController'), 'P17j: abort de request em voo');
+assert_test(str_contains($jsSrc, 'action=') && str_contains($jsSrc, 'error=') && str_contains($jsSrc, 'function uiLog'), 'P17k: log com action/error separados');
 assert_test(str_contains($jsSrc, "'processing'") || str_contains($jsSrc, '"processing"'), 'P15c: pending mapeia para processing');
 assert_test(str_contains($jsSrc, 'meu_plano&subscribed=1'), 'P16a: active redireciona para sucesso');
 

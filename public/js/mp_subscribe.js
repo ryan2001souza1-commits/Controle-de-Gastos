@@ -180,6 +180,7 @@
 
     // Exporta a state machine para testes Node. No browser, `module` não
     // existe e a execução segue para o bootstrap do DOM abaixo.
+    // __wiring expõe start/stop SOMENTE para testes DOM (mesmo arquivo).
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = {
             POLL_INTERVAL_MS: POLL_INTERVAL_MS,
@@ -191,6 +192,11 @@
             decideInitialAction: decideInitialAction,
             decidePollTick: decidePollTick,
             createPollController: createPollController,
+            __wiring: {
+                startUiPoll: function () { return startUiPoll(); },
+                stopSubscriptionPolling: function () { return stopSubscriptionPolling(); },
+                renderTerminalError: function (m) { return renderTerminalError(m); },
+            },
         };
     }
     if (typeof document === 'undefined') {
@@ -314,7 +320,10 @@
     var activePoll = null;
     var retryButton = null;
 
-    function uiLog(source, status, outcome, action) {
+    // uiLog com campos SEPARADOS e inequívocos: action e error nunca se
+    // fundem (regressão do "removalid_card", onde o ':' era comido pelo
+    // sanitizador). Ex.: action=show_error error=invalid_card.
+    function uiLog(source, status, outcome, action, errorKey) {
         try {
             if (typeof console !== 'undefined' && console.info) {
                 // ATTEMPT_SUFFIX já é charset hex validado (ou 'invalid').
@@ -322,19 +331,37 @@
                     + ' source=' + safeWord(source)
                     + ' status=' + safeWord(status)
                     + ' outcome=' + safeWord(outcome)
-                    + ' action=' + safeWord(action));
+                    + ' action=' + safeWord(action)
+                    + ' error=' + safeWord(errorKey || ''));
             }
         } catch (e) {}
     }
 
+    var pollAborter = null;
+
     // stopSubscriptionPolling — ÚNICA função que encerra o poll. Chamada em
-    // active/cancelled/rejected/paused/expired/timeout/fatal. Limpa timers,
-    // invalida gerações (respostas atrasadas morrem) e remove o retry.
+    // active/cancelled/rejected/paused/expired/timeout/fatal. Aborta request
+    // em voo, limpa timers, invalida gerações (respostas atrasadas morrem)
+    // e remove o retry.
     function stopSubscriptionPolling() {
+        if (pollAborter) {
+            try { pollAborter.abort(); } catch (e) {}
+            pollAborter = null;
+        }
         if (activePoll) {
             try { activePoll.stop(); } catch (e) {}
         }
         hideRetryButton();
+    }
+
+    // renderTerminalError — ÚNICA renderização de estado terminal visual.
+    // Atomicamente: para tudo, esconde processing/spinner, mostra a mensagem
+    // final, reabilita o botão, preserva o formulário para correção. Nenhum
+    // callback antigo pode restaurar "processando" depois dela.
+    function renderTerminalError(message) {
+        stopSubscriptionPolling();
+        setBusy(false);
+        showError(message);
     }
 
     function showRetryButton() {
@@ -351,7 +378,7 @@
                 hideRetryButton();
                 if (errorBox) errorBox.style.display = 'none';
                 setBusy(true);
-                uiLog('retry', '', '', 'repoll');
+                uiLog('retry', '', '', 'repoll', '');
                 startUiPoll();
             };
             errorBox.parentNode.insertBefore(btn, errorBox.nextSibling);
@@ -374,39 +401,46 @@
 
     // Inicia UM poll limitado para a attempt atual. Chamadas repetidas
     // encerram a geração anterior antes (nunca dois polls simultâneos).
+    // Cada geração tem seu AbortController: parar o poll ABORTA o fetch
+    // em voo (rejeição cai no guarda de geração e é ignorada).
     function startUiPoll() {
         stopSubscriptionPolling();
         setBusy(true);
+        var aborter = null;
+        try {
+            if (typeof AbortController !== 'undefined') {
+                aborter = new AbortController();
+                pollAborter = aborter;
+            }
+        } catch (e) {}
         var poll = createPollController({
             url: '/index.php?action=subscription_status&attempt=' + encodeURIComponent(ATTEMPT_TOKEN),
             fetchFn: function (url) {
-                return fetch(url, { method: 'GET', credentials: 'same-origin' });
+                var opts = { method: 'GET', credentials: 'same-origin' };
+                if (aborter) {
+                    try { opts.signal = aborter.signal; } catch (e) {}
+                }
+                return fetch(url, opts);
             },
             setTimeoutFn: function (fn, ms) { return setTimeout(fn, ms); },
             clearTimeoutFn: function (id) { clearTimeout(id); },
             onSuccess: function () {
                 stopSubscriptionPolling();
-                uiLog('poll', 'active', 'active', 'success');
+                uiLog('poll', 'active', 'active', 'success', '');
                 window.location.href = '/index.php?action=meu_plano&subscribed=1';
             },
             onTerminal: function (gen, key) {
-                stopSubscriptionPolling();
-                uiLog('poll', key, key, 'stop_' + key);
-                setBusy(false);
-                showError(messageFor(key));
+                uiLog('poll', key, key, 'stop_terminal', key);
+                renderTerminalError(messageFor(key));
             },
             onTimeout: function () {
-                stopSubscriptionPolling();
-                uiLog('poll', 'pending', 'processing', 'timeout');
-                setBusy(false);
-                showError('Pagamento ainda não foi confirmado. Você pode verificar novamente mais tarde.');
+                uiLog('poll', 'pending', 'processing', 'timeout', '');
+                renderTerminalError('Pagamento ainda não foi confirmado. Você pode verificar novamente mais tarde.');
                 showRetryButton();
             },
             onTransportAbort: function () {
-                stopSubscriptionPolling();
-                uiLog('poll', '', '', 'transport_abort');
-                setBusy(false);
-                showError('Não foi possível verificar o pagamento. Verifique sua conexão e tente novamente.');
+                uiLog('poll', '', '', 'transport_abort', 'transport');
+                renderTerminalError('Não foi possível verificar o pagamento. Verifique sua conexão e tente novamente.');
                 showRetryButton();
             },
         });
@@ -515,8 +549,7 @@
                     formData = {};
                     var data = result.data || {};
                     var decision = decideInitialAction(result.http, data);
-                    uiLog('initial', data.status, data.outcome, decision.action
-                        + (decision.key ? ':' + decision.key : ''));
+                    uiLog('initial', data.status, data.outcome, decision.action, decision.key || '');
                     // REGRA DE OURO: sucesso SOMENTE com outcome active.
                     // ok:true sozinho (pending/vinculado) NUNCA celebra compra.
                     if (decision.action === 'success') {
@@ -527,19 +560,17 @@
                     // Somente pending/processing (ou 502/500) inicia polling da
                     // tentativa — sem reenviar o token de uso unico. Terminais
                     // (cancelled/rejected/paused/expired/erro) NUNCA entram
-                    // em poll: exibem o desfecho imediatamente.
+                    // em poll: render terminal atômico imediato.
                     if (decision.action === 'start_poll') {
                         setBusy(true);
                         showError('Pagamento em processamento. Aguardando confirmação…');
                         startUiPoll();
                         return;
                     }
-                    stopSubscriptionPolling();
-                    setBusy(false);
-                    showError(messageFor(decision.key));
+                    renderTerminalError(messageFor(decision.key));
                 }).catch(function () {
                     token = '';
-                    uiLog('initial', '', '', 'fetch_error_repoll');
+                    uiLog('initial', '', '', 'fetch_error_repoll', 'fetch');
                     // Falha de rede/timeout no POST: tenta reconciliar por
                     // polling limitado (sem reenviar token de uso unico).
                     setBusy(true);
