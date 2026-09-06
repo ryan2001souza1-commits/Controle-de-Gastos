@@ -14,6 +14,7 @@
     "agent/explorer-agent.md": "e326feb00e9b609f167aa40ddf62561ded0b0e03fee385da760492c79ccb71d4",
     "agent/frontend-specialist.md": "a381e047cec9f9bea3f96075e5b10ca087428d8dee2f6f42e94119968f476115",
     "agent/game-developer.md": "dcf76d9bc8d220bb801094eed091255118b7aff9203a8a7b98e10128030dcfd8",
+    "agent/governed-implementer.md": "a05ddab5b5e446c36308e1101e757447bb0bbd756c836b44068bfdb0d004b69e",
     "agent/mobile-developer.md": "cf9d2ebc6015dc3e2aab092711b111a22cb822e36b3f12d4e351818ecfab6677",
     "agent/orchestrator.md": "ad8bc39b0ea88df822df4597a0eec90424eb1cbd4418213c29a6f33ced3e5269",
     "agent/penetration-tester.md": "842b8684209208fd03dbf181f8fe7b5e84933732fe3d4f1bd8bf18af338b67cb",
@@ -38,7 +39,7 @@
     "hooks/tests/antigravity.test.mjs": "5e40131265749f54347470a6462dbfdf51ccef0a69165baf008b0b87443dbd5a",
     "hooks/validate-tool-call.mjs": "c8f0be06e8697efbfe3a2e614a3bed1a6e12c714e3faef72ca31c5fbe168e857",
     "mcp_config.json": "cb41a099a03068860be9da7cc94c8eb9914f84d487cd8f8c1fffd7d021ff7688",
-    "memory/MEMORY.md": "b553a654b8a59d7dcc102d4e38e77474e060c6a718cfed1ffe09528caa7abcfa",
+    "memory/MEMORY.md": "eed7d30bbe33996d5d17283ba86d53a7b5a7809431451777cd336a6d441c25e9",
     "memory/feedback-history.md": "06abb008293a359ebf30eafaacc0212c4a21e659170f251edd354f5433bfb1a5",
     "memory/project-conventions.md": "a121234b78e7d0c33908796e71eabde58c12e6becc36a4d3175f1b5b3a03c803",
     "memory/tech-decisions.md": "001f735f5fbc665c2bfedf3f637336cf3a25b4af7dcccd11739c8aff232e872c",
@@ -46,6 +47,7 @@
     "rules/code-rules.md": "3e602c516f195ddeb6fb986aa8cead49a0ebae8a48720f738d4642146dd510a5",
     "rules/core-protocol.md": "647becf363128a82e65ed9628f9ab82b0142692825b7f94f0e264ad6d1cacba2",
     "rules/design-rules.md": "73ee8f120e85939d04a7153bd7d2336cfb7d3025c9c6fc4b9003eca97e3f228b",
+    "rules/implementation-governance.md": "3bfc0289fac15aba7ea5ec169854ec52fbb310b46c3df43393b8c5a359811a0d",
     "rules/quick-reference.md": "f077e962ea7ad1a5afc51efca8f3d27c68b895398e0f0f153c118a9cb635593c",
     "rules/request-routing.md": "2e5e04fc7b500e77c41d3875e4cf3769c83243d78dc419e441b2944aceecbb4d",
     "rules/universal-rules.md": "8f03f437aa32909f473573c75754b671cb47344de82a18c4f8926db6a41c2388",
@@ -221,6 +223,6 @@
     "workflows/verify.md": "2dc26bcbe24c7e71571953da75629521ea3d7a0a444a7101e3601b39864971fc"
   },
   "kitVersion": "2026.8.31",
-  "manifestSha256": "2f662eae86d5fe5842cb3daf8558395f50c541d43c692710e067386224531035",
+  "manifestSha256": "f898b7a42d6704f783615a376f17acebd2e11d77893809069dd2a4ab76fcd5c9",
   "schemaVersion": "1.0.0"
 }

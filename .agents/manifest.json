@@ -191,6 +191,32 @@
       ],
       "version": "1.0.0"
     },
+    "governed-implementer": {
+      "model": "inherit",
+      "path": "agent/governed-implementer.md",
+      "requires": {
+        "skills": {
+          "architecture": "^1.0.0",
+          "clean-code": "^2.0.0",
+          "code-review-checklist": "^1.0.0",
+          "lint-and-validate": "^1.0.0",
+          "systematic-debugging": "^1.0.0",
+          "testing-patterns": "^1.0.0",
+          "verify-changes": "^1.0.0",
+          "vulnerability-scanner": "^1.0.0"
+        }
+      },
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Edit",
+        "Write",
+        "Agent"
+      ],
+      "version": "1.0.0"
+    },
     "mobile-developer": {
       "model": "inherit",
       "path": "agent/mobile-developer.md",
@@ -448,6 +474,12 @@
       "path": "rules/design-rules.md",
       "priority": "P0",
       "trigger": "glob",
+      "version": "1.0.0"
+    },
+    "implementation-governance": {
+      "path": "rules/implementation-governance.md",
+      "priority": "P0",
+      "trigger": "always_on",
       "version": "1.0.0"
     },
     "quick-reference": {
