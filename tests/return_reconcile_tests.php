@@ -43,11 +43,7 @@ class MercadoPagoServiceMock extends MercadoPagoService
     public function __construct() { $this->accessToken = 'MOCK'; }
     public array $mockResponse = ['ok' => false, 'status' => 500, 'error' => 'no_mock'];
     public function getPreapproval(string $id): array { return $this->mockResponse; }
-    public function createPreapproval(string $p, int $u, string $e, string $r): array
-    {
-        return ['ok' => false, 'error' => 'mock'];
-    }
-    public function getInitPointForPlan(string $p, int $u, string $e): array
+    public function createPreapproval(string $planId, string $payerEmail, string $externalReference, string $backUrl): array
     {
         return ['ok' => false, 'error' => 'mock'];
     }

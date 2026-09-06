@@ -37,7 +37,6 @@ class UpgradeMPMock extends MercadoPagoService
     public array $getMock          = ['ok' => false, 'status' => 500];
     public array $cancelMock       = ['ok' => false, 'status' => 500];
     public array $createMock       = ['ok' => false, 'error' => 'no_mock'];
-    public array $initPointMock    = ['ok' => false, 'error' => 'no_mock'];
     public bool $getCalled          = false;
     public bool $cancelCalled       = false;
     public bool $createCalled       = false;
@@ -58,16 +57,10 @@ class UpgradeMPMock extends MercadoPagoService
         return $this->cancelMock;
     }
 
-    public function createPreapproval(string $planId, int $userId, string $email, string $ref): array
+    public function createPreapproval(string $planId, string $payerEmail, string $externalReference, string $backUrl): array
     {
         $this->createCalled = true;
         return $this->createMock;
-    }
-
-    public function getInitPointForPlan(string $planSlug, int $userId, string $email): array
-    {
-        $this->createCalled = true;
-        return $this->initPointMock;
     }
 }
 
@@ -403,12 +396,15 @@ function simulateUpgradeFlow(MockPDOUpgrade $db, UpgradeMPMock $mp, int $userId,
     if ($storedInit !== null && $storedInit !== '') {
         return ['result' => 'reuse_stored_init_point', 'plan' => $targetPlan];
     }
-    $initResult = $mp->getInitPointForPlan($targetPlan, $userId, 'user@test.com');
-    if ($initResult['ok'] === false) {
+    $planId = MercadoPagoService::getPlanIdForSlug($targetPlan) ?? '';
+    $externalRef = 'user_' . $userId . '_' . $targetPlan;
+    $backUrl = 'https://controle-de-gastos-one-silk.vercel.app/mercadopago_return.php';
+    $createResult = $mp->createPreapproval($planId, 'user@test.com', $externalRef, $backUrl);
+    if ($createResult['ok'] === false) {
         return ['result' => 'service_error', 'plan' => $targetPlan];
     }
     if ($pendingSub !== null) {
-        $subscriptionModel->storeInitPoint((int)$pendingSub['id'], $initResult['init_point']);
+        $subscriptionModel->storeInitPoint((int)$pendingSub['id'], $createResult['init_point']);
     }
     return ['result' => 'checkout_created', 'plan' => $targetPlan];
 }
@@ -419,7 +415,7 @@ $mp = new UpgradeMPMock();
 $mp->getMock = ['ok' => true, 'status' => 200,
     'data' => ['id' => 'mp_pro_001', 'status' => 'authorized']];
 $mp->cancelMock = ['ok' => true, 'status' => 200, 'data' => ['id' => 'mp_pro_001', 'status' => 'cancelled']];
-$mp->initPointMock = ['ok' => true, 'init_point' => 'https://mercadopago.com/checkout?premium'];
+$mp->createMock = ['ok' => true, 'preapproval_id' => 'mp_premium_XXX', 'init_point' => 'https://mercadopago.com/checkout?premium'];
 
 $result = simulateUpgradeFlow($db, $mp, 1, 'premium');
 
@@ -440,7 +436,7 @@ $mp = new UpgradeMPMock();
 $mp->getMock = ['ok' => true, 'status' => 200,
     'data' => ['id' => 'mp_pro_001', 'status' => 'authorized']];
 $mp->cancelMock = ['ok' => false, 'status' => 500, 'error' => 'server'];
-$mp->initPointMock = ['ok' => true, 'init_point' => 'https://mercadopago.com/premium'];
+$mp->createMock = ['ok' => true, 'preapproval_id' => 'mp_premium_XXX', 'init_point' => 'https://mercadopago.com/premium'];
 
 $result = simulateUpgradeFlow($db, $mp, 1, 'premium');
 
@@ -460,7 +456,7 @@ $mp = new UpgradeMPMock();
 $mp->getMock = ['ok' => true, 'status' => 200,
     'data' => ['id' => 'mp_pro_001', 'status' => 'cancelled']];
 $mp->cancelMock = ['ok' => true, 'status' => 200, 'data' => ['id' => 'mp_pro_001', 'status' => 'cancelled']];
-$mp->initPointMock = ['ok' => true, 'init_point' => 'https://mercadopago.com/premium'];
+$mp->createMock = ['ok' => true, 'preapproval_id' => 'mp_premium_XXX', 'init_point' => 'https://mercadopago.com/premium'];
 
 $result = simulateUpgradeFlow($db, $mp, 1, 'premium');
 
@@ -474,7 +470,7 @@ $mp = new UpgradeMPMock();
 $mp->getMock = ['ok' => true, 'status' => 200,
     'data' => ['id' => 'mp_pro_001', 'status' => 'authorized']];
 $mp->cancelMock = ['ok' => true, 'status' => 200, 'data' => ['id' => 'mp_pro_001', 'status' => 'cancelled']];
-$mp->initPointMock = ['ok' => true, 'init_point' => 'https://mercadopago.com/premium1'];
+$mp->createMock = ['ok' => true, 'preapproval_id' => 'mp_premium_XXX', 'init_point' => 'https://mercadopago.com/premium1'];
 
 $mp->createCalled = false;
 $result1 = simulateUpgradeFlow($db, $mp, 1, 'premium');
@@ -502,7 +498,7 @@ $mp = new UpgradeMPMock();
 $mp->getMock = ['ok' => true, 'status' => 200,
     'data' => ['id' => 'mp_pro_001', 'status' => 'cancelled']];
 $mp->cancelMock = ['ok' => true, 'status' => 200, 'data' => ['id' => 'mp_pro_001', 'status' => 'cancelled']];
-$mp->initPointMock = ['ok' => true, 'init_point' => 'https://mercadopago.com/premium'];
+$mp->createMock = ['ok' => true, 'preapproval_id' => 'mp_premium_XXX', 'init_point' => 'https://mercadopago.com/premium'];
 
 $result = simulateUpgradeFlow($db, $mp, 1, 'premium');
 assert_test($result['result'] === 'checkout_created',
@@ -546,7 +542,7 @@ $db = makeDbProUser();
 $mp = new UpgradeMPMock();
 $mp->getMock = ['ok' => true, 'status' => 200, 'data' => ['id' => 'mp_pro_001', 'status' => 'authorized']];
 $mp->cancelMock = ['ok' => true, 'status' => 200, 'data' => ['id' => 'mp_pro_001', 'status' => 'cancelled']];
-$mp->initPointMock = ['ok' => true, 'init_point' => 'https://mercadopago.com/premium'];
+$mp->createMock = ['ok' => true, 'preapproval_id' => 'mp_premium_XXX', 'init_point' => 'https://mercadopago.com/premium'];
 
 $result = simulateUpgradeFlow($db, $mp, 2, 'premium');
 assert_test($mp->getCalled === false, 'UP07a: getPreapproval NAO chamado (Joao sem assinatura ativa)');
@@ -559,7 +555,7 @@ $db = makeDbProUser();
 $mp = new UpgradeMPMock();
 $mp->getMock = ['ok' => true, 'status' => 200, 'data' => ['id' => 'mp_admin_001', 'status' => 'authorized']];
 $mp->cancelMock = ['ok' => true, 'status' => 200, 'data' => ['id' => 'mp_admin_001', 'status' => 'cancelled']];
-$mp->initPointMock = ['ok' => true, 'init_point' => 'https://mercadopago.com/premium'];
+$mp->createMock = ['ok' => true, 'preapproval_id' => 'mp_premium_XXX', 'init_point' => 'https://mercadopago.com/premium'];
 
 $result = simulateUpgradeFlow($db, $mp, 3, 'premium');
 assert_test($mp->getCalled === false, 'UP08a: getPreapproval NAO chamado (admin sem subscription)');
@@ -592,7 +588,7 @@ $mp = new UpgradeMPMock();
 $mp->getMock = ['ok' => true, 'status' => 200,
     'data' => ['id' => 'mp_pro_001', 'status' => 'authorized']];
 $mp->cancelMock = ['ok' => false, 'status' => 404, 'error' => 'not_found'];
-$mp->initPointMock = ['ok' => true, 'init_point' => 'https://mercadopago.com/premium'];
+$mp->createMock = ['ok' => true, 'preapproval_id' => 'mp_premium_XXX', 'init_point' => 'https://mercadopago.com/premium'];
 
 $result = simulateUpgradeFlow($db, $mp, 1, 'premium');
 assert_test($result['result'] === 'checkout_created',

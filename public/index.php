@@ -339,7 +339,14 @@ if ($action === 'register') {
     }
 
     try {
-        $result = $mpService->getInitPointForPlan($slug, $userId, $email);
+        $planId = MercadoPagoService::getPlanIdForSlug($slug);
+        if ($planId === null || $planId === '') {
+            header('Location: /index.php?action=meu_plano&error=plan_not_found');
+            exit;
+        }
+        $backUrl = rtrim((string)(getenv('APP_URL') ?: 'https://controle-de-gastos-one-silk.vercel.app'), '/')
+            . '/mercadopago_return.php';
+        $result = $mpService->createPreapproval($planId, $email, $externalReference, $backUrl);
     } catch (Throwable $e) {
         error_log('[subscribe] ' . $e->getMessage());
         header('Location: /index.php?action=meu_plano&error=service_error');
@@ -348,12 +355,14 @@ if ($action === 'register') {
 
     if ($result['ok'] === false) {
         $errMap = [
-            'plan_not_found'    => 'plan_not_found',
-            'invalid_user'      => 'invalid_plan',
-            'invalid_email'     => 'invalid_plan',
-            'network_error'     => 'service_error',
-            'invalid_response'  => 'service_error',
-            'missing_init_point'=> 'service_error',
+            'invalid_plan_id'          => 'plan_not_found',
+            'plan_not_found'           => 'plan_not_found',
+            'invalid_email'            => 'invalid_plan',
+            'invalid_external_reference' => 'invalid_plan',
+            'invalid_back_url'         => 'service_error',
+            'network_error'            => 'service_error',
+            'invalid_response'         => 'service_error',
+            'missing_init_point'       => 'service_error',
         ];
         $err = $errMap[$result['error']] ?? 'service_error';
         header('Location: /index.php?action=meu_plano&error=' . rawurlencode($err));
@@ -361,7 +370,8 @@ if ($action === 'register') {
     }
 
     $initPoint = (string)($result['init_point'] ?? '');
-    if ($initPoint === '') {
+    $preapprovalId = (string)($result['preapproval_id'] ?? '');
+    if ($initPoint === '' || $preapprovalId === '') {
         header('Location: /index.php?action=meu_plano&error=service_error');
         exit;
     }

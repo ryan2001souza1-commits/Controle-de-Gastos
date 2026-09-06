@@ -334,7 +334,7 @@ class MercadoPagoServiceMock extends MercadoPagoService
     }
 
     public function createPreapproval(
-        string $planSlug, int $userId, string $email, string $externalReference
+        string $planId, string $payerEmail, string $externalReference, string $backUrl
     ): array {
         return ['ok' => false, 'error' => 'mock_no_real_api'];
     }
@@ -401,24 +401,26 @@ assert_test(
     'com env -> plan_premium_test_xyz para premium'
 );
 
-echo "\n--- MercadoPagoService::createPreapproval: validacoes de entrada ---\n";
+echo "\n--- MercadoPagoService::createPreapproval: validacoes de entrada (novo fluxo) ---\n";
 
 $s = new MercadoPagoService();
-$r = $s->createPreapproval('gold', 1, 'a@b.com', 'user_1_pro');
-assert_test(($r['error'] ?? '') === 'invalid_plan', 'slug invalido (gold) -> invalid_plan');
+$r = $s->createPreapproval('', 'a@b.com', 'user_1_pro', 'https://example.com/return');
+assert_test(($r['error'] ?? '') === 'invalid_plan_id', 'plan_id vazio -> invalid_plan_id');
 
-$r = $s->createPreapproval('pro', 0, 'a@b.com', 'user_0_pro');
-assert_test(($r['error'] ?? '') === 'invalid_user', 'user_id=0 -> invalid_user');
+$r = $s->createPreapproval('plan123', '', 'user_1_pro', 'https://example.com/return');
+assert_test(($r['error'] ?? '') === 'invalid_email', 'email vazio -> invalid_email');
 
-$r = $s->createPreapproval('pro', 1, 'not-email', 'user_1_pro');
+$r = $s->createPreapproval('plan123', 'not-email', 'user_1_pro', 'https://example.com/return');
 assert_test(($r['error'] ?? '') === 'invalid_email', 'email invalido -> invalid_email');
 
-$r = $s->createPreapproval('pro', 1, 'a@b.com', 'hacker_attempt');
+$r = $s->createPreapproval('plan123', 'a@b.com', 'hacker_attempt', 'https://example.com/return');
 assert_test(($r['error'] ?? '') === 'invalid_external_reference', 'external_reference invalido -> invalid_external_reference');
 
-putenv('MERCADOPAGO_PLAN_ID_PRO');
-$r = $s->createPreapproval('pro', 1, 'a@b.com', 'user_1_pro');
-assert_test(($r['error'] ?? '') === 'plan_not_found', 'sem plan_id no .env -> plan_not_found');
+$r = $s->createPreapproval('plan123', 'a@b.com', 'user_1_pro', '');
+assert_test(($r['error'] ?? '') === 'invalid_back_url', 'back_url vazio -> invalid_back_url');
+
+$r = $s->createPreapproval('plan123', 'a@b.com', 'user_1_pro', 'not-a-url');
+assert_test(($r['error'] ?? '') === 'invalid_back_url', 'back_url invalida -> invalid_back_url');
 
 echo "\n--- SubscriptionReconciler: Pro authorized (Free->Pro) ---\n";
 
@@ -662,7 +664,8 @@ if (!$liveMode) {
     $svcLive = new MercadoPagoService();
     $uidLive = 777777;
     $liveRef = 'user_' . $uidLive . '_pro';
-    $rLive = $svcLive->createPreapproval('pro', $uidLive, 'live_test@example.com', $liveRef);
+    $liveBackUrl = 'https://controle-de-gastos-one-silk.vercel.app/mercadopago_return.php';
+    $rLive = $svcLive->createPreapproval('plan_pro_test_live', 'live_test@example.com', $liveRef, $liveBackUrl);
     assert_test(
         ($rLive['ok'] ?? false) === true
             && is_string($rLive['preapproval_id'] ?? '')

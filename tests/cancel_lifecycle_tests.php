@@ -36,8 +36,7 @@ class MercadoPagoServiceCancelMock extends MercadoPagoService
     }
 
     public function getPreapproval(string $id): array { return $this->getMock; }
-    public function createPreapproval(string $p, int $u, string $e, string $r): array { return ['ok' => false]; }
-    public function getInitPointForPlan(string $p, int $u, string $e): array { return ['ok' => false]; }
+    public function createPreapproval(string $planId, string $payerEmail, string $externalReference, string $backUrl): array { return ['ok' => false]; }
 }
 
 class MockPDOCancel

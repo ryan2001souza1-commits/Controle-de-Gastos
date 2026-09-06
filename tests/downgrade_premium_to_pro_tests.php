@@ -36,7 +36,7 @@ class DowngradeMPMock extends MercadoPagoService
     public function __construct() { $this->accessToken = 'MOCK'; }
     public array $getMock    = ['ok' => false, 'status' => 500];
     public array $cancelMock = ['ok' => false, 'status' => 500];
-    public array $initPointMock = ['ok' => false, 'error' => 'no_mock'];
+    public array $createMock = ['ok' => false, 'error' => 'no_mock'];
     public bool $cancelCalled = false;
     public ?string $lastCancelId = null;
 
@@ -49,11 +49,9 @@ class DowngradeMPMock extends MercadoPagoService
         return $this->cancelMock;
     }
 
-    public function createPreapproval(string $p, int $u, string $e, string $r): array { return ['ok' => false]; }
-
-    public function getInitPointForPlan(string $planSlug, int $userId, string $email): array
+    public function createPreapproval(string $planId, string $payerEmail, string $externalReference, string $backUrl): array
     {
-        return $this->initPointMock;
+        return $this->createMock;
     }
 }
 
@@ -378,12 +376,15 @@ function simulateDowngradeFlow(MockPDODowngrade $db, DowngradeMPMock $mp, int $u
     if ($storedInit !== null && $storedInit !== '') {
         return ['result' => 'reuse_stored_init_point', 'plan' => $targetPlan];
     }
-    $initResult = $mp->getInitPointForPlan($targetPlan, $userId, 'user@test.com');
-    if ($initResult['ok'] === false) {
+    $planId = MercadoPagoService::getPlanIdForSlug($targetPlan) ?? '';
+    $externalRef = 'user_' . $userId . '_' . $targetPlan;
+    $backUrl = 'https://controle-de-gastos-one-silk.vercel.app/mercadopago_return.php';
+    $createResult = $mp->createPreapproval($planId, 'user@test.com', $externalRef, $backUrl);
+    if ($createResult['ok'] === false) {
         return ['result' => 'service_error', 'plan' => $targetPlan];
     }
     if ($pendingSub !== null) {
-        $subscriptionModel->storeInitPoint((int)$pendingSub['id'], $initResult['init_point']);
+        $subscriptionModel->storeInitPoint((int)$pendingSub['id'], $createResult['init_point']);
     }
     return ['result' => 'checkout_created', 'plan' => $targetPlan];
 }
@@ -394,7 +395,7 @@ $mp = new DowngradeMPMock();
 $mp->getMock = ['ok' => true, 'status' => 200,
     'data' => ['id' => 'mp_premium_001', 'status' => 'authorized']];
 $mp->cancelMock = ['ok' => true, 'status' => 200, 'data' => ['id' => 'mp_premium_001', 'status' => 'cancelled']];
-$mp->initPointMock = ['ok' => true, 'init_point' => 'https://mercadopago.com/pro'];
+$mp->createMock = ['ok' => true, 'preapproval_id' => 'mp_pro_XXX', 'init_point' => 'https://mercadopago.com/pro'];
 
 $result = simulateDowngradeFlow($db, $mp, 1, 'pro');
 
@@ -412,7 +413,7 @@ $mp = new DowngradeMPMock();
 $mp->getMock = ['ok' => true, 'status' => 200,
     'data' => ['id' => 'mp_premium_001', 'status' => 'authorized']];
 $mp->cancelMock = ['ok' => false, 'status' => 500, 'error' => 'server'];
-$mp->initPointMock = ['ok' => true, 'init_point' => 'https://mercadopago.com/pro'];
+$mp->createMock = ['ok' => true, 'preapproval_id' => 'mp_pro_XXX', 'init_point' => 'https://mercadopago.com/pro'];
 
 $result = simulateDowngradeFlow($db, $mp, 1, 'pro');
 
@@ -432,7 +433,7 @@ $mp = new DowngradeMPMock();
 $mp->getMock = ['ok' => true, 'status' => 200,
     'data' => ['id' => 'mp_premium_001', 'status' => 'cancelled']];
 $mp->cancelMock = ['ok' => true, 'status' => 200, 'data' => ['id' => 'mp_premium_001', 'status' => 'cancelled']];
-$mp->initPointMock = ['ok' => true, 'init_point' => 'https://mercadopago.com/pro'];
+$mp->createMock = ['ok' => true, 'preapproval_id' => 'mp_pro_XXX', 'init_point' => 'https://mercadopago.com/pro'];
 
 $result = simulateDowngradeFlow($db, $mp, 1, 'pro');
 
@@ -446,7 +447,7 @@ $mp = new DowngradeMPMock();
 $mp->getMock = ['ok' => true, 'status' => 200,
     'data' => ['id' => 'mp_premium_001', 'status' => 'authorized']];
 $mp->cancelMock = ['ok' => true, 'status' => 200, 'data' => ['id' => 'mp_premium_001', 'status' => 'cancelled']];
-$mp->initPointMock = ['ok' => true, 'init_point' => 'https://mercadopago.com/pro1'];
+$mp->createMock = ['ok' => true, 'preapproval_id' => 'mp_pro_XXX', 'init_point' => 'https://mercadopago.com/pro1'];
 
 $result1 = simulateDowngradeFlow($db, $mp, 1, 'pro');
 assert_test($result1['result'] === 'checkout_created', 'DN04a: primeiro clique -> checkout_created');
@@ -497,7 +498,7 @@ assert_test($ana['plano_status'] === 'ativo', 'DN05c: plano_status=ativo');
 echo "\n--- DN06: Usuario sem assinatura ativa -> Pro checkout funciona ---\n";
 $db = makeDbPremiumUser();
 $mp = new DowngradeMPMock();
-$mp->initPointMock = ['ok' => true, 'init_point' => 'https://mercadopago.com/pro'];
+$mp->createMock = ['ok' => true, 'preapproval_id' => 'mp_pro_XXX', 'init_point' => 'https://mercadopago.com/pro'];
 
 $result = simulateDowngradeFlow($db, $mp, 2, 'pro');
 assert_test($mp->cancelCalled === false, 'DN06a: cancel NAO chamado (Beto sem assinatura ativa)');
@@ -507,7 +508,7 @@ assert_test($result['result'] === 'checkout_created', 'DN06c: fluxo normal');
 echo "\n--- DN07: Conta administrativa/manual -> nao afetada ---\n";
 $db = makeDbPremiumUser();
 $mp = new DowngradeMPMock();
-$mp->initPointMock = ['ok' => true, 'init_point' => 'https://mercadopago.com/pro'];
+$mp->createMock = ['ok' => true, 'preapproval_id' => 'mp_pro_XXX', 'init_point' => 'https://mercadopago.com/pro'];
 
 $result = simulateDowngradeFlow($db, $mp, 3, 'pro');
 assert_test($mp->cancelCalled === false, 'DN07a: cancel NAO chamado (admin sem subscription)');
@@ -539,7 +540,7 @@ $mp = new DowngradeMPMock();
 $mp->getMock = ['ok' => true, 'status' => 200,
     'data' => ['id' => 'mp_premium_001', 'status' => 'authorized']];
 $mp->cancelMock = ['ok' => false, 'status' => 404, 'error' => 'not_found'];
-$mp->initPointMock = ['ok' => true, 'init_point' => 'https://mercadopago.com/pro'];
+$mp->createMock = ['ok' => true, 'preapproval_id' => 'mp_pro_XXX', 'init_point' => 'https://mercadopago.com/pro'];
 
 $result = simulateDowngradeFlow($db, $mp, 1, 'pro');
 assert_test($result['result'] === 'checkout_created',
@@ -554,7 +555,7 @@ $db->tables['subscriptions'][0]['raw_status'] = 'cancelled';
 $mp = new DowngradeMPMock();
 $mp->getMock = ['ok' => true, 'status' => 200,
     'data' => ['id' => 'mp_premium_001', 'status' => 'cancelled']];
-$mp->initPointMock = ['ok' => true, 'init_point' => 'https://mercadopago.com/pro'];
+$mp->createMock = ['ok' => true, 'preapproval_id' => 'mp_pro_XXX', 'init_point' => 'https://mercadopago.com/pro'];
 
 $result = simulateDowngradeFlow($db, $mp, 1, 'pro');
 assert_test($mp->cancelCalled === false, 'DN10a: cancel NAO chamado (Premium ja cancelled no MP)');
