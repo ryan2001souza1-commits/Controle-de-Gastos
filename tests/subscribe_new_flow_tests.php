@@ -69,20 +69,24 @@ function simulateSubscribeAction(
 
     $subscriptionModel = new Subscription($db);
 
-    // A) Assinatura ja existente para o mesmo plano
+    // A) Bloqueio de DUPLICATA: apenas active/authorized PARA O MESMO PLANO
     $existing = $subscriptionModel->findActiveOrPendingByUserAndPlan($userId, $slug);
     if ($existing !== null) {
-        $existingMpId = (string)($existing['mp_preapproval_id'] ?? '');
-        if ($existingMpId !== '') {
-            $reuse = $mp->getPreapproval($existingMpId);
-            if ($reuse['ok'] === true && is_array($reuse['data'])) {
-                $status = strtolower((string)($reuse['data']['status'] ?? ''));
-                if ($status === 'authorized') {
-                    return ['redirect' => '/index.php?action=meu_plano&subscribed=1'];
+        $existingStatus = strtolower((string)($existing['status'] ?? ''));
+        $isAuthorized = ($existingStatus === 'active');
+        if ($isAuthorized) {
+            $existingMpId = (string)($existing['mp_preapproval_id'] ?? '');
+            if ($existingMpId !== '') {
+                $reuseMp = new MockMPService();
+                $reuse = $reuseMp->getPreapproval($existingMpId);
+                if ($reuse['ok'] === true && is_array($reuse['data'])) {
+                    $status = strtolower((string)($reuse['data']['status'] ?? ''));
+                    if ($status === 'authorized') {
+                        return ['redirect' => '/index.php?action=meu_plano&subscribed=1'];
+                    }
                 }
             }
         }
-        return ['redirect' => '/mercadopago_return.php'];
     }
 
     // upgrade cancela antiga (Pro<->Premium)
@@ -102,7 +106,21 @@ function simulateSubscribeAction(
         }
     }
 
-    $subscriptionModel->createPending($userId, $slug, $planId, $externalReference);
+    // Forca criacao de novo registro pending (cada clique = 1 preapproval)
+    $stmtInsert = $db->prepare(
+        'INSERT INTO subscriptions (user_id, plan_id, plan_slug, status, raw_status, external_reference)
+         VALUES (:uid, :pid, :slug, :status, :raw, :ext_ref)
+         RETURNING id'
+    );
+    $stmtInsert->execute([
+        ':uid'    => $userId,
+        ':pid'    => $planId,
+        ':slug'   => $slug,
+        ':status' => 'pending',
+        ':raw'    => 'pending',
+        ':ext_ref'=> $externalReference,
+    ]);
+    $newPendingId = (int)$stmtInsert->fetchColumn();
 
     // B) NOVA ASSINATURA: createPreapproval sempre
     $planIdMp = MercadoPagoService::getPlanIdForSlug($slug);
@@ -208,9 +226,9 @@ class MockStmtSubs
             $this->pdo->lastInsertedId = $newId;
             $this->pdo->tables['subscriptions'][] = [
                 'id' => $newId,
-                'user_id' => (int)($params[':user_id'] ?? 0),
-                'plan_id' => (int)($params[':plan_id'] ?? 0),
-                'plan_slug' => $params[':plan_slug'] ?? '',
+                'user_id' => (int)($params[':user_id'] ?? $params[':uid'] ?? 0),
+                'plan_id' => (int)($params[':plan_id'] ?? $params[':pid'] ?? 0),
+                'plan_slug' => $params[':plan_slug'] ?? $params[':slug'] ?? '',
                 'status' => $params[':status'] ?? 'pending',
                 'start_date' => null,
                 'next_billing_date' => null,
@@ -218,8 +236,8 @@ class MockStmtSubs
                 'cancelled_at' => null,
                 'expired_at' => null,
                 'grace_period_end' => null,
-                'raw_status' => $params[':raw_status'] ?? '',
-                'external_reference' => $params[':external_reference'] ?? '',
+                'raw_status' => $params[':raw_status'] ?? $params[':raw'] ?? '',
+                'external_reference' => $params[':external_reference'] ?? $params[':ext_ref'] ?? '',
                 'mp_preapproval_id' => $params[':mp_preapproval_id'] ?? '',
                 'checkout_url' => null,
             ];
@@ -245,23 +263,46 @@ class MockStmtSubs
         $sqlLower = $this->sql;
         $params = $this->params;
 
-        if (str_contains($sqlLower, "status in ('pending','active','paused')")
-            || (str_contains($sqlLower, 'from subscriptions') && str_contains($sqlLower, 'order by id desc limit 1'))) {
+        $hasInClause = str_contains($sqlLower, "in (");
+        if (str_contains($sqlLower, "from subscriptions")
+            && str_contains($sqlLower, "status")
+            && str_contains($sqlLower, "user_id")) {
+
             $uid = (int)($params[':uid'] ?? 0);
-            $slug = (string)($params[':slug'] ?? '');
-            $matches = [];
-            foreach ($this->pdo->tables['subscriptions'] as $s) {
-                if ((int)$s['user_id'] === $uid
-                    && (string)$s['plan_slug'] === $slug
-                    && in_array($s['status'], ['pending', 'active', 'paused'], true)) {
-                    $matches[] = $s;
+
+            if ($hasInClause && str_contains($sqlLower, "'pending'")) {
+                $slug = (string)($params[':slug'] ?? '');
+                $matches = [];
+                foreach ($this->pdo->tables['subscriptions'] as $s) {
+                    if ((int)$s['user_id'] === $uid
+                        && (string)$s['plan_slug'] === $slug
+                        && in_array($s['status'], ['pending', 'active', 'paused'], true)) {
+                        $matches[] = $s;
+                    }
                 }
+                usort($matches, fn($a, $b) => (int)$b['id'] - (int)$a['id']);
+                if (!empty($matches)) {
+                    return $mode === PDO::FETCH_ASSOC ? $matches[0] : (object)$matches[0];
+                }
+                return false;
             }
-            usort($matches, fn($a, $b) => (int)$b['id'] - (int)$a['id']);
-            if (!empty($matches)) {
-                return $mode === PDO::FETCH_ASSOC ? $matches[0] : (object)$matches[0];
+
+            if ($hasInClause && !str_contains($sqlLower, "'pending'")) {
+                $matches = [];
+                foreach ($this->pdo->tables['subscriptions'] as $s) {
+                    $mpId = (string)($s['mp_preapproval_id'] ?? '');
+                    if ((int)$s['user_id'] === $uid
+                        && in_array($s['status'], ['active', 'paused'], true)
+                        && $mpId !== '') {
+                        $matches[] = $s;
+                    }
+                }
+                usort($matches, fn($a, $b) => (int)$b['id'] - (int)$a['id']);
+                if (!empty($matches)) {
+                    return $mode === PDO::FETCH_ASSOC ? $matches[0] : (object)$matches[0];
+                }
+                return false;
             }
-            return false;
         }
         if (str_contains($sqlLower, "status = 'active'") && str_contains($sqlLower, 'from subscriptions')
             && !str_contains($sqlLower, 'in (')) {
@@ -405,8 +446,8 @@ putenv('MERCADOPAGO_PLAN_ID_PREMIUM=plan_premium_xyz');
 
 echo "\n=== TESTES: action=subscribe NAO reutiliza storedInitPoint ===\n\n";
 
-// ---------- CENARIO 1: NOVA assinatura com checkout_url antigo ja gravado ----------
-echo "--- NS01: storedInitPoint preenchido NAO impede createPreapproval ---\n";
+// ---------- CENARIO 1: assinatura cancelled NAO bloqueia ----------
+echo "\n--- NS01: assinatura cancelled NAO bloqueia nova preapproval ---\n";
 
 $db = new MockPDOSubs();
 $db->tables['subscriptions'] = [
@@ -424,11 +465,45 @@ $mp = new MockMPService();
 $result = simulateSubscribeAction($db, $mp, 1, 'pro', 'maria@ex.com');
 
 assert_test($mp->createCallCount === 1, 'NS01a: createPreapproval foi chamado 1 vez', "count={$mp->createCallCount}");
-assert_test(str_contains($result['redirect'], 'mercadopago.com.br/checkout/v1/redirect?preapproval_id=mp_new_1'), 'NS01b: redirect usa init_point da NOVA preapproval', $result['redirect']);
-assert_test(!str_contains($result['redirect'], 'OLD_INIT_POINT_LEGADO'), 'NS01c: redirect NAO usa init_point legado', $result['redirect']);
+assert_test(
+    strpos($result['redirect'], 'mercadopago.com.br/checkout/v1/redirect') !== false,
+    'NS01b: redirect para checkout MP',
+    $result['redirect']
+);
+assert_test(
+    strpos($result['redirect'], 'OLD_INIT_POINT_LEGADO') === false,
+    'NS01c: redirect NAO usa init_point legado',
+    $result['redirect']
+);
 
-// ---------- CENARIO 2: storedInitPoint preenchido + nova assinatura em outro plano ----------
-echo "\n--- NS02: assinatura pending antiga para mesmo plano redireciona para return ---\n";
+// ---------- CENARIO 2: pending existente para outro plano (Pro bloqueia Premium?) ----------
+echo "\n--- NS02: pending Pro NAO bloqueia assinatura Premium ---\n";
+
+$db = new MockPDOSubs();
+$db->tables['subscriptions'] = [
+    [
+        'id' => 1, 'user_id' => 1, 'plan_id' => 2, 'plan_slug' => 'pro',
+        'status' => 'pending',
+        'raw_status' => 'pending',
+        'external_reference' => 'user_1_pro',
+        'mp_preapproval_id' => 'mp_pend_pro',
+        'checkout_url' => null,
+    ],
+];
+
+$mp = new MockMPService();
+$result = simulateSubscribeAction($db, $mp, 1, 'premium', 'maria@ex.com');
+
+assert_test($mp->createCallCount === 1, 'NS02a: createPreapproval Premium chamado 1 vez', "count={$mp->createCallCount}");
+assert_test($mp->lastCreatedPlanId === 'plan_premium_xyz', 'NS02b: plan_id e Premium', $mp->lastCreatedPlanId);
+assert_test(
+    strpos($result['redirect'], 'mercadopago.com.br') !== false,
+    'NS02c: redirect para checkout MP Premium',
+    $result['redirect']
+);
+
+// ---------- CENARIO 3: pending existente PARA O MESMO PLANO ----------
+echo "\n--- NS03: pending Pro NAO bloqueia nova preapproval Pro ---\n";
 
 $db = new MockPDOSubs();
 $db->tables['subscriptions'] = [
@@ -445,11 +520,20 @@ $db->tables['subscriptions'] = [
 $mp = new MockMPService();
 $result = simulateSubscribeAction($db, $mp, 1, 'pro', 'maria@ex.com');
 
-assert_test($mp->createCallCount === 0, 'NS02a: createPreapproval NAO foi chamado (pending existe)', "count={$mp->createCallCount}");
-assert_test(str_contains($result['redirect'], '/mercadopago_return.php'), 'NS02b: redirect para return.php', $result['redirect']);
+assert_test($mp->createCallCount === 1, 'NS03a: createPreapproval chamado 1 vez (pending NAO bloqueia)', "count={$mp->createCallCount}");
+assert_test(
+    strpos($result['redirect'], 'mercadopago.com.br') !== false,
+    'NS03b: redirect para checkout MP',
+    $result['redirect']
+);
+assert_test(
+    strpos($result['redirect'], 'OLD_INIT_POINT') === false,
+    'NS03c: redirect NAO reutiliza init_point legado',
+    $result['redirect']
+);
 
-// ---------- CENARIO 3: assinatura authorized redireciona para subscribed=1 ----------
-echo "\n--- NS03: assinatura authorized -> redirect subscribed=1 ---\n";
+// ---------- CENARIO 4: active/authorized para O MESMO PLANO ----------
+echo "\n--- NS04: active/authorized Pro -> redirect subscribed=1 (NAO cria duplicata) ---\n";
 
 $db = new MockPDOSubs();
 $db->tables['subscriptions'] = [
@@ -466,66 +550,82 @@ $db->tables['subscriptions'] = [
 $mp = new MockMPService();
 $result = simulateSubscribeAction($db, $mp, 1, 'pro', 'maria@ex.com');
 
-assert_test($mp->createCallCount === 0, 'NS03a: createPreapproval NAO chamado (ja authorized)', "count={$mp->createCallCount}");
-assert_test(str_contains($result['redirect'], 'subscribed=1'), 'NS03b: redirect subscribed=1', $result['redirect']);
+assert_test($mp->createCallCount === 0, 'NS04a: createPreapproval NAO chamado (ja authorized)', "count={$mp->createCallCount}");
+assert_test(
+    strpos($result['redirect'], 'subscribed=1') !== false,
+    'NS04b: redirect subscribed=1',
+    $result['redirect']
+);
 
-// ---------- CENARIO 4: NOVA assinatura Premium ----------
-echo "\n--- NS04: NOVA assinatura Premium com storedInitPoint antigo NAO bloqueia ---\n";
+// ---------- CENARIO 5: active/authorized para PLANO DIFERENTE -----------
+echo "\n--- NS05: active Pro NAO bloqueia Premium ---\n";
 
 $db = new MockPDOSubs();
 $db->tables['subscriptions'] = [
     [
         'id' => 1, 'user_id' => 1, 'plan_id' => 2, 'plan_slug' => 'pro',
-        'status' => 'cancelled',
-        'raw_status' => 'cancelled',
+        'status' => 'active',
+        'raw_status' => 'authorized',
         'external_reference' => 'user_1_pro',
-        'mp_preapproval_id' => 'mp_canc_pro',
-        'checkout_url' => 'https://mp.com/OLD_PRO',
+        'mp_preapproval_id' => 'mp_auth_pro',
+        'checkout_url' => 'https://mp.com/PRO_OLD',
     ],
 ];
 
 $mp = new MockMPService();
 $result = simulateSubscribeAction($db, $mp, 1, 'premium', 'maria@ex.com');
 
-assert_test($mp->createCallCount === 1, 'NS04a: createPreapproval chamado 1 vez para Premium', "count={$mp->createCallCount}");
-assert_test($mp->lastCreatedPlanId === 'plan_premium_xyz', 'NS04b: plan_id do Premium', $mp->lastCreatedPlanId);
-assert_test(str_contains($result['redirect'], 'mercadopago.com.br'), 'NS04c: redirect para nova preapproval', $result['redirect']);
+assert_test($mp->createCallCount === 1, 'NS05a: createPreapproval Premium chamado 1 vez', "count={$mp->createCallCount}");
+assert_test($mp->lastCreatedPlanId === 'plan_premium_xyz', 'NS05b: plan_id e Premium', $mp->lastCreatedPlanId);
+assert_test(
+    strpos($result['redirect'], 'mercadopago.com.br') !== false,
+    'NS05c: redirect para checkout MP Premium',
+    $result['redirect']
+);
 
-// ---------- CENARIO 5: NOVA assinatura sem nenhuma pendencia ----------
-echo "\n--- NS05: NOVA assinatura limpa (sem subscriptions) ---\n";
+// ---------- CENARIO 6: NOVA assinatura limpa ----------
+echo "\n--- NS06: NOVA assinatura limpa (sem subscriptions) ---\n";
 
 $db = new MockPDOSubs();
 $mp = new MockMPService();
 $result = simulateSubscribeAction($db, $mp, 1, 'pro', 'maria@ex.com');
 
-assert_test($mp->createCallCount === 1, 'NS05a: createPreapproval chamado 1 vez', "count={$mp->createCallCount}");
-assert_test($mp->lastCreatedExternalRef === 'user_1_pro', 'NS05b: external_reference = user_1_pro', $mp->lastCreatedExternalRef);
-assert_test($mp->lastCreatedEmail === 'maria@ex.com', 'NS05c: payer_email = email do user', $mp->lastCreatedEmail);
-assert_test(str_contains($result['redirect'], 'mp_new_1'), 'NS05d: redirect usa init_point novo', $result['redirect']);
+assert_test($mp->createCallCount === 1, 'NS06a: createPreapproval chamado 1 vez', "count={$mp->createCallCount}");
+assert_test($mp->lastCreatedExternalRef === 'user_1_pro', 'NS06b: external_reference = user_1_pro', $mp->lastCreatedExternalRef);
+assert_test($mp->lastCreatedEmail === 'maria@ex.com', 'NS06c: payer_email = email do user', $mp->lastCreatedEmail);
+assert_test(
+    strpos($result['redirect'], 'mp_new_1') !== false,
+    'NS06d: redirect usa init_point novo',
+    $result['redirect']
+);
 
-// ---------- CENARIO 6: assinatura cancelled NAO bloqueia nova ----------
-echo "\n--- NS06: assinatura cancelled NAO bloqueia nova tentativa ---\n";
+// ---------- CENARIO 7: rejected NAO bloqueia nova tentativa ----------
+echo "\n--- NS07: assinatura rejected NAO bloqueia nova preapproval ---\n";
 
 $db = new MockPDOSubs();
 $db->tables['subscriptions'] = [
     [
         'id' => 1, 'user_id' => 1, 'plan_id' => 2, 'plan_slug' => 'pro',
-        'status' => 'cancelled',
-        'raw_status' => 'cancelled',
+        'status' => 'rejected',
+        'raw_status' => 'rejected',
         'external_reference' => 'user_1_pro',
-        'mp_preapproval_id' => 'mp_canc_123',
-        'checkout_url' => 'https://mp.com/OLD',
+        'mp_preapproval_id' => 'mp_rej_123',
+        'checkout_url' => null,
     ],
 ];
 
 $mp = new MockMPService();
 $result = simulateSubscribeAction($db, $mp, 1, 'pro', 'maria@ex.com');
 
-assert_test($mp->createCallCount === 1, 'NS06a: createPreapproval chamado 1 vez (cancelled NAO bloqueia)', "count={$mp->createCallCount}");
-assert_test(str_contains($result['redirect'], 'mp_new_1'), 'NS06b: redirect usa init_point novo', $result['redirect']);
+assert_test($mp->createCallCount === 1, 'NS07a: createPreapproval chamado 1 vez (rejected NAO bloqueia)', "count={$mp->createCallCount}");
+assert_test(
+    strpos($result['redirect'], 'mercadopago.com.br') !== false,
+    'NS07b: redirect para checkout MP',
+    $result['redirect']
+);
 
-// ---------- CENARIO 7: API falha ----------
-echo "\n--- NS07: createPreapproval retorna erro -> redirect service_error ---\n";
+// ---------- CENARIO 8: API falha ----------
+echo "\n--- NS08: createPreapproval retorna erro -> redirect service_error ---\n";
 
 $db = new MockPDOSubs();
 $mp = new MockMPService();
@@ -533,11 +633,15 @@ $mp->createMockResponse = ['ok' => false, 'status' => 500, 'error' => 'mp_error'
 
 $result = simulateSubscribeAction($db, $mp, 1, 'pro', 'maria@ex.com');
 
-assert_test($mp->createCallCount === 1, 'NS07a: createPreapproval chamado 1 vez', "count={$mp->createCallCount}");
-assert_test(str_contains($result['redirect'], 'service_error'), 'NS07b: redirect para service_error', $result['redirect']);
+assert_test($mp->createCallCount === 1, 'NS08a: createPreapproval chamado 1 vez', "count={$mp->createCallCount}");
+assert_test(
+    strpos($result['redirect'], 'service_error') !== false,
+    'NS08b: redirect para service_error',
+    $result['redirect']
+);
 
-// ---------- CENARIO 8: createPreapproval retorna init_point vazio ----------
-echo "\n--- NS08: createPreapproval sem init_point -> redirect service_error ---\n";
+// ---------- CENARIO 9: createPreapproval retorna init_point vazio ----------
+echo "\n--- NS09: createPreapproval sem init_point -> redirect service_error ---\n";
 
 $db = new MockPDOSubs();
 $mp = new MockMPService();
@@ -545,10 +649,14 @@ $mp->createMockResponse = ['ok' => true, 'status' => 201, 'preapproval_id' => 'm
 
 $result = simulateSubscribeAction($db, $mp, 1, 'pro', 'maria@ex.com');
 
-assert_test(str_contains($result['redirect'], 'service_error'), 'NS08: redirect service_error (init_point vazio)', $result['redirect']);
+assert_test(
+    strpos($result['redirect'], 'service_error') !== false,
+    'NS09: redirect service_error (init_point vazio)',
+    $result['redirect']
+);
 
-// ---------- CENARIO 9: redirect usa init_point retornado pela NOVA preapproval ----------
-echo "\n--- NS09: redirect usa exatamente o init_point retornado ---\n";
+// ---------- CENARIO 10: redirect usa EXATAMENTE o init_point da NOVA preapproval ----------
+echo "\n--- NS10: redirect usa exatamente o init_point retornado pela nova preapproval ---\n";
 
 $db = new MockPDOSubs();
 $mp = new MockMPService();
@@ -564,10 +672,58 @@ $result = simulateSubscribeAction($db, $mp, 1, 'premium', 'maria@ex.com');
 
 assert_test(
     $result['redirect'] === 'https://www.mercadopago.com.br/checkout/v1/redirect?preapproval_id=mp_especifico_99',
-    'NS09a: redirect EXATO retornado pela preapproval',
+    'NS10a: redirect EXATO retornado pela preapproval',
     $result['redirect']
 );
-assert_test($result['preapproval_id'] === 'mp_especifico_99', 'NS09b: preapproval_id correto', $result['preapproval_id'] ?? '');
+assert_test($result['preapproval_id'] === 'mp_especifico_99', 'NS10b: preapproval_id correto', $result['preapproval_id'] ?? '');
+
+// ---------- CENARIO 11: createPreapproval chamado APENAS uma vez ----------
+echo "\n--- NS11: createPreapproval chamado exatamente uma vez por clique ---\n";
+
+$db = new MockPDOSubs();
+$mp = new MockMPService();
+
+simulateSubscribeAction($db, $mp, 1, 'pro', 'maria@ex.com');
+assert_test($mp->createCallCount === 1, 'NS11a: 1 clique = 1 chamada', "count={$mp->createCallCount}");
+
+simulateSubscribeAction($db, $mp, 1, 'pro', 'maria@ex.com');
+assert_test($mp->createCallCount === 2, 'NS11b: 2 cliques = 2 chamadas (sem storedInitPoint reutilizado)', "count={$mp->createCallCount}");
+
+simulateSubscribeAction($db, $mp, 1, 'pro', 'maria@ex.com');
+assert_test($mp->createCallCount === 3, 'NS11c: 3 cliques = 3 chamadas', "count={$mp->createCallCount}");
+
+// ---------- CENARIO 12: NUNCA vai para mercadopago_return.php antes de createPreapproval ----------
+echo "\n--- NS12: action=subscribe NAO envia para mercadopago_return.php ANTES do checkout ---\n";
+
+$testCases = [
+    ['status' => 'pending', 'slug' => 'pro'],
+    ['status' => 'cancelled', 'slug' => 'pro'],
+    ['status' => 'rejected', 'slug' => 'premium'],
+    ['status' => 'paused', 'slug' => 'pro'],
+    ['status' => null, 'slug' => 'pro'],
+];
+
+foreach ($testCases as $i => $tc) {
+    $db = new MockPDOSubs();
+    if ($tc['status'] !== null) {
+        $db->tables['subscriptions'] = [[
+            'id' => 1, 'user_id' => 1, 'plan_id' => 2, 'plan_slug' => $tc['slug'],
+            'status' => $tc['status'],
+            'raw_status' => $tc['status'] ?? '',
+            'external_reference' => 'user_1_' . $tc['slug'],
+            'mp_preapproval_id' => 'mp_test_' . $i,
+            'checkout_url' => null,
+        ]];
+    }
+    $mp = new MockMPService();
+    $result = simulateSubscribeAction($db, $mp, 1, $tc['slug'], 'maria@ex.com');
+    assert_test(
+        strpos($result['redirect'], 'mercadopago_return.php') === false,
+        "NS12[$i]: status={$tc['status']}/{$tc['slug']} NAO vai para return.php antes do checkout",
+        $result['redirect']
+    );
+    assert_test($mp->createCallCount === 1, "NS12[$i]b: createPreapproval chamado", "count={$mp->createCallCount}");
+}
 
 // ---------- Resumo ----------
 echo "\n=== RESUMO ===\n";

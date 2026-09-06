@@ -244,27 +244,30 @@ if ($action === 'register') {
     $planId = (int)$planRow['id'];
 
     $subscriptionModel = new Subscription($db);
-    // ---- A) Assinatura ja existente para o mesmo plano ----
-    // Se existe subscription pending/ativa/pausada, NAO reutilizar
-    // storedInitPoint nem redirect para init_point do MP antigo.
-    // Em vez disso, redirecionar para a pagina de retorno do MP
-    // (o usuario pode continuar de onde parou).
+    $mpService = new MercadoPagoService();
+    // ---- A) Bloqueio de DUPLICATA: apenas active/authorized PARA O MESMO PLANO ----
+    // Status pending/cancelled/rejected/paused NAO bloqueiam uma nova
+    // preapproval: o usuario pode clicar Assinar novamente e criar uma
+    // nova tentativa do zero.
+    // init_point antigo nunca e reutilizado; /mercadopago_return.php
+    // e usado APENAS como back_url apos o checkout.
     $existing = $subscriptionModel->findActiveOrPendingByUserAndPlan($userId, $slug);
     if ($existing !== null) {
-        $existingMpId = (string)($existing['mp_preapproval_id'] ?? '');
-        if ($existingMpId !== '') {
-            $mpService = new MercadoPagoService();
-            $reuse = $mpService->getPreapproval($existingMpId);
-            if ($reuse['ok'] === true && is_array($reuse['data'])) {
-                $status = strtolower((string)($reuse['data']['status'] ?? ''));
-                if ($status === 'authorized') {
-                    header('Location: /index.php?action=meu_plano&subscribed=1', true, 302);
-                    exit;
+        $existingStatus = strtolower((string)($existing['status'] ?? ''));
+        $isAuthorized = ($existingStatus === 'active');
+        if ($isAuthorized) {
+            $existingMpId = (string)($existing['mp_preapproval_id'] ?? '');
+            if ($existingMpId !== '') {
+                $reuse = $mpService->getPreapproval($existingMpId);
+                if ($reuse['ok'] === true && is_array($reuse['data'])) {
+                    $status = strtolower((string)($reuse['data']['status'] ?? ''));
+                    if ($status === 'authorized') {
+                        header('Location: /index.php?action=meu_plano&subscribed=1', true, 302);
+                        exit;
+                    }
                 }
             }
         }
-        header('Location: /mercadopago_return.php', true, 302);
-        exit;
     }
 
     if ($slug === 'premium' || $slug === 'pro') {
@@ -328,12 +331,27 @@ if ($action === 'register') {
         }
     }
 
-    $subscriptionModel->createPending($userId, $slug, $planId, $externalReference);
+    // Forca criacao de novo registro pending.
+    // Cada clique em "Assinar" gera uma preapproval diferente.
+    $stmtInsert = $db->prepare(
+        'INSERT INTO subscriptions (user_id, plan_id, plan_slug, status, raw_status, external_reference)
+         VALUES (:uid, :pid, :slug, :status, :raw, :ext_ref)
+         RETURNING id'
+    );
+    $stmtInsert->execute([
+        ':uid'   => $userId,
+        ':pid'   => $planId,
+        ':slug'  => $slug,
+        ':status'=> Subscription::STATUS_PENDING,
+        ':raw'   => 'pending',
+        ':ext_ref'=> $externalReference,
+    ]);
+    $newPendingId = (int)$stmtInsert->fetchColumn();
 
     // ---- B) NOVA ASSINATURA: chamar createPreapproval SEMPRE ----
     // NAO redirecionar para storedInitPoint. O init_point retornado
     // pela nova preapproval e o unico usado.
-    $pendingSub = $subscriptionModel->findActiveOrPendingByUserAndPlan($userId, $slug);
+    $pendingSub = ['id' => $newPendingId];
 
     try {
         $planId = MercadoPagoService::getPlanIdForSlug($slug);
