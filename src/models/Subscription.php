@@ -255,22 +255,57 @@ class Subscription
     }
 
     /**
-     * Variante com trava de linha (SELECT ... FOR UPDATE).
-     * Deve ser chamada dentro de transacao: serializa dois POST simultaneos
-     * da mesma tentativa — o segundo espera e enxerga o mp_preapproval_id
-     * gravado pelo primeiro, em vez de criar segunda assinatura no MP.
+     * Tomada atomica da tentativa (compare-and-set em UM statement).
+     * (travas de linha via clausula FOR UPDATE foram removidas do fluxo:
+     * fragil sob pooler +
+     * prepares nativos, e mantinha trava aberta na janela da falha 25P02.)
+     *
+     * Substitui o padrao BEGIN + trava de linha: um unico UPDATE
+     * condicional decide o vencedor sem manter trava entre statements.
+     * Retorna a linha vinculada em caso de vitoria, null em caso de derrota
+     * (outro request vinculou primeiro) — sem excecao como controle de fluxo.
+     * Chamadas duplicadas sao idempotentes via UNIQUE parcial de
+     * mp_preapproval_id + verificacao posterior.
+     *
+     * @return array{id:int,status:string,mp_preapproval_id:string}|null
      */
-    public function findByAttemptTokenForUpdate(string $attemptToken): ?array
-    {
-        if (!self::isAttemptToken($attemptToken)) {
+    public function claimMpPreapprovalId(
+        int $subscriptionId,
+        int $userId,
+        string $planSlug,
+        string $mpPreapprovalId
+    ): ?array {
+        if ($subscriptionId <= 0 || $userId <= 0 || $planSlug === '') {
+            return null;
+        }
+        if (!preg_match('/^[a-zA-Z0-9_\-]{1,80}$/', $mpPreapprovalId)) {
             return null;
         }
         $stmt = $this->db->prepare(
-            'SELECT * FROM subscriptions WHERE attempt_token = :token ORDER BY id DESC LIMIT 1 FOR UPDATE'
+            "UPDATE subscriptions
+                SET mp_preapproval_id = :mpid,
+                    updated_at = NOW()
+              WHERE id = :id
+                AND user_id = :uid
+                AND plan_slug = :slug
+                AND (mp_preapproval_id IS NULL OR mp_preapproval_id = '')
+          RETURNING id, status, mp_preapproval_id"
         );
-        $stmt->execute([':token' => $attemptToken]);
+        $stmt->execute([
+            ':mpid' => $mpPreapprovalId,
+            ':id'   => $subscriptionId,
+            ':uid'  => $userId,
+            ':slug' => $planSlug,
+        ]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $row ?: null;
+        if (!is_array($row) || (int)($row['id'] ?? 0) !== $subscriptionId) {
+            return null;
+        }
+        return [
+            'id' => (int)$row['id'],
+            'status' => (string)($row['status'] ?? ''),
+            'mp_preapproval_id' => (string)($row['mp_preapproval_id'] ?? ''),
+        ];
     }
 
     /**

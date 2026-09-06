@@ -300,8 +300,12 @@ class SubscriptionCheckoutService
         $this->setPhase('txn_begin');
         $this->db->beginTransaction();
         try {
-            $this->setPhase('txn_lock');
-            $fresh = $this->subscriptionModel->findByAttemptTokenForUpdate($attemptToken);
+            // Re-leitura SEM trava: a exclusividade vem do claim atomico
+            // abaixo, nao de trava de linha (removida: fragil sob
+            // pooler + prepares nativos, e mantinha lock durante a janela
+            // de falha observada em producao).
+            $this->setPhase('txn_reread');
+            $fresh = $this->subscriptionModel->findByAttemptToken($attemptToken);
             if ($fresh === null || (int)$fresh['id'] !== $attemptId || (int)($fresh['user_id'] ?? 0) !== $userId) {
                 throw new RuntimeException('attempt_changed');
             }
@@ -313,6 +317,7 @@ class SubscriptionCheckoutService
                 if ($rowMpId !== $mpPreapprovalId) {
                     throw new RuntimeException('mp_conflict');
                 }
+                $this->setPhase('txn_commit');
                 $this->db->commit();
                 return [
                     'ok' => true,
@@ -326,8 +331,35 @@ class SubscriptionCheckoutService
             if ($other !== null && (int)$other['id'] !== $attemptId) {
                 throw new RuntimeException('mp_conflict');
             }
-            $this->setPhase('txn_attach');
-            $this->subscriptionModel->attachMpPreapprovalId($attemptId, $mpPreapprovalId);
+            // Tomada atomica: UM statement decide o vencedor. Derrota (0 linhas)
+            // significa que outro request/webhook vinculou primeiro: re-le e
+            // adota o vencedor em vez de explodir.
+            $this->setPhase('txn_claim');
+            $claimed = $this->subscriptionModel->claimMpPreapprovalId(
+                $attemptId,
+                $userId,
+                $planSlug,
+                $mpPreapprovalId
+            );
+            if ($claimed === null) {
+                $this->setPhase('txn_claim_lost');
+                $reread = $this->subscriptionModel->findByAttemptToken($attemptToken);
+                $winnerMpId = (string)($reread['mp_preapproval_id'] ?? '');
+                if ($winnerMpId !== '' && $winnerMpId !== $mpPreapprovalId) {
+                    throw new RuntimeException('mp_conflict');
+                }
+                if ($winnerMpId === $mpPreapprovalId && $winnerMpId !== '') {
+                    $this->setPhase('txn_commit');
+                    $this->db->commit();
+                    return [
+                        'ok' => true,
+                        'already' => true,
+                        'status' => (string)($reread['status'] ?? 'pending'),
+                        'redirect' => '/index.php?action=meu_plano&subscribed=1',
+                    ];
+                }
+                throw new RuntimeException('claim_failed');
+            }
             $internalStatus = MercadoPagoWebhookService::mapMpStatusToInternal($mpStatusRaw);
             if ($internalStatus === null) {
                 $internalStatus = Subscription::STATUS_PENDING;

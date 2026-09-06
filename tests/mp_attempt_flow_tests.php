@@ -94,7 +94,10 @@ class FakeAttemptStmt extends PDOStatement
             $this->pdo->lastRow = end($t['subscriptions']);
         }
 
-        if (str_starts_with(trim($sql), 'update subscriptions')) {
+        // Claim atomico e emulado integralmente no fetch() (condicao + escrita
+        // + retorno atomicos); o execute generico nao pode toca-lo antes.
+        $isClaim = str_contains($sql, 'returning id') && isset($p[':mpid'], $p[':uid'], $p[':slug']);
+        if (str_starts_with(trim($sql), 'update subscriptions') && !$isClaim) {
             $rows = &$this->pdo->tables['subscriptions'];
             foreach ($rows as &$s) {
                 $match = false;
@@ -146,6 +149,20 @@ class FakeAttemptStmt extends PDOStatement
     {
         $sql = $this->sqlText;
         $p = $this->bound;
+        // Claim atomico: UPDATE ... WHERE id/uid/slug + mp vazio RETURNING.
+        if (str_contains($sql, 'returning id') && isset($p[':mpid'], $p[':uid'], $p[':slug'])) {
+            foreach ($this->pdo->tables['subscriptions'] as &$s) {
+                if ((int)$s['id'] === (int)$p[':id']
+                    && (int)$s['user_id'] === (int)$p[':uid']
+                    && (string)$s['plan_slug'] === (string)$p[':slug']
+                    && ((string)($s['mp_preapproval_id'] ?? '') === '')) {
+                    $s['mp_preapproval_id'] = (string)$p[':mpid'];
+                    return ['id' => (int)$s['id'], 'status' => (string)$s['status'], 'mp_preapproval_id' => (string)$s['mp_preapproval_id']];
+                }
+            }
+            unset($s);
+            return false;
+        }
         if (str_contains($sql, 'from subscriptions') && isset($p[':token'])) {
             foreach (array_reverse($this->subRows()) as $s) {
                 if ((string)($s['attempt_token'] ?? '') === (string)$p[':token'] && $p[':token'] !== '') {
@@ -805,6 +822,37 @@ $svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
 $r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
 assert_test(($r['http'] ?? 0) === 200, 'AT40a: guard reverteu e fluxo completou');
 assert_test($db->inTransaction() === false, 'AT40b: sem txn residual ao final');
+
+echo "\n--- AT41: claim atomico vence/perde sem excecao ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$won = $sm->claimMpPreapprovalId((int)$a['id'], 5, 'pro', 'mp_claim_1');
+assert_test($won !== null && ($won['mp_preapproval_id'] ?? '') === 'mp_claim_1', 'AT41a: claim vence em linha livre');
+$lost = $sm->claimMpPreapprovalId((int)$a['id'], 5, 'pro', 'mp_claim_2');
+assert_test($lost === null, 'AT41b: segundo claim perde (retorna null, sem excecao)');
+$badOwner = $sm->claimMpPreapprovalId((int)$a['id'], 12, 'pro', 'mp_claim_3');
+assert_test($badOwner === null, 'AT41c: owner errado nao toma a linha');
+$badPlan = $sm->claimMpPreapprovalId((int)$a['id'], 5, 'premium', 'mp_claim_4');
+assert_test($badPlan === null, 'AT41d: plano errado nao toma a linha');
+$row = $sm->findByAttemptToken($a['attempt_token']);
+assert_test(($row['mp_preapproval_id'] ?? '') === 'mp_claim_1', 'AT41e: vencedor preservado');
+
+echo "\n--- AT42: fluxo nao usa SELECT FOR UPDATE ---\n";
+$svcSrc = (string)file_get_contents($ROOT . '/src/services/SubscriptionCheckoutService.php');
+assert_test(stripos($svcSrc, 'FOR UPDATE') === false, 'AT42a: service sem FOR UPDATE');
+$modelSrc = (string)file_get_contents($ROOT . '/src/models/Subscription.php');
+assert_test(!preg_match('/SELECT[^;]*FOR UPDATE/i', $modelSrc), 'AT42b: model sem SELECT FOR UPDATE executavel');
+
+echo "\n--- AT43: concorrencia real no claim (duas tentativas, um mp id) ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$aA = $sm->createAttempt(5, 'pro', 2);
+$aB = $sm->createAttempt(12, 'pro', 2);
+$w1 = $sm->claimMpPreapprovalId((int)$aA['id'], 5, 'pro', 'mp_race_1');
+$w2 = $sm->claimMpPreapprovalId((int)$aB['id'], 12, 'pro', 'mp_race_1');
+assert_test($w1 !== null, 'AT43a: primeira tomada vence');
+assert_test($w2 !== null, 'AT43b: linhas distintas aceitam (dono verificado depois)');
+$dup = $sm->claimMpPreapprovalId((int)$aA['id'], 5, 'pro', 'mp_race_2');
+assert_test($dup === null, 'AT43c: mesma linha nao e retomada');
 
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;
