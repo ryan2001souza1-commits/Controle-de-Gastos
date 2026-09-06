@@ -138,7 +138,13 @@
                         return;
                     }
                     setBusy(false);
-                    showError('Não foi possível concluir o pagamento. Confira os dados do cartão.');
+                    var userMessages = {
+                        invalid_card: 'Verifique os dados do cartão e tente novamente.',
+                        card_declined: 'Pagamento recusado. Tente outro cartão ou fale com seu banco.',
+                        service_error: 'Serviço indisponível no momento. Tente novamente em instantes.',
+                        payment_failed: 'Não foi possível concluir o pagamento. Confira os dados do cartão.'
+                    };
+                    showError(userMessages[data.error] || userMessages.payment_failed);
                 }).catch(function () {
                     token = '';
                     pollStatus(function () {

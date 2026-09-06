@@ -467,6 +467,24 @@ foreach ($logLines as $line) {
 }
 assert_test(!$leak && count($logLines) > 0, 'AT14d: nenhum error_log referencia card token (' . count($logLines) . ' logs auditados)');
 
+echo "\n--- AT15: hardening pós security-review ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+assert_test($sm->updateStatusById((int)$a['id'], 'hacked_status', 'x', null, null) === false, 'AT15a: status arbitrario rejeitado');
+$row = $sm->findByAttemptToken($a['attempt_token']);
+assert_test(($row['status'] ?? '') === 'pending', 'AT15b: linha intacta apos rejeicao');
+[$ts, $v1] = MercadoPagoWebhookService::parseSignatureHeader('ts=1700000000, v1=abcdef1234');
+assert_test($ts === '1700000000' && $v1 === 'abcdef1234', 'AT15c: header com espaco apos virgula parseado');
+$vercel = json_decode((string)file_get_contents($ROOT . '/vercel.json'), true);
+$csp = '';
+foreach (($vercel['headers'][0]['headers'] ?? []) as $h) {
+    if (($h['key'] ?? '') === 'Content-Security-Policy') $csp = (string)$h['value'];
+}
+assert_test(str_contains($csp, 'https://sdk.mercadopago.com'), 'AT15d: CSP cobre sdk.mercadopago.com');
+assert_test(preg_match('/connect-src[^;]*sdk\.mercadopago\.com/', $csp) === 1, 'AT15e: connect-src inclui SDK (tokenizacao)');
+assert_test(preg_match('/frame-src[^;]*mercadopago\.com/', $csp) === 1, 'AT15f: frame-src inclui MP (iframes CardForm)');
+assert_test(!str_contains($csp, '*.'), 'AT15g: sem wildcards na CSP');
+
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;
 echo "Total: $total | \033[32mPassed: $passed\033[0m | \033[31mFailed: $failed\033[0m\n";

@@ -162,8 +162,19 @@ class MercadoPagoService
 
         if ($httpStatus < 200 || $httpStatus >= 300) {
             $msg = is_string($data['message'] ?? null) ? (string)$data['message'] : 'mp_error';
-            error_log('[MercadoPagoService] createPreapproval erro HTTP ' . $httpStatus . ': ' . $msg);
-            return ['ok' => false, 'status' => $httpStatus, 'error' => $msg];
+            // status_detail do MP (ex.: cc_rejected_insufficient_amount): charset
+            // restrito a codigos snake_case — nunca ecoa cartao/token (sao opacos
+            // e nunca vao ao log em nenhum ponto deste fluxo).
+            $detail = '';
+            if (is_string($data['status_detail'] ?? null)) {
+                $detail = strtolower(trim((string)$data['status_detail']));
+                if (!preg_match('/^[a-z0-9_]{1,80}$/', $detail)) {
+                    $detail = '';
+                }
+            }
+            error_log('[MercadoPagoService] createPreapproval erro HTTP ' . $httpStatus . ': ' . $msg
+                . ($detail !== '' ? ' detail=' . $detail : ''));
+            return ['ok' => false, 'status' => $httpStatus, 'error' => $msg, 'mp_detail' => $detail];
         }
 
         $preapprovalId = $data['id'] ?? null;
@@ -209,6 +220,53 @@ class MercadoPagoService
             'plan_id'            => $planId,
             'mp_status'          => is_string($data['status'] ?? null) ? (string)$data['status'] : null,
         ];
+    }
+
+    /**
+     * Mapeia um resultado falho de createPreapproval() para um codigo seguro
+     * exibivel ao usuario. Nunca expoe mensagem bruta do MP, token ou segredo.
+     *
+     * - 'invalid_card'  dados do cartao/token invalidos (tentar de novo com
+     *                   dados corretos faz sentido);
+     * - 'card_declined' emissor recusou (outro cartao/banco);
+     * - 'processing'    falha de rede/timeout: a assinatura PODE ter sido criada
+     *                   no MP — o frontend deve fazer polling, nao novo cartao;
+     * - 'service_error' erro nosso/transitorio (tentar mais tarde).
+     *
+     * @param array{ok:bool, status?:int, error?:string, mp_detail?:string} $result
+     */
+    public static function mapErrorToUserCode(array $result): string
+    {
+        if (($result['ok'] ?? false) === true) {
+            return 'ok';
+        }
+        $http = (int)($result['status'] ?? 0);
+        $error = strtolower((string)($result['error'] ?? ''));
+        $detail = strtolower((string)($result['mp_detail'] ?? ''));
+        $blob = $error . ' ' . $detail;
+        if (str_contains($error, 'invalid_card_token')) {
+            return 'invalid_card';
+        }
+        if (
+            str_contains($blob, 'declined') || str_contains($blob, 'insufficient')
+            || str_contains($blob, 'rejected') || str_contains($blob, 'invalid_payment')
+            || str_contains($blob, 'cc_rejected') || str_contains($blob, 'call_issuer')
+        ) {
+            return 'card_declined';
+        }
+        if ($http === 0) {
+            return 'processing';
+        }
+        if (
+            str_contains($blob, 'card_token') || str_contains($blob, 'invalid_card')
+            || str_contains($blob, 'bad_request') || str_contains($blob, 'invalid_param')
+        ) {
+            return 'invalid_card';
+        }
+        if ($http === 401 || $http === 403 || $http >= 500) {
+            return 'service_error';
+        }
+        return 'payment_failed';
     }
 
     /**

@@ -112,6 +112,18 @@ if ($mpPreapprovalId === null) {
 }
 
 $webhookSecret = (string)getenv('MERCADOPAGO_WEBHOOK_SECRET');
+// Fail-closed em producao: sem secret configurado, recusar em vez de
+// processar webhooks nao autenticados. Fora de producao (dev/teste local),
+// mantem o comportamento permissivo para nao quebrar desenvolvimento.
+$isProdEnv = (getenv('VERCEL_ENV') === 'production')
+    || (strtolower((string)(getenv('APP_ENV') ?: '')) === 'production');
+if ($webhookSecret === '' && $isProdEnv) {
+    error_log('[MPWebhook] MERCADOPAGO_WEBHOOK_SECRET ausente em producao');
+    http_response_code(503);
+    header('Content-Type: application/json');
+    echo json_encode(['error' => 'webhook_not_configured']);
+    exit;
+}
 if ($webhookSecret !== '') {
     $sigHeader = '';
     if (isset($headers['x-signature']) && is_string($headers['x-signature'])) {

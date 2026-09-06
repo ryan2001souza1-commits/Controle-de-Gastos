@@ -392,6 +392,19 @@ class Subscription
         ?string $nextBillingDate,
         ?string $gracePeriodEnd
     ): bool {
+        // Allowlist: status interno precisa ser um dos estados conhecidos.
+        // Impede gravacao de valor arbitrario mesmo se um caller futuro
+        // passar dado nao mapeado.
+        if (!in_array($newStatus, [
+            self::STATUS_PENDING,
+            self::STATUS_ACTIVE,
+            self::STATUS_PAUSED,
+            self::STATUS_CANCELLED,
+            self::STATUS_EXPIRED,
+            self::STATUS_REJECTED,
+        ], true)) {
+            return false;
+        }
         $stmt = $this->db->prepare(
             'UPDATE subscriptions
                 SET status = :status,

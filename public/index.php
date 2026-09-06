@@ -456,10 +456,15 @@ if ($action === 'register') {
         );
         if ($result['ok'] === false) {
             $db->rollBack();
-            $mpHttp = (int)($result['status'] ?? 0);
-            $code = ($mpHttp === 0 || $mpHttp >= 500) ? 502 : 400;
-            http_response_code($code);
-            echo json_encode(['ok' => false, 'error' => 'payment_failed']);
+            // Codigo seguro para o usuario (mapeado, sem vazar detalhe do MP).
+            $userCode = MercadoPagoService::mapErrorToUserCode($result);
+            $httpCode = match ($userCode) {
+                'processing', 'service_error' => 502,
+                'card_declined' => 402,
+                default => 400,
+            };
+            http_response_code($httpCode);
+            echo json_encode(['ok' => false, 'error' => $userCode]);
             exit;
         }
 

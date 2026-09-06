@@ -103,6 +103,7 @@ class MercadoPagoWebhookService
         $ts = null;
         $v1 = null;
         foreach ($parts as $part) {
+            $part = trim($part);
             if (str_starts_with($part, 'ts=')) {
                 $ts = trim(substr($part, 3));
             } elseif (str_starts_with($part, 'v1=')) {

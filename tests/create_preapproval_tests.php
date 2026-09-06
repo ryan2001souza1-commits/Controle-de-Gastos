@@ -132,7 +132,14 @@ class FakeCurlMpService extends MercadoPagoService
 
         if ($httpStatus < 200 || $httpStatus >= 300) {
             $msg = is_string($data['message'] ?? null) ? (string)$data['message'] : 'mp_error';
-            return ['ok' => false, 'status' => $httpStatus, 'error' => $msg];
+            $detail = '';
+            if (is_string($data['status_detail'] ?? null)) {
+                $detail = strtolower(trim((string)$data['status_detail']));
+                if (!preg_match('/^[a-z0-9_]{1,80}$/', $detail)) {
+                    $detail = '';
+                }
+            }
+            return ['ok' => false, 'status' => $httpStatus, 'error' => $msg, 'mp_detail' => $detail];
         }
 
         $preapprovalId = $data['id'] ?? null;
@@ -422,6 +429,35 @@ assert_test(
     ($s->lastCall['method'] ?? '') === 'POST',
     'Metodo e POST'
 );
+
+echo "\n--- mapErrorToUserCode (diagnostico seguro p/ usuario) ---\n";
+
+assert_test(MercadoPagoService::mapErrorToUserCode(['ok' => true]) === 'ok', 'ok=true -> ok');
+assert_test(MercadoPagoService::mapErrorToUserCode(['ok' => false, 'status' => 0, 'error' => 'network_error']) === 'processing', 'timeout/rede -> processing (poll, sem novo cartao)');
+assert_test(MercadoPagoService::mapErrorToUserCode(['ok' => false, 'status' => 0, 'error' => 'invalid_card_token']) === 'invalid_card', 'token invalido -> invalid_card');
+assert_test(MercadoPagoService::mapErrorToUserCode(['ok' => false, 'status' => 400, 'error' => 'bad_request', 'mp_detail' => 'cc_rejected_insufficient_amount']) === 'card_declined', 'detail recusado -> card_declined');
+assert_test(MercadoPagoService::mapErrorToUserCode(['ok' => false, 'status' => 401, 'error' => 'unauthorized']) === 'service_error', '401 -> service_error');
+assert_test(MercadoPagoService::mapErrorToUserCode(['ok' => false, 'status' => 500, 'error' => 'mp_error']) === 'service_error', '500 -> service_error');
+assert_test(MercadoPagoService::mapErrorToUserCode(['ok' => false, 'status' => 400, 'error' => 'algo_estranho']) === 'payment_failed', 'desconhecido -> payment_failed (generico seguro)');
+
+echo "\n--- status_detail sanitizado (nunca vaza token) ---\n";
+
+$s = new FakeCurlMpService();
+$s->curlQueue = [[
+    'status' => 400,
+    'body' => json_encode(['message' => 'invalid card', 'status_detail' => 'cc_rejected_bad_filled_card_number']),
+]];
+$r = $s->createPreapproval('plan_pro_xyz', 'user@test.com', 'user_1_pro', 'https://example.com/return', 'tok_test_abc123');
+assert_test(($r['mp_detail'] ?? '') === 'cc_rejected_bad_filled_card_number', 'detail valido propagado');
+assert_test(strpos(json_encode($r), 'tok_test_abc123') === false, 'token ausente da resposta de erro');
+
+$s = new FakeCurlMpService();
+$s->curlQueue = [[
+    'status' => 400,
+    'body' => json_encode(['message' => 'x', 'status_detail' => 'INJECT <script>']),
+]];
+$r = $s->createPreapproval('plan_pro_xyz', 'user@test.com', 'user_1_pro', 'https://example.com/return', 'tok_test_abc123');
+assert_test(($r['mp_detail'] ?? 'X') === '', 'detail malformado descartado');
 
 echo "\n--- Preapproval ID invalido na resposta ---\n";
 
