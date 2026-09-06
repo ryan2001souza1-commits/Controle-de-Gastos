@@ -726,6 +726,54 @@ assert_test(str_contains($jsSrc, 'POLL_INTERVAL_MS'), 'AT34b: intervalo definido
 assert_test(str_contains($jsSrc, 'voltar mais tarde'), 'AT34c: mensagem de deadline sem spinner infinito');
 assert_test(str_contains($jsSrc, "'rejected'") && str_contains($jsSrc, "'cancelled'"), 'AT34d: estados terminais encerram o poll');
 
+echo "\n--- AT35: falha SQL aborta txn -> rollback imediato, sem cascata 25P02 ---\n";
+class FailOncePDO extends FakeAttemptPDO
+{
+    public int $prepares = 0;
+    public int $failOn = 3;
+    public function prepare(string $query, array $options = []): PDOStatement|false
+    {
+        $this->prepares++;
+        if ($this->prepares === $this->failOn) {
+            $ex = new PDOException('SQLSTATE[40001]: serialization failure');
+            $ex->errorInfo = ['40001', '', 'serialization'];
+            throw $ex;
+        }
+        return parent::prepare($query, $options);
+    }
+}
+[$db0, $mp0, $sm0] = makeAttemptEnv();
+$a0 = $sm0->createAttempt(5, 'pro', 2);
+$failDb = new FailOncePDO();
+$failDb->tables = $db0->tables;
+$failDb->lastId = $db0->lastId;
+$svcFail = new SubscriptionCheckoutService($failDb, $mp0, new FakeUserModel());
+$preparesBefore = $failDb->prepares;
+$r = $svcFail->processTokenPayment(5, $a0['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 500, 'AT35a: falha vira 500 generico');
+assert_test($failDb->inTransaction() === false, 'AT35b: rollback executado (sem txn residual)');
+assert_test($failDb->prepares <= $preparesBefore + 4, 'AT35c: nenhuma query apos a falha (sem cascata)', 'prepares=' . $failDb->prepares);
+
+echo "\n--- AT36: reconcile_search com txn residual aberta -> guard reverte e segue ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$db->beginTransaction();
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 200, 'AT36a: fluxo segue apos guard (invariant logged)');
+assert_test($db->inTransaction() === false, 'AT36b: sem txn residual ao final');
+$row = $sm->findByAttemptToken($a['attempt_token']);
+assert_test(($row['status'] ?? '') === 'active', 'AT36c: vinculo concluido mesmo com txn previa');
+
+echo "\n--- AT37: concorrencia mesma attempt, segundo ve primeiro vinculado ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r1 = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test($mp->postCount === 1, 'AT37a: primeiro POST vincula');
+$r2 = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_outro_999');
+assert_test(($r2['body']['already'] ?? false) === true && $mp->postCount === 1, 'AT37b: segundo request reutiliza (0 POST extra)');
+
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;
 echo "Total: $total | \033[32mPassed: $passed\033[0m | \033[31mFailed: $failed\033[0m\n";
