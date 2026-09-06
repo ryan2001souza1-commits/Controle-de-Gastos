@@ -72,7 +72,14 @@ class SubscriptionPollService
         // Reconciliação controlada: UMA leitura ao MP, sem transação aberta.
         $check = $this->mpService->getPreapproval($mpId);
         if ($check['ok'] !== true || !is_array($check['data'] ?? null)) {
-            // 404/transiente: fail-open — mantém o pending local, sem escrever.
+            // 404/transiente: fail-open — mantém o pending local. Registra o
+            // check no throttle (backoff) sem alterar nenhum estado.
+            $this->subscriptionModel->updateMpData(
+                (int)$row['id'],
+                $mpId,
+                (string)($row['raw_status'] ?? ''),
+                null
+            );
             $this->logSync($attemptToken, $mpId, $status, 'mp_unavailable');
             return $this->localOut($row, $status, $mpId, false);
         }
@@ -82,7 +89,13 @@ class SubscriptionPollService
         $nextBillingDate = isset($data['next_payment_date']) ? (string)$data['next_payment_date'] : null;
         $internal = MercadoPagoWebhookService::mapMercadoPagoSubscriptionStatus($mpStatus);
         if ($internal === null) {
-            // Status desconhecido: nunca ativar, sem escrever.
+            // Status desconhecido: nunca ativar. Backoff sem mudar estado.
+            $this->subscriptionModel->updateMpData(
+                (int)$row['id'],
+                $mpId,
+                (string)($row['raw_status'] ?? ''),
+                null
+            );
             $this->logSync($attemptToken, $mpId, $status, 'unmapped:' . $this->safeToken($mpStatus));
             return $this->localOut($row, $status, $mpId, false);
         }

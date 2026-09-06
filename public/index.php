@@ -413,13 +413,13 @@ if ($action === 'register') {
             (string)($_SERVER['HTTP_X_VERCEL_ID'] ?? $_SERVER['HTTP_X_REQUEST_ID'] ?? '')
         );
         error_log(sprintf(
-            '[subscribe_token] phase=%s class=%s sqlstate=%s code=%s msg=%s attempt=%s req=%s time=%s trail=%s',
+            '[subscribe_token] phase=%s class=%s sqlstate=%s code=%s msg=%s attempt_suffix=%s req=%s time=%s trail=%s',
             (string)($res['phase'] ?? 'unknown'),
             (string)($debug['class'] ?? '?'),
             (string)($debug['sqlstate'] ?? ''),
             (string)($debug['code'] ?? ''),
             (string)($debug['message'] ?? ''),
-            $attemptToken,
+            substr($attemptToken, -8),
             $requestId,
             gmdate('Y-m-d\TH:i:s\Z'),
             preg_replace('/[^A-Za-z0-9_:\->]/', '', (string)($debug['trail'] ?? ''))

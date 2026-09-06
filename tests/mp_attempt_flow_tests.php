@@ -1089,6 +1089,47 @@ foreach ($db->tables['usuarios'] as $u) { if ((int)$u['id'] === 5) $userA = $u; 
 assert_test(($userA['plano'] ?? '') === 'pro', 'AT52w: linked+authorized aplica plano (estava FREE)');
 assert_test($mp->postCount === 0, 'AT52x: linked zero POST (só reconciliação)');
 
+echo "\n--- AT53: MP cancela na criação -> 200 cancelled, sem promoção, retry gera nova attempt ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$mp->createQueue = [[
+    'ok' => true, 'status' => 201, 'preapproval_id' => 'mp53_cancel_1',
+    'external_reference' => $a['attempt_token'], 'plan_id' => 'plan_pro_xyz',
+    'mp_status' => 'cancelled',
+]];
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 200, 'AT53a: http 200 (veredito terminal, não 500)');
+assert_test(($r['body']['outcome'] ?? '') === 'cancelled', 'AT53b: outcome cancelled (frontend mostra cancelamento, não sucesso)');
+$row = $sm->findByAttemptToken($a['attempt_token']);
+assert_test(($row['status'] ?? '') === 'cancelled', 'AT53c: linha local cancelled (reflete o MP)');
+assert_test(($row['mp_preapproval_id'] ?? '') === 'mp53_cancel_1', 'AT53d: mp id vinculado (auditoria)');
+$userA = null;
+foreach ($db->tables['usuarios'] as $u) { if ((int)$u['id'] === 5) $userA = $u; }
+assert_test(($userA['plano'] ?? '') === 'gratuito', 'AT53e: cancelled NÃO promove usuário');
+assert_test($db->beginCalls === 0 && $db->commitCalls === 0, 'AT53f: sem begin/commit', 'begin=' . $db->beginCalls . ' commit=' . $db->commitCalls);
+$a2 = $sm->createAttempt(5, 'pro', 2);
+assert_test(($a2['created'] ?? false) === true, 'AT53g: retry após cancelled cria NOVA attempt (cancelled não é reutilizada)');
+assert_test($a2['attempt_token'] !== $a['attempt_token'], 'AT53h: token distinto (sem reuso indevido)');
+
+echo "\n--- AT54: auditoria forense dos logs — sufixos, nunca segredos ---\n";
+$svcSrc = (string)file_get_contents($ROOT . '/src/services/SubscriptionCheckoutService.php');
+$svcLogs = [];
+foreach (explode("\n", $svcSrc) as $line) {
+    if (str_contains($line, 'error_log')) $svcLogs[] = $line;
+}
+$leakFull = false;
+foreach ($svcLogs as $line) {
+    if (preg_match('/\$attemptToken\s*[,\)]/', $line)) $leakFull = true;
+    if (preg_match('/\$mpPreapprovalId\s*[,\)]/', $line)) $leakFull = true;
+    if (stripos($line, 'cardToken') !== false) $leakFull = true;
+}
+assert_test(!$leakFull, 'AT54a: nenhum error_log interpola attempt/mp id completos ou card token');
+$hasSuffix = str_contains($svcSrc, 'attempt_suffix');
+assert_test($hasSuffix, 'AT54b: logs de desfecho carregam attempt_suffix (forense futura)');
+$indexSrc = (string)file_get_contents($ROOT . '/public/index.php');
+assert_test(!preg_match('/attempt=%s/', $indexSrc), 'AT54c: log de 500 usa attempt_suffix (não token completo)');
+
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;
 echo "Total: $total | \033[32mPassed: $passed\033[0m | \033[31mFailed: $failed\033[0m\n";

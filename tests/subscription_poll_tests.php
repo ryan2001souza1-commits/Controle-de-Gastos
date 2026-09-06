@@ -375,8 +375,15 @@ $before = poll_row($db, $id);
 $r = $svc->getStatus(5, '22222222222222222222222222222222');
 $after = poll_row($db, $id);
 assert_test(($r['body']['status'] ?? '') === 'pending', 'P11a: mantém pending (fail-open)');
-assert_test($before['updated_at'] === $after['updated_at'], 'P11b: nenhuma escrita local');
+$sameExceptThrottle = true;
+foreach (['status', 'raw_status', 'mp_preapproval_id', 'plan_slug'] as $f) {
+    if (($before[$f] ?? null) !== ($after[$f] ?? null)) $sameExceptThrottle = false;
+}
+assert_test($sameExceptThrottle, 'P11b: nenhum estado alterado (só throttle)');
 assert_test(poll_user_plan($db) === 'gratuito', 'P11c: usuário intacto');
+$callsAfterFirst = $mp->getCalls;
+$rAgain = $svc->getStatus(5, '22222222222222222222222222222222');
+assert_test($mp->getCalls === $callsAfterFirst, 'P11e: backoff — 2º poll imediato sem novo GET ao MP');
 
 echo "\n--- P11b: erro transiente do MP mantém pending ---\n";
 $db = new FakePollPDO();

@@ -149,6 +149,13 @@ class SubscriptionCheckoutService
                         }
                     }
                 }
+                // Forense sanitizada do retry: sufixo + desfecho (sem ids/tokens).
+                error_log(sprintf(
+                    '[subscribe_token] already attempt_suffix=%s mp_status=%s outcome=%s',
+                    substr($attemptToken, -8),
+                    preg_replace('/[^a-z_]/', '', $mpStatus),
+                    preg_replace('/[^a-z_]/', '', (string)self::outcomeFor($internal))
+                ));
                 return $this->out(200, [
                     'ok' => true,
                     'already' => true,
@@ -390,11 +397,13 @@ class SubscriptionCheckoutService
                 }
             }
             $this->setPhase('link_complete');
-            // Forense sanitizada da resposta do MP (Fase 5): http/status do
-            // POST já passaram por aqui como mpStatusRaw→internal. Sem ids,
-            // tokens, emails ou dados do cartão — só o desfecho.
+            // Forense sanitizada da resposta do MP (Fase 5): sufixos de 8
+            // chars + desfecho. Nunca attempt/mp id completos, tokens,
+            // emails ou dados do cartão.
             error_log(sprintf(
-                '[subscribe_token] link_complete mp_status=%s local=%s outcome=%s',
+                '[subscribe_token] link_complete attempt_suffix=%s mp_suffix=%s mp_status=%s local=%s outcome=%s',
+                substr($attemptToken, -8),
+                substr($mpPreapprovalId, -8),
                 preg_replace('/[^a-z_]/', '', $mpStatusRaw),
                 preg_replace('/[^a-z_]/', '', $internalStatus),
                 preg_replace('/[^a-z_]/', '', self::outcomeFor($internalStatus))
