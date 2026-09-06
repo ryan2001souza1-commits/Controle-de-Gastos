@@ -49,7 +49,7 @@ class DowngradeMPMock extends MercadoPagoService
         return $this->cancelMock;
     }
 
-    public function createPreapproval(string $planId, string $payerEmail, string $externalReference, string $backUrl, string $cardTokenId = '', string $idempotencyKey = '', $deviceId = null): array
+    public function createPreapproval(string $planId, string $payerEmail, string $externalReference, string $backUrl, string $cardTokenId = '', string $idempotencyKey = '', $deviceId = null, string $reason = ''): array
     {
         return $this->createMock;
     }

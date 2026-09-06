@@ -68,7 +68,8 @@ class FakeCurlMpService extends MercadoPagoService
         string $backUrl,
         string $cardTokenId = '',
         string $idempotencyKey = '',
-        $deviceId = null
+        $deviceId = null,
+        string $reason = ''
     ): array {
         $planId = trim($planId);
         if ($planId === '') {
@@ -101,18 +102,23 @@ class FakeCurlMpService extends MercadoPagoService
             return ['ok' => false, 'status' => 0, 'error' => 'invalid_idempotency_key'];
         }
 
-        $this->lastCall = [
-            'call_num' => 1,
-            'url' => 'https://api.mercadopago.com/preapproval',
-            'method' => 'POST',
-            'postfields' => [
+        $postfields = [
                 'preapproval_plan_id' => $planId,
                 'external_reference' => $externalReference,
                 'payer_email' => $payerEmail,
                 'card_token_id' => $cardTokenId,
                 'back_url' => $backUrl,
                 'status' => 'authorized',
-            ],
+            ];
+        $sanitizedReason = MercadoPagoService::sanitizeReason($reason);
+        if ($sanitizedReason !== null) {
+            $postfields['reason'] = $sanitizedReason;
+        }
+        $this->lastCall = [
+            'call_num' => 1,
+            'url' => 'https://api.mercadopago.com/preapproval',
+            'method' => 'POST',
+            'postfields' => $postfields,
             'headers' => array_values(array_filter([
                 $idempotencyKey !== ''
                     ? 'X-Idempotency-Key: ' . $idempotencyKey
@@ -577,7 +583,7 @@ foreach ($errLines as $line) {
     if (stripos($line, 'device') !== false) $leak = true;
 }
 assert_test(!$leak, 'DID12: nenhum error_log referencia device (' . count($errLines) . ' logs auditados)');
-assert_test(strpos((string)file_get_contents($ROOT . '/src/services/SubscriptionCheckoutService.php'), '[mp_device] attempt_suffix=') !== false, 'DID12b: observabilidade é presence-only');
+assert_test(strpos((string)file_get_contents($ROOT . '/src/services/SubscriptionCheckoutService.php'), '[mp_context] attempt_suffix=') !== false, 'DID12b: observabilidade é presence-only ([mp_context])');
 $hasRealCurl = false;
 foreach (glob($ROOT . '/tests/*.php') as $tf) {
     $src = (string)file_get_contents($tf);
@@ -586,6 +592,47 @@ foreach (glob($ROOT . '/tests/*.php') as $tf) {
 assert_test(!$hasRealCurl, 'DID16: nenhum teste executa curl real');
 
 // --- Resumo ---
+
+echo "\n--- Antifraud context CTX8-CTX16 (payload/reason, sem MP real) ---\n";
+
+// CTX8: reason sanitizada (específica, sem PII, sem CR/LF).
+assert_test(MercadoPagoService::sanitizeReason('') === null, 'CTX8a: reason vazia -> omitida');
+assert_test(MercadoPagoService::sanitizeReason(str_repeat('x', 129)) === null, 'CTX8b: reason >128 -> omitida');
+assert_test(MercadoPagoService::sanitizeReason("Plano Pro\nX: 1") === null, 'CTX8c: reason com LF -> omitida');
+assert_test(MercadoPagoService::sanitizeReason('Controle de Gastos - Pro - Assinatura mensal') === 'Controle de Gastos - Pro - Assinatura mensal', 'CTX8d: reason específica preservada');
+
+// CTX9/CTX10/CTX11: reason por plano + plano/ext preservados.
+$s->reset();
+$s->curlQueue = [[
+    'status' => 201,
+    'body' => json_encode(['id' => 'mp_ctx_pro', 'status' => 'authorized', 'external_reference' => 'user_1_pro', 'preapproval_plan_id' => 'plan_pro_xyz']),
+]];
+$s->createPreapproval('plan_pro_xyz', 'user@test.com', 'user_1_pro', 'https://example.com/return', 'tok_test_abc123', '', null, 'Controle de Gastos - Pro - Assinatura mensal');
+assert_test(($s->lastCall['postfields']['reason'] ?? '') === 'Controle de Gastos - Pro - Assinatura mensal', 'CTX9: Pro utiliza descrição Pro');
+assert_test(($s->lastCall['postfields']['preapproval_plan_id'] ?? '') === 'plan_pro_xyz', 'CTX11: preapproval_plan_id preservado');
+$s->reset();
+$s->curlQueue = [[
+    'status' => 201,
+    'body' => json_encode(['id' => 'mp_ctx_prem', 'status' => 'authorized', 'external_reference' => 'user_5_premium', 'preapproval_plan_id' => 'plan_premium_xyz']),
+]];
+$s->createPreapproval('plan_premium_xyz', 'premium@ex.com', 'user_5_premium', 'https://example.com/return', 'tok_test_abc123', '', null, 'Controle de Gastos - Premium - Assinatura mensal');
+assert_test(($s->lastCall['postfields']['reason'] ?? '') === 'Controle de Gastos - Premium - Assinatura mensal', 'CTX10: Premium utiliza descrição Premium');
+assert_test(($s->lastCall['postfields']['external_reference'] ?? '') === 'user_5_premium', 'CTX12: external_reference preservado');
+
+// CTX3: sem objeto payer/identification no payload (schema oficial não aceita).
+$keys = array_keys($s->lastCall['postfields']);
+$hasPayerObj = false;
+foreach ($keys as $k) {
+    if (stripos($k, 'payer') !== false && $k !== 'payer_email') $hasPayerObj = true;
+    if (stripos($k, 'identification') !== false || stripos($k, 'cpf') !== false) $hasPayerObj = true;
+}
+assert_test(!$hasPayerObj, 'CTX3: payload sem payer-objeto/identification/CPF (identidade via card_token)');
+assert_test(strpos($svcSrc, "'identification'") === false, 'CTX3b: builder sem chave identification');
+
+// CTX16: chaves esperadas presentes no payload sanitizado.
+foreach (['preapproval_plan_id', 'payer_email', 'card_token_id', 'external_reference', 'back_url', 'status', 'reason'] as $k) {
+    assert_test(array_key_exists($k, $s->lastCall['postfields']), "CTX16: payload contém '$k'");
+}
 
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed + $skipped;

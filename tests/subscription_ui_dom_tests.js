@@ -111,9 +111,20 @@ function ok(cond, name) {
 }
 
 // Carrega o arquivo UMA vez por cenário (IIFE faz bootstrap no require).
-function loadApp({ subscribeResponses, pollScript, deviceId }) {
+function loadApp({ subscribeResponses, pollScript, deviceId, identity }) {
     delete require.cache[require.resolve('../public/js/mp_subscribe.js')];
     const { doc, nodes, parent } = makeEnv();
+    // Inputs próprios de identidade (fora dos iframes): default VÁLIDOS.
+    const ident = Object.assign(
+        { name: 'Ada Lovelace', email: 'a@ex.com', doc: '12345678901' },
+        identity || {}
+    );
+    for (const [id, val] of [['mp-cardholderName', ident.name], ['mp-cardholderEmail', ident.email], ['mp-identificationNumber', ident.doc]]) {
+        const el = makeNode();
+        el.value = val;
+        nodes[id] = el;
+    }
+    doc.getElementById = (id) => nodes[id] || null;
     const T = makeTimers();
     const uiLogs = [];
     const fetches = [];
@@ -433,6 +444,34 @@ const PENDING = { ok: true, status: 'pending', outcome: 'processing', linked: tr
         await app.T.drain(10);
         ok(app.postBodies.length >= 1 && !('device_id' in app.postBodies[0]), 'DID2: ausente -> chave omitida do POST');
         ok(app.nodes['mp-checkout-loading'].style.display === 'block' || app.polls() >= 1, 'DID3: script atrasado/ausente não quebra o fluxo');
+        app.cleanup();
+    }
+
+    // ---- CTX identidade: gate antes de tokenizar (sem MP real) ----
+    console.log('--- CTX identity gate ---');
+    for (const [label, ident] of [
+        ['nome vazio', { name: '' }],
+        ['nome curto', { name: 'A' }],
+        ['email inválido', { email: 'sem-arroba' }],
+        ['email vazio', { email: '' }],
+        ['doc vazio', { doc: '' }],
+        ['doc curto', { doc: '123' }],
+    ]) {
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], identity: ident });
+        await app.submit();
+        await app.T.drain(20);
+        const posts = app.fetches.filter((u) => u.includes('subscribe_token')).length;
+        ok(posts === 0, `CTX-ident ${label}: zero POST sem identidade (sem token queimado)`);
+        ok(app.nodes['mp-checkout-error'].textContent.includes('nome, e-mail e documento'), `CTX-ident ${label}: orienta completar identidade`);
+        ok(app.nodes['mp-pay-button'].disabled === false, `CTX-ident ${label}: botão livre p/ corrigir`);
+        app.cleanup();
+    }
+    {
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING] });
+        await app.submit();
+        await new Promise((r) => setImmediate(r));
+        await new Promise((r) => setImmediate(r));
+        ok(app.fetches.filter((u) => u.includes('subscribe_token')).length === 1, 'CTX-ident válida: 1 POST (fluxo segue)');
         app.cleanup();
     }
 

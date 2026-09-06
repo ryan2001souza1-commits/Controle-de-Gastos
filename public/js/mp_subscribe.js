@@ -23,6 +23,7 @@
 
     var USER_MESSAGES = {
         invalid_card: 'Verifique os dados do cartão e tente novamente.',
+        invalid_identity: 'Verifique nome, e-mail e documento do titular antes de pagar.',
         card_declined: 'Pagamento recusado. Tente outro cartão ou fale com seu banco.',
         rejected: 'Pagamento recusado. Tente outro cartão ou fale com o banco.',
         cancelled: 'Pagamento cancelado ou não autorizado.',
@@ -37,6 +38,18 @@
         try { s = String(v == null ? '' : v); } catch (e) { s = ''; }
         s = s.toLowerCase().replace(/[^a-z_]/g, '');
         return s.slice(0, 40);
+    }
+
+    // Lê input próprio por id (fora dos iframes do MP). Nunca toca em
+    // número/CVV (vivem nos iframes). Retorna '' se ausente.
+    function readInputValue(id) {
+        try {
+            var el = (typeof document !== 'undefined') ? document.getElementById(id) : null;
+            if (!el || typeof el.value !== 'string') return '';
+            return el.value.trim();
+        } catch (e) {
+            return '';
+        }
     }
 
     // Normaliza qualquer payload do backend para o enum da UI.
@@ -513,6 +526,22 @@
                 event.preventDefault();
                 if (submitted) return;
                 setBusy(true);
+
+                // Contexto antifraude (WCS-49458): identidade do titular
+                // alimenta o card_token. Exige nome/e-mail/documento
+                // preenchidos ANTES de tokenizar — sem token queimado à toa,
+                // sem POST ao backend. São inputs próprios (não iframes).
+                var holderName = readInputValue('mp-cardholderName');
+                var holderEmail = readInputValue('mp-cardholderEmail');
+                var holderDocDigits = readInputValue('mp-identificationNumber').replace(/\D/g, '');
+                if (holderName.length < 3
+                    || holderEmail.length > 120
+                    || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(holderEmail)
+                    || holderDocDigits.length < 5) {
+                    setBusy(false);
+                    showError(USER_MESSAGES.invalid_identity);
+                    return;
+                }
 
                 var formData = {};
                 try {

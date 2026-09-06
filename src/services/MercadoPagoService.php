@@ -82,6 +82,12 @@ class MercadoPagoService
      *                                   Improve payment approval). Ausente/
      *                                   invalido = header omitido (fail-safe,
      *                                   checkout nunca bloqueia por isso).
+     * @param string $reason           Descricao especifica da assinatura
+     *                                   (ex.: "Controle de Gastos - Pro -
+     *                                   Assinatura mensal"). Campo oficial
+     *                                   aceito em POST /preapproval (com ou sem
+     *                                   plano). Validado (sem CR/LF, <=128):
+     *                                   invalido = omitido, sem bloquear.
      * @return array{ok:bool, preapproval_id?:string, init_point?:string,
      *               external_reference?:string, plan_id?:string, status?:int,
      *               mp_status?:string, error?:string}
@@ -93,7 +99,8 @@ class MercadoPagoService
         string $backUrl,
         string $cardTokenId,
         string $idempotencyKey = '',
-        $deviceId = null
+        $deviceId = null,
+        string $reason = ''
     ): array {
         $planId = trim($planId);
         if ($planId === '') {
@@ -134,6 +141,12 @@ class MercadoPagoService
             'back_url'           => $backUrl,
             'status'             => 'authorized',
         ];
+        // Reason especifica e deterministica (contexto antifraude). Campo
+        // oficial do endpoint; omitida se invalida. Sem PII (plano apenas).
+        $reason = self::sanitizeReason($reason);
+        if ($reason !== null) {
+            $payload['reason'] = $reason;
+        }
 
         $url = self::BASE_URL . '/preapproval';
         $headers = [
@@ -561,6 +574,25 @@ class MercadoPagoService
             return null;
         }
         return $deviceId;
+    }
+
+    /**
+     * Sanitiza a descricao (reason) da assinatura: deterministica por plano,
+     * sem PII. Rejeita CR/LF, controles e excesso (>128): invalido = omitir.
+     */
+    public static function sanitizeReason($reason): ?string
+    {
+        if (!is_string($reason)) {
+            return null;
+        }
+        $reason = trim($reason);
+        if ($reason === '' || strlen($reason) > 128) {
+            return null;
+        }
+        if (preg_match('/[\r\n\x00-\x1F\x7F]/', $reason) === 1) {
+            return null;
+        }
+        return $reason;
     }
 
     /**

@@ -202,8 +202,10 @@ class SubscriptionCheckoutService
             // Retry do mesmo attempt reenvia a MESMA chave: o MP deduplica.
             // Device ID validado (nunca o valor bruto): presente → header
             // X-meli-session-id; ausente/inválido → omitido (fail-safe).
+            // Reason deterministica por plano (contexto antifraude, sem PII).
             $this->setPhase('mp_create');
             $sanitizedDeviceId = MercadoPagoService::sanitizeDeviceId($deviceId);
+            $reason = self::reasonForSlug($slug);
             $result = $this->mpService->createPreapproval(
                 $mpPlanId,
                 $email,
@@ -211,12 +213,18 @@ class SubscriptionCheckoutService
                 $backUrl,
                 $cardTokenId,
                 $attemptToken,
-                $sanitizedDeviceId
+                $sanitizedDeviceId,
+                $reason
             );
-            // Observabilidade presence-only: jamais o valor do Device ID.
+            // Observabilidade presence-only (formato oficial [mp_context]):
+            // jamais valores — só presença. Sem email/nome/doc/device.
+            $ctx = self::contextPresence($userRow);
             error_log(sprintf(
-                '[mp_device] attempt_suffix=%s device_id_present=%s header_sent=%s',
+                '[mp_context] attempt_suffix=%s payer_email=%s payer_name=%s payer_identification=%s device_id=%s device_header=%s',
                 substr($attemptToken, -8),
+                'yes',
+                $ctx['payer_name'],
+                $ctx['payer_identification'],
                 $sanitizedDeviceId !== null ? 'yes' : 'no',
                 $sanitizedDeviceId !== null ? 'yes' : 'no'
             ));
@@ -448,6 +456,42 @@ class SubscriptionCheckoutService
             }
             throw $t;
         }
+    }
+
+    /**
+     * Reason deterministica por plano (contexto antifraude, sem PII).
+     * Texto especifico exigido pelo suporte (nada de "Pagamento"/"Plano"
+     * generico). Slug ja validado (pro|premium) antes deste ponto.
+     */
+    public static function reasonForSlug(string $planSlug): string
+    {
+        $name = ($planSlug === 'premium') ? 'Premium' : 'Pro';
+        return 'Controle de Gastos - ' . $name . ' - Assinatura mensal';
+    }
+
+    /**
+     * Presenca de contexto antifraude do cadastro (para o log [mp_context]).
+     * Retorna SOMENTE flags yes/no — nunca valores (nome/CPF jamais saem).
+     * Aceita linha array (testes/legado) ou objeto User.
+     *
+     * @param mixed $userRow
+     * @return array{payer_name:string, payer_identification:string}
+     */
+    public static function contextPresence($userRow): array
+    {
+        $nome = '';
+        $cpf = '';
+        if (is_array($userRow)) {
+            $nome = (string)($userRow['nome'] ?? $userRow['name'] ?? '');
+            $cpf = (string)($userRow['cpf'] ?? '');
+        } elseif (is_object($userRow)) {
+            $nome = (string)($userRow->nome ?? $userRow->name ?? '');
+            $cpf = (string)($userRow->cpf ?? '');
+        }
+        return [
+            'payer_name' => (trim($nome) !== '' ? 'yes' : 'no'),
+            'payer_identification' => (trim($cpf) !== '' ? 'yes' : 'no'),
+        ];
     }
 
     /**

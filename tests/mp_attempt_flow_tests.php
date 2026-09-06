@@ -335,7 +335,8 @@ class FakeAttemptMP extends MercadoPagoService
         string $backUrl,
         string $cardTokenId = '',
         string $idempotencyKey = '',
-        $deviceId = null
+        $deviceId = null,
+        string $reason = ''
     ): array {
         // Espelha a validacao real (cobertura exaustiva em
         // create_preapproval_tests.php); aqui o foco e o fluxo.
@@ -1181,6 +1182,46 @@ foreach (explode("\n", $svcSrc56) as $line) {
     if (preg_match('/\$sanitizedDeviceId\s*[,\)\.]/', $line) && !str_contains($line, '!== null')) $leak56 = true;
 }
 assert_test(!$leak56, 'AT56e: nenhum error_log interpola valor do device');
+
+echo "\n--- AT57: contexto antifraude (CTX1/CTX2/CTX4/CTX9 + reason no fluxo) ---\n";
+// CTX1: sem e-mail válido não há payer consistente -> 400 antes do MP.
+class FakeUserNoEmail
+{
+    public function findById(int $id): ?object
+    {
+        return (object)['email' => ''];
+    }
+}
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserNoEmail());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 400, 'CTX1: e-mail ausente -> 400 sem chamar MP');
+assert_test($mp->postCount === 0, 'CTX1b: zero POST sem payer consistente');
+// CTX2: presence flags puras (array/objeto/vazio) — nunca valores.
+assert_test(SubscriptionCheckoutService::contextPresence(['nome' => 'Ada', 'cpf' => '123']) === ['payer_name' => 'yes', 'payer_identification' => 'yes'], 'CTX2a: array completo');
+assert_test(SubscriptionCheckoutService::contextPresence((object)['name' => 'Ada', 'cpf' => null]) === ['payer_name' => 'yes', 'payer_identification' => 'no'], 'CTX2b: objeto User (name/cpf)');
+assert_test(SubscriptionCheckoutService::contextPresence(null) === ['payer_name' => 'no', 'payer_identification' => 'no'], 'CTX2c: nulo -> no/no');
+$ctxBlob = json_encode(SubscriptionCheckoutService::contextPresence(['nome' => 'Ada Silva', 'cpf' => '12345678901']));
+assert_test(strpos($ctxBlob, 'Ada') === false && strpos($ctxBlob, '12345678901') === false, 'CTX2d: valores jamais vazam (só flags)');
+// CTX4: CPF/identificação jamais em logs do checkout/serviço/endpoint.
+$leakCtx = false;
+foreach (['/src/services/SubscriptionCheckoutService.php', '/src/services/MercadoPagoService.php', '/public/index.php'] as $f) {
+    foreach (explode("\n", (string)file_get_contents($ROOT . $f)) as $line) {
+        if (!str_contains($line, 'error_log')) continue;
+        if (preg_match('/cpf|identification|docNumber|cardholder/i', $line)) $leakCtx = true;
+    }
+}
+assert_test(!$leakCtx, 'CTX4: CPF/identificação nunca em error_log');
+// CTX9: reason determinística por slug.
+assert_test(SubscriptionCheckoutService::reasonForSlug('pro') === 'Controle de Gastos - Pro - Assinatura mensal', 'CTX9a: reason Pro exata');
+assert_test(SubscriptionCheckoutService::reasonForSlug('premium') === 'Controle de Gastos - Premium - Assinatura mensal', 'CTX9b: reason Premium exata');
+// Reason atravessa o fluxo até o MP fake.
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 200, 'CTX9c: fluxo com reason completa 200');
 
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;
