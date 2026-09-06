@@ -22,6 +22,17 @@ require_once $ROOT . '/src/models/Plan.php';
 require_once $ROOT . '/src/models/Subscription.php';
 require_once $ROOT . '/src/services/MercadoPagoService.php';
 require_once $ROOT . '/src/services/MercadoPagoWebhookService.php';
+require_once $ROOT . '/src/services/SubscriptionCheckoutService.php';
+
+class FakeUserModel
+{
+    public function findById(int $id): ?object
+    {
+        if ($id === 5) return (object)['email' => 'a@ex.com'];
+        if ($id === 12) return (object)['email' => 'b@ex.com'];
+        return null;
+    }
+}
 
 putenv('MERCADOPAGO_PLAN_ID_PRO=plan_pro_xyz');
 putenv('MERCADOPAGO_PLAN_ID_PREMIUM=plan_premium_xyz');
@@ -252,8 +263,51 @@ class FakeAttemptMP extends MercadoPagoService
 {
     public array $preapprovals = [];
     public int $postCount = 0;
+    public array $createQueue = [];
+    public array $searchMap = [];
+    public bool $searchFail = false;
 
     public function __construct() { $this->accessToken = 'TEST'; }
+
+    public function createPreapproval(
+        string $planId,
+        string $payerEmail,
+        string $externalReference,
+        string $backUrl,
+        string $cardTokenId = '',
+        string $idempotencyKey = ''
+    ): array {
+        // Espelha a validacao real (cobertura exaustiva em
+        // create_preapproval_tests.php); aqui o foco e o fluxo.
+        if ($cardTokenId === '') {
+            return ['ok' => false, 'status' => 0, 'error' => 'invalid_card_token'];
+        }
+        $this->postCount++;
+        $mock = array_shift($this->createQueue);
+        if ($mock !== null) {
+            return $mock;
+        }
+        $id = 'mp_new_' . $this->postCount;
+        $this->preapprovals[$id] = [
+            'id' => $id,
+            'status' => 'authorized',
+            'external_reference' => $externalReference,
+            'preapproval_plan_id' => $planId,
+        ];
+        return [
+            'ok' => true, 'status' => 201, 'preapproval_id' => $id,
+            'init_point' => null, 'external_reference' => $externalReference,
+            'plan_id' => $planId, 'mp_status' => 'authorized',
+        ];
+    }
+
+    public function searchPreapprovalsByExternalReference(string $ext, int $limit = 10): array
+    {
+        if ($this->searchFail) {
+            return ['ok' => false, 'error' => 'network_error', 'matches' => []];
+        }
+        return ['ok' => true, 'matches' => $this->searchMap[$ext] ?? []];
+    }
 
     public function addPreapproval(string $id, string $status, string $extRef, string $planId): void
     {
@@ -484,6 +538,128 @@ assert_test(str_contains($csp, 'https://sdk.mercadopago.com'), 'AT15d: CSP cobre
 assert_test(preg_match('/connect-src[^;]*sdk\.mercadopago\.com/', $csp) === 1, 'AT15e: connect-src inclui SDK (tokenizacao)');
 assert_test(preg_match('/frame-src[^;]*mercadopago\.com/', $csp) === 1, 'AT15f: frame-src inclui MP (iframes CardForm)');
 assert_test(!str_contains($csp, '*.'), 'AT15g: sem wildcards na CSP');
+
+echo "\n--- AT20: service happy path (token -> POST -> link -> active) ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 200, 'AT20a: http 200');
+assert_test(($r['body']['ok'] ?? false) === true, 'AT20b: ok=true');
+assert_test($mp->postCount === 1, 'AT20c: exatamente 1 POST ao MP');
+$row = $sm->findByAttemptToken($a['attempt_token']);
+assert_test(($row['status'] ?? '') === 'active', 'AT20d: tentativa ativa');
+assert_test(($row['mp_preapproval_id'] ?? '') !== '', 'AT20e: mp id vinculado');
+assert_test($db->inTransaction() === false, 'AT20f: transacao finalizada (commit)');
+
+echo "\n--- AT21: validacoes de entrada (sem DB) ---\n";
+$r = $svc->processTokenPayment(0, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 401, 'AT21a: user 0 -> 401');
+$r = $svc->processTokenPayment(5, 'zzz', 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 400 && ($r['phase'] ?? '') === 'validate_input', 'AT21b: attempt malformado -> 400 phase=validate_input');
+$r = $svc->processTokenPayment(5, $a['attempt_token'], '');
+assert_test(($r['body']['error'] ?? '') === 'invalid_card_token', 'AT21c: token vazio -> invalid_card_token');
+
+echo "\n--- AT22: attempt de outro usuario -> 404 ---\n";
+$r = $svc->processTokenPayment(12, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 404, 'AT22a: 404 sem vazar existencia');
+
+echo "\n--- AT23: retry apos vinculo nao re-POSTa ---\n";
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_outro_123');
+assert_test(($r['http'] ?? 0) === 200 && ($r['body']['already'] ?? false) === true, 'AT23a: retry retorna already:true');
+assert_test($mp->postCount === 1, 'AT23b: nenhum POST adicional');
+
+echo "\n--- AT24: MP 400 recusado -> 402 sem persistir ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$mp->createQueue = [['ok' => false, 'status' => 400, 'error' => 'bad_request', 'mp_detail' => 'cc_rejected_insufficient_amount']];
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 402, 'AT24a: http 402');
+assert_test(($r['body']['error'] ?? '') === 'card_declined', 'AT24b: card_declined (mensagem segura)');
+$row = $sm->findByAttemptToken($a['attempt_token']);
+assert_test(($row['mp_preapproval_id'] ?? '') === '', 'AT24c: nada vinculado (rollback)');
+assert_test($db->inTransaction() === false, 'AT24d: transacao finalizada (rollback)');
+
+echo "\n--- AT25: timeout pos-criacao resolve via search (sem 2o POST) ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$mp->createQueue = [['ok' => false, 'status' => 0, 'error' => 'network_error']];
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r1 = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r1['http'] ?? 0) === 502, 'AT25a: timeout sem registro -> 502 processing');
+// MP havia criado a preapproval (descoberta depois); retry reconcilia:
+$mp->searchMap[$a['attempt_token']] = [[
+    'id' => 'mp_orphan_1', 'status' => 'authorized',
+    'preapproval_plan_id' => 'plan_pro_xyz', 'external_reference' => $a['attempt_token'],
+]];
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 200 && ($r['body']['reconciled'] ?? false) === true, 'AT25b: retry reconcilia sem novo POST');
+assert_test($mp->postCount === 1, 'AT25c: apenas o POST original (1 chamada MP, sem duplicata)');
+$row = $sm->findByAttemptToken($a['attempt_token']);
+assert_test(($row['mp_preapproval_id'] ?? '') === 'mp_orphan_1' && ($row['status'] ?? '') === 'active', 'AT25d: orfa vinculada e ativa');
+
+echo "\n--- AT26: timeout sem registro no MP -> 502 processing ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$mp->createQueue = [['ok' => false, 'status' => 0, 'error' => 'network_error']];
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 502 && ($r['body']['error'] ?? '') === 'processing', 'AT26a: 502 processing (frontend faz poll)');
+
+echo "\n--- AT27: retry encontra orfa via search (sem POST) ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(12, 'premium', 3);
+$mp->searchMap[$a['attempt_token']] = [[
+    'id' => 'mp_orphan_2', 'status' => 'pending',
+    'preapproval_plan_id' => 'plan_premium_xyz', 'external_reference' => $a['attempt_token'],
+]];
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(12, $a['attempt_token'], 'tok_novo_456');
+assert_test(($r['http'] ?? 0) === 200 && ($r['body']['reconciled'] ?? false) === true, 'AT27a: reconciliado');
+assert_test($mp->postCount === 0, 'AT27b: zero POST ao MP');
+$row = $sm->findByAttemptToken($a['attempt_token']);
+assert_test(($row['status'] ?? '') === 'pending', 'AT27c: status pending (sem ativacao indevida)');
+
+echo "\n--- AT28: search com multiplos -> 409 fail-closed ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$mp->searchMap[$a['attempt_token']] = [
+    ['id' => 'mp_dup_1', 'status' => 'authorized', 'preapproval_plan_id' => 'plan_pro_xyz', 'external_reference' => $a['attempt_token']],
+    ['id' => 'mp_dup_2', 'status' => 'authorized', 'preapproval_plan_id' => 'plan_pro_xyz', 'external_reference' => $a['attempt_token']],
+];
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 409, 'AT28a: 409 conflict (revisao humana)');
+
+echo "\n--- AT29: describeDbError redige segredos ---\n";
+$pdoEx = new PDOException('SQLSTATE[23505]: x duplicate user@mail.com hex abcdef0123456789 Bearer tok APP_USR-zzz card 4111111111111111');
+$pdoEx->errorInfo = ['23505', '7', 'duplicate'];
+$d = Subscription::describeDbError($pdoEx);
+assert_test(($d['class'] ?? '') === 'PDOException', 'AT29a: classe preservada');
+assert_test(($d['sqlstate'] ?? '') === '23505', 'AT29b: sqlstate preservado');
+$blob = json_encode($d);
+assert_test(strpos($blob, 'user@mail.com') === false, 'AT29c: email redigido');
+assert_test(strpos($blob, 'abcdef0123456789') === false, 'AT29d: hex redigido');
+assert_test(strpos($blob, '4111111111111111') === false, 'AT29e: PAN redigido');
+assert_test(strpos($blob, 'Bearer tok') === false, 'AT29f: bearer redigido');
+assert_test(strpos($blob, 'APP_USR-zzz') === false, 'AT29g: chave redigida');
+
+echo "\n--- AT30: PDO inesperado -> 500 com fase (sem vazar) ---\n";
+class ThrowingPDO extends FakeAttemptPDO
+{
+    public function prepare(string $query, array $options = []): PDOStatement|false
+    {
+        throw new PDOException('SQLSTATE[08006]: connection failure');
+    }
+}
+$throwDb = new ThrowingPDO();
+$svcThrow = new SubscriptionCheckoutService($throwDb, $mp, new FakeUserModel());
+$r = $svcThrow->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 500, 'AT30a: http 500');
+assert_test(($r['body']['error'] ?? '') === 'internal_error', 'AT30b: erro generico ao cliente');
+assert_test(isset($r['phase']) && isset($r['debug']['sqlstate']), 'AT30c: fase+debug presentes p/ log');
+assert_test(strpos(json_encode($r['body']), '08006') === false, 'AT30d: sqlstate NAO vaza ao cliente');
 
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;

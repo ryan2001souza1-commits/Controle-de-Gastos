@@ -69,6 +69,7 @@ require_once __DIR__ . '/../src/services/AiFinanceContext.php';
 require_once __DIR__ . '/../src/services/AiService.php';
 require_once __DIR__ . '/../src/services/MercadoPagoService.php';
 require_once __DIR__ . '/../src/services/MercadoPagoWebhookService.php';
+require_once __DIR__ . '/../src/services/SubscriptionCheckoutService.php';
 require_once __DIR__ . '/../src/controllers/AiController.php';
 
 
@@ -392,122 +393,39 @@ if ($action === 'register') {
         exit;
     }
 
+    // Logica executada por SubscriptionCheckoutService (testavel, com fases).
+    // Este wrapper so faz HTTP in/out + log sanitizado em falha interna.
     try {
-        $db->beginTransaction();
-        // Trava a linha da tentativa: dois POST simultaneos da mesma tentativa
-        // sao serializados; o segundo enxerga o mp_preapproval_id do primeiro.
-        $attempt = $subscriptionModel->findByAttemptTokenForUpdate($attemptToken);
-        if ($attempt === null || (int)($attempt['user_id'] ?? 0) !== $userId) {
-            $db->rollBack();
-            http_response_code(404);
-            echo json_encode(['ok' => false, 'error' => 'attempt_not_found']);
-            exit;
-        }
-        $attemptId = (int)$attempt['id'];
-        $slug = (string)($attempt['plan_slug'] ?? '');
-        if (!in_array($slug, ['pro', 'premium'], true)) {
-            $db->rollBack();
-            http_response_code(400);
-            echo json_encode(['ok' => false, 'error' => 'invalid_plan']);
-            exit;
-        }
-
-        // Idempotencia: tentativa ja vinculada — nao faz novo POST ao MP.
-        // Reconcilia pelo estado autoritativo (GET /preapproval).
-        $existingMpId = (string)($attempt['mp_preapproval_id'] ?? '');
-        if ($existingMpId !== '') {
-            $db->rollBack();
-            $check = $mpService->getPreapproval($existingMpId);
-            $mpStatus = 'unknown';
-            if ($check['ok'] === true && is_array($check['data'])) {
-                $mpStatus = strtolower((string)($check['data']['status'] ?? 'unknown'));
-            }
-            echo json_encode([
-                'ok' => true,
-                'already' => true,
-                'status' => $mpStatus,
-                'redirect' => '/index.php?action=meu_plano&subscribed=1',
-            ]);
-            exit;
-        }
-
-        // Tudo derivado do servidor: plan_id do .env, email do usuario
-        // autenticado, external_reference = attempt_token. O frontend nao
-        // tem autoridade sobre nenhum desses valores.
-        $mpPlanId = MercadoPagoService::getPlanIdForSlug($slug);
-        $userRow = $userModel->findById($userId);
-        $email = (string)($userRow->email ?? '');
-        if ($mpPlanId === null || $mpPlanId === '' || $email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $db->rollBack();
-            http_response_code(400);
-            echo json_encode(['ok' => false, 'error' => 'invalid_plan']);
-            exit;
-        }
-        $backUrl = rtrim((string)(getenv('APP_URL') ?: 'https://controle-de-gastos-one-silk.vercel.app'), '/')
-            . '/mercadopago_return.php';
-
-        $result = $mpService->createPreapproval(
-            $mpPlanId,
-            $email,
-            $attemptToken,
-            $backUrl,
-            $cardTokenId,
-            $attemptToken
-        );
-        if ($result['ok'] === false) {
-            $db->rollBack();
-            // Codigo seguro para o usuario (mapeado, sem vazar detalhe do MP).
-            $userCode = MercadoPagoService::mapErrorToUserCode($result);
-            $httpCode = match ($userCode) {
-                'processing', 'service_error' => 502,
-                'card_declined' => 402,
-                default => 400,
-            };
-            http_response_code($httpCode);
-            echo json_encode(['ok' => false, 'error' => $userCode]);
-            exit;
-        }
-
-        $mpPreapprovalId = (string)$result['preapproval_id'];
-        // Guarda cross-account: este MP ID nao pode pertencer a outra linha.
-        $other = $subscriptionModel->findByMpId($mpPreapprovalId);
-        if ($other !== null && (int)$other['id'] !== $attemptId) {
-            $db->rollBack();
-            error_log('[subscribe_token] mp_preapproval_id ja vinculado a outra assinatura');
-            http_response_code(409);
-            echo json_encode(['ok' => false, 'error' => 'conflict']);
-            exit;
-        }
-
-        $subscriptionModel->attachMpPreapprovalId($attemptId, $mpPreapprovalId);
-        $mpStatus = strtolower(trim((string)($result['mp_status'] ?? 'authorized')));
-        $internalStatus = MercadoPagoWebhookService::mapMpStatusToInternal($mpStatus);
-        if ($internalStatus === null) {
-            $internalStatus = Subscription::STATUS_PENDING;
-        }
-        $subscriptionModel->updateStatusById($attemptId, $internalStatus, $mpStatus, null, null);
-        if ($internalStatus === Subscription::STATUS_ACTIVE) {
-            $fresh = $subscriptionModel->findById($attemptId);
-            if ($fresh !== null) {
-                $subscriptionModel->applyStatusToUser($fresh);
-            }
-        }
-        $db->commit();
-        echo json_encode([
-            'ok' => true,
-            'status' => $internalStatus,
-            'redirect' => '/index.php?action=meu_plano&subscribed=1',
-        ]);
-        exit;
+        $checkoutService = new SubscriptionCheckoutService($db, $mpService, $userModel);
     } catch (Throwable $e) {
-        if ($db->inTransaction()) {
-            $db->rollBack();
-        }
-        error_log('[subscribe_token] ' . get_class($e));
-        http_response_code(500);
-        echo json_encode(['ok' => false, 'error' => 'internal_error']);
+        error_log('[subscribe_token] service init failed');
+        http_response_code(503);
+        echo json_encode(['ok' => false, 'error' => 'service_unavailable']);
         exit;
     }
+
+    $res = $checkoutService->processTokenPayment($userId, $attemptToken, $cardTokenId);
+    if (($res['http'] ?? 500) >= 500 && isset($res['debug']) && is_array($res['debug'])) {
+        $debug = $res['debug'];
+        $requestId = preg_replace(
+            '/[^A-Za-z0-9_\-:]/', '',
+            (string)($_SERVER['HTTP_X_VERCEL_ID'] ?? $_SERVER['HTTP_X_REQUEST_ID'] ?? '')
+        );
+        error_log(sprintf(
+            '[subscribe_token] phase=%s class=%s sqlstate=%s code=%s msg=%s attempt=%s req=%s time=%s',
+            (string)($res['phase'] ?? 'unknown'),
+            (string)($debug['class'] ?? '?'),
+            (string)($debug['sqlstate'] ?? ''),
+            (string)($debug['code'] ?? ''),
+            (string)($debug['message'] ?? ''),
+            $attemptToken,
+            $requestId,
+            gmdate('Y-m-d\TH:i:s\Z')
+        ));
+    }
+    http_response_code((int)($res['http'] ?? 500));
+    echo json_encode($res['body'] ?? ['ok' => false, 'error' => 'internal_error']);
+    exit;
 } elseif ($action === 'subscription_status') {
     requireLogin();
     header('Content-Type: application/json; charset=utf-8');

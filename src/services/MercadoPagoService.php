@@ -142,7 +142,11 @@ class MercadoPagoService
             CURLOPT_POST           => true,
             CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             CURLOPT_HTTPHEADER     => $headers,
-            CURLOPT_TIMEOUT => 20,
+            // Dentro da janela da function serverless (maxDuration 10s):
+            // timeout total 8s + connect 5s evitam SIGKILL no meio do POST
+            // (timeout pos-criacao gera preapproval orfa no MP).
+            CURLOPT_TIMEOUT => 8,
+            CURLOPT_CONNECTTIMEOUT => 5,
         ]);
 
         $body = curl_exec($ch);
@@ -290,7 +294,8 @@ class MercadoPagoService
                 'Authorization: Bearer ' . $this->accessToken,
                 'X-Integrator-Id: dev_controle_de_gastos',
             ],
-            CURLOPT_TIMEOUT        => 20,
+            CURLOPT_TIMEOUT        => 8,
+            CURLOPT_CONNECTTIMEOUT => 5,
         ]);
 
         $body = curl_exec($ch);
@@ -319,6 +324,83 @@ class MercadoPagoService
         }
 
         return ['ok' => true, 'status' => 200, 'data' => $data];
+    }
+
+    /**
+     * Busca preapprovals por external_reference EXATO (somente leitura).
+     *
+     * A API /preapproval/search NAO oferece filtro exato por
+     * external_reference (filtros oficiais: q, payer_id, payer_email,
+     * preapproval_plan_id, status). Por isso buscamos por `q` e filtramos
+     * por igualdade EXATA no cliente, retornando apenas registros cujo
+     * external_reference e identico ao informado.
+     *
+     * USO PERMITIDO: evitar POST duplicado de uma tentativa JA conhecida
+     * (identidade fixada pela linha local) e varredura de orfas.
+     * USO PROIBIDO: descobrir a qual usuario pertence uma preapproval
+     * (identidade), ordenar por tempo ou pegar "a mais recente".
+     *
+     * Nunca lanca excecao: falha de transporte/resposta vira ok:false
+     * (fail-open para a busca; a decisao de POST segue o fluxo normal).
+     *
+     * @return array{ok:bool, matches?:array, error?:string}
+     */
+    public function searchPreapprovalsByExternalReference(string $externalReference, int $limit = 10): array
+    {
+        if (!preg_match('/^[0-9a-f]{32}$/', $externalReference)) {
+            return ['ok' => false, 'error' => 'invalid_external_reference', 'matches' => []];
+        }
+        $limit = max(1, min($limit, 50));
+        $url = self::BASE_URL . '/preapproval/search?q=' . urlencode($externalReference)
+            . '&limit=' . $limit;
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => [
+                'Authorization: Bearer ' . $this->accessToken,
+                'X-Integrator-Id: dev_controle_de_gastos',
+            ],
+            CURLOPT_TIMEOUT        => 8,
+            CURLOPT_CONNECTTIMEOUT => 5,
+        ]);
+
+        $body = curl_exec($ch);
+        $httpStatus = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+        if ($body === false) {
+            return ['ok' => false, 'error' => 'network_error', 'matches' => []];
+        }
+        $data = json_decode($body, true);
+        if (!is_array($data)) {
+            return ['ok' => false, 'error' => 'invalid_response', 'matches' => []];
+        }
+        if ($httpStatus < 200 || $httpStatus >= 300) {
+            return ['ok' => false, 'error' => 'mp_error', 'matches' => []];
+        }
+
+        $matches = [];
+        $results = $data['results'] ?? null;
+        if (is_array($results)) {
+            foreach ($results as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                if ((string)($row['external_reference'] ?? '') !== $externalReference) {
+                    continue;
+                }
+                $mpId = (string)($row['id'] ?? '');
+                if ($mpId === '' || !preg_match('/^[a-zA-Z0-9_\-]{1,80}$/', $mpId)) {
+                    continue;
+                }
+                $matches[] = [
+                    'id' => $mpId,
+                    'status' => strtolower(trim((string)($row['status'] ?? ''))),
+                    'preapproval_plan_id' => (string)($row['preapproval_plan_id'] ?? ''),
+                    'external_reference' => $externalReference,
+                ];
+            }
+        }
+        return ['ok' => true, 'matches' => $matches];
     }
 
     /**

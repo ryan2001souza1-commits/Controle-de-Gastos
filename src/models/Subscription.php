@@ -181,6 +181,54 @@ class Subscription
     }
 
     /**
+     * Descreve um erro de banco de forma segura para logs.
+     * Retorna SOMENTE: classe, SQLSTATE, codigo e mensagem sanitizada.
+     * Redige: emails, sequencias hex longas (tokens/ids), padroes de chave
+     * (TEST-/APP_USR-), corridas de digitos (PAN) e pares Bearer.
+     * Nunca inclui SQL, parametros ou dados da query.
+     *
+     * @return array{class:string, sqlstate:string, code:string, message:string}
+     */
+    public static function describeDbError(Throwable $e): array
+    {
+        $sqlstate = '';
+        $code = '';
+        if ($e instanceof PDOException) {
+            $err = $e->errorInfo ?? null;
+            if (is_array($err) && isset($err[0]) && is_string($err[0])) {
+                $sqlstate = $err[0];
+            }
+            $c = $e->getCode();
+            if (is_int($c) || (is_string($c) && $c !== '')) {
+                $code = (string)$c;
+            }
+        }
+        $msg = '';
+        try {
+            $msg = $e->getMessage();
+        } catch (Throwable $t) {
+            $msg = 'unreadable';
+        }
+        if (!is_string($msg)) {
+            $msg = 'unreadable';
+        }
+        $msg = preg_replace('/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/', '<email>', $msg) ?? $msg;
+        $msg = preg_replace('/(TEST-|APP_USR-)[A-Za-z0-9_-]+/', '$1<redacted>', $msg) ?? $msg;
+        $msg = preg_replace('/Bearer\s+[A-Za-z0-9._~+\/-]+/', 'Bearer <redacted>', $msg) ?? $msg;
+        $msg = preg_replace('/\b\d{13,19}\b/', '<card-redacted>', $msg) ?? $msg;
+        $msg = preg_replace('/\b[0-9a-fA-F]{16,}\b/', '<hex-redacted>', $msg) ?? $msg;
+        if (strlen($msg) > 300) {
+            $msg = substr($msg, 0, 300);
+        }
+        return [
+            'class' => get_class($e),
+            'sqlstate' => $sqlstate,
+            'code' => $code,
+            'message' => $msg,
+        ];
+    }
+
+    /**
      * Valida o formato de attempt_token (exatamente 32 hex).
      * Usado para rejeitar input malformado antes de qualquer query.
      */
