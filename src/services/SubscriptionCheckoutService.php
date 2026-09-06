@@ -122,10 +122,32 @@ class SubscriptionCheckoutService
                 if ($check['ok'] === true && is_array($check['data'])) {
                     $mpStatus = strtolower((string)($check['data']['status'] ?? 'unknown'));
                 }
+                $internal = MercadoPagoWebhookService::mapMpStatusToInternal($mpStatus);
+                // Defesa em profundidade: se o MP diz authorized mas o plano
+                // local nunca foi aplicado (ex.: crash entre link e apply),
+                // sincroniza o status e aplica agora, de forma idempotente,
+                // em vez de so informar.
+                if ($internal === Subscription::STATUS_ACTIVE) {
+                    $linked = $this->subscriptionModel->findByMpId($existingMpId);
+                    if ($linked !== null) {
+                        $this->subscriptionModel->updateStatusById(
+                            (int)$linked['id'],
+                            Subscription::STATUS_ACTIVE,
+                            $mpStatus,
+                            null,
+                            null
+                        );
+                        $fresh = $this->subscriptionModel->findById((int)$linked['id']);
+                        if ($fresh !== null) {
+                            $this->subscriptionModel->applyStatusToUser($fresh);
+                        }
+                    }
+                }
                 return $this->out(200, [
                     'ok' => true,
                     'already' => true,
-                    'status' => $mpStatus,
+                    'status' => $internal ?? $mpStatus,
+                    'outcome' => self::outcomeFor($internal),
                     'redirect' => '/index.php?action=meu_plano&subscribed=1',
                 ], $this->currentPhase);
             }
@@ -327,10 +349,12 @@ class SubscriptionCheckoutService
                     throw new RuntimeException('mp_conflict');
                 }
                 if ($winnerMpId === $mpPreapprovalId && $winnerMpId !== '') {
+                    $rowStatus = (string)($reread['status'] ?? 'pending');
                     return [
                         'ok' => true,
                         'already' => true,
-                        'status' => (string)($reread['status'] ?? 'pending'),
+                        'status' => $rowStatus,
+                        'outcome' => self::outcomeFor($rowStatus),
                         'redirect' => '/index.php?action=meu_plano&subscribed=1',
                     ];
                 }
@@ -357,9 +381,11 @@ class SubscriptionCheckoutService
                 }
             }
             $this->setPhase('txn_commit');
+            $this->db->commit();
             return [
                 'ok' => true,
                 'status' => $internalStatus,
+                'outcome' => self::outcomeFor($internalStatus),
                 'redirect' => '/index.php?action=meu_plano&subscribed=1',
             ];
         } catch (Throwable $t) {
@@ -373,6 +399,24 @@ class SubscriptionCheckoutService
             }
             throw $t;
         }
+    }
+
+    /**
+     * Outcome semântico para o frontend. O frontend SÓ pode exibir sucesso
+     * ("compra concluída") com outcome=active. Qualquer outro outcome exige
+     * UX de processamento/falha — nunca celebração.
+     */
+    public static function outcomeFor(?string $internalStatus): string
+    {
+        return match ($internalStatus) {
+            Subscription::STATUS_ACTIVE => 'active',
+            Subscription::STATUS_PENDING => 'processing',
+            Subscription::STATUS_REJECTED => 'rejected',
+            Subscription::STATUS_CANCELLED => 'cancelled',
+            Subscription::STATUS_PAUSED => 'paused',
+            Subscription::STATUS_EXPIRED => 'cancelled',
+            default => 'processing',
+        };
     }
 
     private function out(int $http, array $body, string $phase): array

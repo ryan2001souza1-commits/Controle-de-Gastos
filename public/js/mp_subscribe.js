@@ -263,13 +263,20 @@
                     token = '';
                     formData = {};
                     var data = result.data || {};
-                    if (data.ok === true) {
+                    // REGRA DE OURO: sucesso SOMENTE com outcome/status active.
+                    // ok:true sozinho (pending/vinculado) NUNCA celebra compra.
+                    var outcome = data.outcome
+                        || (data.status === 'active' ? 'active'
+                            : (data.ok === true ? 'processing' : 'error'));
+                    if (outcome === 'active') {
                         window.location.href = data.redirect || '/index.php?action=meu_plano&subscribed=1';
                         return;
                     }
-                    // Timeout/rede apos criacao no MP: reconcilia por polling
-                    // da tentativa (sem reenviar token de uso unico).
-                    if (result.http === 502 || result.http === 500) {
+                    // Timeout/rede/processing apos criacao no MP: reconcilia por
+                    // polling da tentativa (sem reenviar token de uso unico).
+                    if (outcome === 'processing' || result.http === 502 || result.http === 500) {
+                        setBusy(true);
+                        showError('Pagamento em processamento. Aguardando confirmação…');
                         pollStatus(function () {
                             setBusy(false);
                             showError('Pagamento ainda em processamento. Você pode voltar mais tarde.');
@@ -280,10 +287,13 @@
                     var userMessages = {
                         invalid_card: 'Verifique os dados do cartão e tente novamente.',
                         card_declined: 'Pagamento recusado. Tente outro cartão ou fale com seu banco.',
+                        rejected: 'Pagamento não aprovado. Confira os dados ou tente outro cartão.',
+                        cancelled: 'Assinatura cancelada antes da conclusão.',
+                        paused: 'Assinatura pausada. Fale com o suporte se precisar de ajuda.',
                         service_error: 'Serviço indisponível no momento. Tente novamente em instantes.',
                         payment_failed: 'Não foi possível concluir o pagamento. Confira os dados do cartão.'
                     };
-                    showError(userMessages[data.error] || userMessages.payment_failed);
+                    showError(userMessages[data.error] || userMessages[outcome] || userMessages.payment_failed);
                 }).catch(function () {
                     token = '';
                     pollStatus(function () {

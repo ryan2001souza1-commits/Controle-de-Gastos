@@ -920,6 +920,49 @@ $r = $svc->processTokenPayment(12, $a['attempt_token'], 'tok_valid_abc');
 assert_test(($r['http'] ?? 0) === 200, 'AT48b: retry adota o vinculo parcial');
 assert_test($mp->postCount === 0, 'AT48c: zero POST (nada duplicado)');
 
+echo "\n--- AT49: outcome por status (backend nunca mente sucesso) ---\n";
+assert_test(SubscriptionCheckoutService::outcomeFor('active') === 'active', 'AT49a: active -> active');
+assert_test(SubscriptionCheckoutService::outcomeFor('pending') === 'processing', 'AT49b: pending -> processing');
+assert_test(SubscriptionCheckoutService::outcomeFor('rejected') === 'rejected', 'AT49c: rejected -> rejected');
+assert_test(SubscriptionCheckoutService::outcomeFor('cancelled') === 'cancelled', 'AT49d: cancelled -> cancelled');
+assert_test(SubscriptionCheckoutService::outcomeFor('paused') === 'paused', 'AT49e: paused -> paused');
+assert_test(SubscriptionCheckoutService::outcomeFor(null) === 'processing', 'AT49f: desconhecido -> processing (nunca sucesso)');
+assert_test(SubscriptionCheckoutService::outcomeFor('hacked') === 'processing', 'AT49g: inesperado -> processing');
+
+echo "\n--- AT50: resposta carrega outcome conforme status MP ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['body']['outcome'] ?? '') === 'active', 'AT50a: authorized -> outcome active', $r['body']['outcome'] ?? '');
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(12, 'premium', 3);
+$mp->createQueue = [[
+    'ok' => true, 'status' => 201, 'preapproval_id' => 'mp_pend_9',
+    'external_reference' => $a['attempt_token'], 'plan_id' => 'plan_premium_xyz',
+    'mp_status' => 'pending',
+]];
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(12, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['body']['outcome'] ?? '') === 'processing', 'AT50b: pending -> outcome processing (NAO sucesso)');
+assert_test(($r['body']['ok'] ?? false) === true, 'AT50c: ok tecnico mantido (frontend decide por outcome)');
+$userB = null;
+foreach ($db->tables['usuarios'] as $u) { if ((int)$u['id'] === 12) $userB = $u; }
+assert_test(($userB['plano'] ?? '') === 'gratuito', 'AT50d: pending NAO promove usuario');
+
+echo "\n--- AT51: linked+authorized+FREE aplica plano idempotente ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$sm->updateMpData((int)$a['id'], 'mp_preauth_7', 'pending', null);
+$mp->addPreapproval('mp_preauth_7', 'authorized', $a['attempt_token'], 'plan_pro_xyz');
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['body']['outcome'] ?? '') === 'active', 'AT51a: outcome active');
+$userA = null;
+foreach ($db->tables['usuarios'] as $u) { if ((int)$u['id'] === 5) $userA = $u; }
+assert_test(($userA['plano'] ?? '') === 'pro', 'AT51b: plano aplicado (estava FREE)');
+assert_test($mp->postCount === 0, 'AT51c: zero POST (só reconciliação)');
+
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;
 echo "Total: $total | \033[32mPassed: $passed\033[0m | \033[31mFailed: $failed\033[0m\n";

@@ -69,6 +69,17 @@ foreach (['issuer', 'installments', 'identificationType', 'identificationNumber'
 assert_test(str_contains($js, 'safeSerializeError'), 'serializador seguro de erros do SDK presente');
 assert_test(str_contains($js, '[object-sem-campos-seguros]') || str_contains($js, 'message'), 'serializador extrai campos seguros');
 
+echo "\n--- semantica de sucesso (anti-falso-positivo) ---\n";
+assert_test(str_contains($js, "outcome === 'active'"), 'sucesso exige outcome active');
+assert_test(str_contains($js, "outcome === 'processing'"), 'processing inicia poll');
+assert_test(
+    preg_match('/if\s*\(\s*data\.ok\s*===\s*true\s*\)\s*\{\s*window\.location/', $js) !== 1,
+    'PROIBIDO redirect por ok:true sozinho'
+);
+foreach (['rejected', 'cancelled', 'subscribed=1'] as $s) {
+    assert_test(str_contains($js, $s), "JS trata '$s'");
+}
+
 echo "\n--- init robusta (anti-falha-silenciosa) ---\n";
 assert_test(str_contains($js, 'new MercadoPago'), 'SDK inicializado via new MercadoPago');
 assert_test(str_contains($js, 'cardForm = mp.cardForm'), 'CardForm inicializado');
