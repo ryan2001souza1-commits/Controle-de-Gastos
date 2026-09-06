@@ -32,11 +32,42 @@ class SubscriptionCheckoutService
     private $userModel;
     private Subscription $subscriptionModel;
     private string $currentPhase = 'init';
+    /** @var list<string> trilha phase:txstate para diagnostico pos-falha */
+    private array $trail = [];
 
     private function setPhase(string $phase): string
     {
         $this->currentPhase = $phase;
+        $tx = 'unknown';
+        try {
+            $tx = $this->db->inTransaction() ? 'yes' : 'no';
+        } catch (Throwable $ignored) {
+        }
+        $this->trail[] = $phase . ':' . $tx;
+        if (count($this->trail) > 40) {
+            array_shift($this->trail);
+        }
         return $phase;
+    }
+
+    /**
+     * Garante ausencia de transacao residual antes de trecho critico.
+     * Retorna true se precisou reverter (logado pelo chamador).
+     */
+    private function ensureNoOpenTransaction(string $where): bool
+    {
+        try {
+            if ($this->db->inTransaction()) {
+                error_log('[subscribe_token] phase=' . $where . ' invariant_violation unexpected_open_transaction');
+                try {
+                    $this->db->rollBack();
+                } catch (Throwable $ignored) {
+                }
+                return true;
+            }
+        } catch (Throwable $ignored) {
+        }
+        return false;
     }
 
     public function __construct($db, MercadoPagoService $mpService, $userModel)
@@ -65,6 +96,10 @@ class SubscriptionCheckoutService
                 return $this->out(400, ['ok' => false, 'error' => 'invalid_card_token'], $this->currentPhase);
             }
 
+            // Guarda de entrada (Fase 6): se a conexao chegou aqui com
+            // transacao aberta sem o fluxo ter aberto, algo anterior
+            // (boot/middleware) vazou estado — reverte com evidencia.
+            $this->ensureNoOpenTransaction('entry');
             // Leitura SEM transacao: nenhuma trava e mantida durante rede.
             $this->setPhase('attempt_lookup');
             $attempt = $this->subscriptionModel->findByAttemptToken($attemptToken);
@@ -99,13 +134,7 @@ class SubscriptionCheckoutService
             // com este exact external_reference, vincula em vez de duplicar.
             // Invariante: reconcile_search (rede) NUNCA roda com transacao
             // aberta. Se aberta, registra, reverte e NAO segue silencioso.
-            if ($this->db->inTransaction()) {
-                error_log('[subscribe_token] phase=reconcile_search invariant_violation transaction_still_open');
-                try {
-                    $this->db->rollBack();
-                } catch (Throwable $ignored) {
-                }
-            }
+            $this->ensureNoOpenTransaction('reconcile_search');
             $this->setPhase('reconcile_search');
             $found = $this->findOwnPreapproval($attempt);
             if ($found === 'conflict') {
@@ -195,11 +224,13 @@ class SubscriptionCheckoutService
             if ($e instanceof RuntimeException && $e->getMessage() === 'attempt_changed') {
                 return $this->out(404, ['ok' => false, 'error' => 'attempt_not_found'], $failedPhase);
             }
+            $debug = Subscription::describeDbError($e);
+            $debug['trail'] = implode('>', $this->trail);
             return [
                 'http' => 500,
                 'body' => ['ok' => false, 'error' => 'internal_error'],
                 'phase' => $failedPhase,
-                'debug' => Subscription::describeDbError($e),
+                'debug' => $debug,
             ];
         }
     }
@@ -265,13 +296,7 @@ class SubscriptionCheckoutService
         // Invariante: entrar aqui SEM transacao aberta. Se houver residual
         // (ex.: boot/migration deixou txn abortada), registra e limpa em vez
         // de contaminar este vinculo — fail-closed com evidencia.
-        if ($this->db->inTransaction()) {
-            error_log('[subscribe_token] phase=txn_preflight invariant_violation residual_transaction');
-            try {
-                $this->db->rollBack();
-            } catch (Throwable $ignored) {
-            }
-        }
+        $this->ensureNoOpenTransaction('txn_preflight');
         $this->setPhase('txn_begin');
         $this->db->beginTransaction();
         try {

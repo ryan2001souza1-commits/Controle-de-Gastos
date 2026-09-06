@@ -412,7 +412,7 @@ if ($action === 'register') {
             (string)($_SERVER['HTTP_X_VERCEL_ID'] ?? $_SERVER['HTTP_X_REQUEST_ID'] ?? '')
         );
         error_log(sprintf(
-            '[subscribe_token] phase=%s class=%s sqlstate=%s code=%s msg=%s attempt=%s req=%s time=%s',
+            '[subscribe_token] phase=%s class=%s sqlstate=%s code=%s msg=%s attempt=%s req=%s time=%s trail=%s',
             (string)($res['phase'] ?? 'unknown'),
             (string)($debug['class'] ?? '?'),
             (string)($debug['sqlstate'] ?? ''),
@@ -420,7 +420,8 @@ if ($action === 'register') {
             (string)($debug['message'] ?? ''),
             $attemptToken,
             $requestId,
-            gmdate('Y-m-d\TH:i:s\Z')
+            gmdate('Y-m-d\TH:i:s\Z'),
+            preg_replace('/[^A-Za-z0-9_:\->]/', '', (string)($debug['trail'] ?? ''))
         ));
     }
     http_response_code((int)($res['http'] ?? 500));

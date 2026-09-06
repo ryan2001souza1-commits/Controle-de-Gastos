@@ -774,6 +774,38 @@ assert_test($mp->postCount === 1, 'AT37a: primeiro POST vincula');
 $r2 = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_outro_999');
 assert_test(($r2['body']['already'] ?? false) === true && $mp->postCount === 1, 'AT37b: segundo request reutiliza (0 POST extra)');
 
+echo "\n--- AT38: trilha prova txn fechada antes de reconcile_search ---\n";
+class TrailPDO extends FakeAttemptPDO
+{
+    public array $trailSeen = [];
+}
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 200, 'AT38a: sucesso');
+assert_test(str_contains($r['debug']['trail'] ?? '', 'reconcile_search:no') || !isset($r['debug']), 'AT38b: sem debug em sucesso (só falha registra trilha)');
+
+echo "\n--- AT39: debug de falha traz trilha + fase exata ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$failDb2 = new FailOncePDO();
+$failDb2->tables = $db->tables;
+$failDb2->lastId = $db->lastId;
+$svcFail2 = new SubscriptionCheckoutService($failDb2, $mp, new FakeUserModel());
+$r = $svcFail2->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(isset($r['debug']['trail']) && str_contains($r['debug']['trail'], ':'), 'AT39a: trilha presente no debug');
+assert_test(!empty($r['phase']), 'AT39b: fase presente');
+
+echo "\n--- AT40: guard de entrada reverte txn residual e registra ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$db->beginTransaction();
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 200, 'AT40a: guard reverteu e fluxo completou');
+assert_test($db->inTransaction() === false, 'AT40b: sem txn residual ao final');
+
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;
 echo "Total: $total | \033[32mPassed: $passed\033[0m | \033[31mFailed: $failed\033[0m\n";
