@@ -293,20 +293,18 @@ class SubscriptionCheckoutService
         string $mpPreapprovalId,
         string $mpStatusRaw
     ): array {
-        // Invariante: entrar aqui SEM transacao aberta. Se houver residual
-        // (ex.: boot/migration deixou txn abortada), registra e limpa em vez
-        // de contaminar este vinculo — fail-closed com evidencia.
+        // SEM transacao explicita neste metodo — decisao estrutural pos-25P02:
+        // cada statement roda em autocommit com sua propria condicao
+        // (compare-and-set). Sem txn aberta, 25P02 "em cascata" e impossivel:
+        // qualquer falha futura sai com seu SQLSTATE real. A atomicidade que
+        // importa (uma tentativa, um mp id) vem do claim + UNIQUE parcial,
+        // nao de BEGIN/COMMIT. Convergencia de estados parciais: webhook,
+        // poll e retry releem e completam de forma idempotente.
+        // Invariante: se houver txn residual aberta, registra e limpa antes.
         $this->ensureNoOpenTransaction('txn_preflight');
-        $this->setPhase('txn_begin');
-        $this->db->beginTransaction();
         try {
-            // Roundtrip de verificacao: prova que o begin abriu transacao
-            // valida no SERVIDOR (detecta pooler/conexao que mente no begin).
-            $this->setPhase('txn_begin_verify');
-            $this->db->query('SELECT 1');
             // Tomada atomica PRIMEIRO (ownership+plano+mp-vazio no WHERE):
-            // um unico statement decide o vencedor. Nenhum SELECT previo,
-            // nenhuma trava mantida, nenhuma janela para 25P02 em cascata.
+            // um unico statement decide o vencedor. Nenhum SELECT previo.
             $this->setPhase('txn_claim');
             $claimed = $this->subscriptionModel->claimMpPreapprovalId(
                 $attemptId,
@@ -329,8 +327,6 @@ class SubscriptionCheckoutService
                     throw new RuntimeException('mp_conflict');
                 }
                 if ($winnerMpId === $mpPreapprovalId && $winnerMpId !== '') {
-                    $this->setPhase('txn_commit');
-                    $this->db->commit();
                     return [
                         'ok' => true,
                         'already' => true,
@@ -361,13 +357,14 @@ class SubscriptionCheckoutService
                 }
             }
             $this->setPhase('txn_commit');
-            $this->db->commit();
             return [
                 'ok' => true,
                 'status' => $internalStatus,
                 'redirect' => '/index.php?action=meu_plano&subscribed=1',
             ];
         } catch (Throwable $t) {
+            // Sem txn propria: so reverte se algum chamador externo mantiver
+            // uma aberta (defensivo; nunca deve ocorrer neste fluxo).
             if ($this->db->inTransaction()) {
                 try {
                     $this->db->rollBack();

@@ -854,7 +854,7 @@ assert_test($w2 !== null, 'AT43b: linhas distintas aceitam (dono verificado depo
 $dup = $sm->claimMpPreapprovalId((int)$aA['id'], 5, 'pro', 'mp_race_2');
 assert_test($dup === null, 'AT43c: mesma linha nao e retomada');
 
-echo "\n--- AT44: txn_begin_verify falha -> 500 com fase exata ---\n";
+echo "\n--- AT44: fluxo nao depende de query() auxiliar (verify removido) ---\n";
 class VerifyFailPDO extends FakeAttemptPDO
 {
     public function query(string $query, ?int $fetchMode = null, mixed ...$args): PDOStatement|false
@@ -869,9 +869,11 @@ $vdb->tables = $db->tables;
 $vdb->lastId = $db->lastId;
 $svc = new SubscriptionCheckoutService($vdb, $mp, new FakeUserModel());
 $r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
-assert_test(($r['http'] ?? 0) === 500, 'AT44a: http 500');
-assert_test(($r['phase'] ?? '') === 'txn_begin_verify', 'AT44b: fase exata (nunca 25P02 generico)', $r['phase'] ?? '');
-assert_test($vdb->inTransaction() === false, 'AT44c: rollback executado');
+assert_test(($r['http'] ?? 0) === 200, 'AT44a: sucesso mesmo com query() quebrado (nada o usa)');
+assert_test($vdb->inTransaction() === false, 'AT44b: sem txn residual');
+$smV = new Subscription($vdb);
+$row = $smV->findByAttemptToken($a['attempt_token']);
+assert_test(($row['status'] ?? '') === 'active', 'AT44c: vinculo completo');
 
 echo "\n--- AT45: search acha mp de OUTRO plano -> conflict, sem POST ---\n";
 [$db, $mp, $sm] = makeAttemptEnv();
@@ -895,6 +897,28 @@ $svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
 $r = $svc->processTokenPayment(12, $a['attempt_token'], 'tok_valid_abc');
 assert_test(($r['http'] ?? 0) === 200, 'AT46a: sucesso');
 assert_test(TestEvents::assertNoMpInsideTxn('x'), 'AT46b: rede fora de txn mantido');
+
+echo "\n--- AT47: caminho feliz nao abre transacao (25P02 estruturalmente impossivel) ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+TestEvents::reset();
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 200, 'AT47a: sucesso');
+$begins = count(array_filter(TestEvents::$log, fn($e) => $e === 'db:begin'));
+assert_test($begins === 0, 'AT47b: zero beginTransaction no caminho feliz', 'begins=' . $begins);
+assert_test(TestEvents::assertNoMpInsideTxn('x'), 'AT47c: ordem rede/txn preservada');
+
+echo "\n--- AT48: progresso parcial converge no retry (claim direto + adocao) ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(12, 'premium', 3);
+// Simula crash apos o claim (mp gravado, status nao atualizado):
+$won = $sm->claimMpPreapprovalId((int)$a['id'], 12, 'premium', 'mp_partial_1');
+assert_test($won !== null, 'AT48a: claim direto funciona');
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(12, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 200, 'AT48b: retry adota o vinculo parcial');
+assert_test($mp->postCount === 0, 'AT48c: zero POST (nada duplicado)');
 
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;
