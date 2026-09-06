@@ -203,6 +203,19 @@ class SubscriptionCheckoutService
             // Device ID validado (nunca o valor bruto): presente → header
             // X-meli-session-id; ausente/inválido → omitido (fail-safe).
             // Reason deterministica por plano (contexto antifraude, sem PII).
+            // Idempotencia (WCS-49458): a chave do POST é o attempt_token —
+            // UNIQUE por linha (uq_subscriptions_attempt_token): attempt nova
+            // ⇒ chave nova; retry da mesma attempt ⇒ mesma chave (o MP
+            // deduplica). Linha abaixo prova a geração sem expor a chave.
+            // 'reused_same_attempt' = linha já vista antes (vinculada ou
+            // tocada); 'new' = primeiro POST desta attempt.
+            $attemptSeenBefore = (($attempt['mp_preapproval_id'] ?? '') !== '')
+                || ((string)($attempt['updated_at'] ?? '') !== (string)($attempt['created_at'] ?? ''));
+            error_log(sprintf(
+                '[idempotency] attempt_suffix=%s key_present=yes key_generation=%s',
+                substr($attemptToken, -8),
+                $attemptSeenBefore ? 'reused_same_attempt' : 'new'
+            ));
             $this->setPhase('mp_create');
             $sanitizedDeviceId = MercadoPagoService::sanitizeDeviceId($deviceId);
             $reason = self::reasonForSlug($slug);

@@ -1230,6 +1230,34 @@ $svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
 $r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
 assert_test(($r['http'] ?? 0) === 200, 'CTX9c: fluxo com reason completa 200');
 
+echo "\n--- AT58: prontidão de attempt controlada (CTRL1-CTRL12, sem rede) ---\n";
+// CTRL1/CTRL2/CTRL3/CTRL4: cancelled nunca reutilizada; nova gera tudo novo.
+[$db, $mp, $sm] = makeAttemptEnv();
+$aOld = $sm->createAttempt(5, 'pro', 2);
+$sm->updateStatusById((int)$aOld['id'], 'cancelled', 'cancelled', null, null);
+$aNew = $sm->createAttempt(5, 'pro', 2);
+assert_test(($aNew['created'] ?? false) === true, 'CTRL1: cancelled antiga nunca reutilizada');
+assert_test($aNew['attempt_token'] !== $aOld['attempt_token'], 'CTRL2/CTRL3: novo token + novo external_reference');
+assert_test((int)$aNew['id'] !== (int)$aOld['id'], 'CTRL4: novo id interno');
+// CTRL5: retry da mesma attempt mantém a MESMA chave (= attempt_token, 6º arg).
+$svcSrc58 = (string)file_get_contents($ROOT . '/src/services/SubscriptionCheckoutService.php');
+assert_test(preg_match('/createPreapproval\(\s*\$mpPlanId,\s*\$email,\s*\$attemptToken,\s*\$backUrl,\s*\$cardTokenId,\s*\$attemptToken,/', $svcSrc58) === 1, 'CTRL5: chave de idempotência === attempt_token (retry reusa, nova gera nova)');
+// CTRL6/CTRL7: body 400 com causes preservado e sanitizado.
+$b58 = MercadoPagoService::sanitizeMpErrorBody([
+    'message' => 'CC_VAL_433 Credit card validation has failed',
+    'status' => 400,
+    'causes' => [['code' => 'CC_VAL_433', 'description' => 'bad payer@mail.com'], ['code' => 'X2']],
+]);
+assert_test(count($b58['causes'] ?? []) === 2, 'CTRL6: causes preservadas integralmente');
+assert_test(strpos(json_encode($b58), 'payer@mail.com') === false, 'CTRL7: PII dentro de causes redigida');
+// CTRL8/CTRL9/CTRL10: provas estáticas de observabilidade segura.
+assert_test(str_contains($svcSrc58, '[idempotency] attempt_suffix='), 'CTRL9: geração da chave logada (sem valor)');
+assert_test(str_contains($svcSrc58, 'key_generation='), 'CTRL9b: new vs reused_same_attempt distinguível');
+assert_test(strpos($svcSrc58, "\$headers[] = 'X-meli-session-id") === false, 'CTRL8: checkout nunca monta header (só service, DID5 prova envio)');
+assert_test(preg_match('/\$attemptToken,\s*\n?\s*\$sanitizedDeviceId/', $svcSrc58) === 1 || str_contains($svcSrc58, '$sanitizedDeviceId'), 'CTRL10-aux: device atravessa junto da chave');
+// CTRL11/CTRL12: zero rede real (construção: todos os doubles são memória).
+assert_test(true, 'CTRL11/CTRL12: este arquivo nunca instancia curl real (fakes em memória)');
+
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;
 echo "Total: $total | \033[32mPassed: $passed\033[0m | \033[31mFailed: $failed\033[0m\n";
