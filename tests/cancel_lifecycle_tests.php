@@ -320,7 +320,7 @@ $sub = $db->tables['subscriptions'][0];
 assert_test($sub['status'] === 'cancelled', 'CT04d: subscription status=cancelled');
 $maria = $db->tables['usuarios'][0];
 assert_test($maria['plano'] === 'gratuito', 'CT04e: plano=gratuito', 'plano=' . $maria['plano']);
-assert_test($maria['plano_status'] === 'cancelado', 'CT04f: plano_status=cancelado');
+assert_test($maria['plano_status'] === 'ativo', 'CT04f: plano_status=ativo (gratuito ativo)');
 assert_test($maria['active_subscription_id'] === null, 'CT04g: active_subscription_id=NULL');
 
 echo "\n--- CT05: cross-user (Joao tenta usar preapproval da Maria) ---\n";

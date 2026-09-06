@@ -410,7 +410,7 @@ class Subscription
             $stmt = $this->db->prepare(
                 "UPDATE usuarios
                     SET plano = 'gratuito',
-                        plano_status = 'cancelado',
+                        plano_status = 'ativo',
                         plano_fim = NOW(),
                         active_subscription_id = NULL,
                         updated_at = NOW()

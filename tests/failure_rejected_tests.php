@@ -288,7 +288,7 @@ $db = makeDbRejected();
 updateSubscriptionAndApply($db, 1, Subscription::STATUS_REJECTED, 'failure', null, null);
 $maria = $db->tables['usuarios'][0];
 assert_test($maria['plano'] === 'gratuito', 'RJ01a: plano=gratuito apos rejected sem grace');
-assert_test($maria['plano_status'] === 'cancelado', 'RJ01b: plano_status=cancelado');
+assert_test($maria['plano_status'] === 'ativo', 'RJ01b: plano_status=ativo (gratuito ativo)');
 assert_test($maria['active_subscription_id'] === null, 'RJ01c: active_subscription_id=NULL');
 $sub = $db->tables['subscriptions'][0];
 assert_test($sub['status'] === 'rejected', 'RJ01d: subscription status=rejected');
@@ -309,7 +309,7 @@ $pastGrace = date('Y-m-d H:i:s', time() - 1);
 updateSubscriptionAndApply($db, 1, Subscription::STATUS_REJECTED, 'failure', null, $pastGrace);
 $maria = $db->tables['usuarios'][0];
 assert_test($maria['plano'] === 'gratuito', 'RJ03a: plano=gratuito quando grace expirado');
-assert_test($maria['plano_status'] === 'cancelado', 'RJ03b: plano_status=cancelado');
+assert_test($maria['plano_status'] === 'ativo', 'RJ03b: plano_status=ativo (grace expirou, plano free ativo)');
 assert_test($maria['active_subscription_id'] === null, 'RJ03c: active_subscription_id=NULL');
 
 echo "\n--- RJ04: rejected duplicado (idempotencia) ---\n";
@@ -318,7 +318,7 @@ updateSubscriptionAndApply($db, 1, Subscription::STATUS_REJECTED, 'failure', nul
 updateSubscriptionAndApply($db, 1, Subscription::STATUS_REJECTED, 'failure', null, null);
 $maria = $db->tables['usuarios'][0];
 assert_test($maria['plano'] === 'gratuito', 'RJ04a: plano continua=gratuito (idempotente)');
-assert_test($maria['plano_status'] === 'cancelado', 'RJ04b: plano_status continua=cancelado');
+assert_test($maria['plano_status'] === 'ativo', 'RJ04b: plano_status continua=ativo');
 
 echo "\n--- RJ05: rejected -> authorized reativacao ---\n";
 $db = makeDbRejected();
