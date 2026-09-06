@@ -471,6 +471,11 @@ assert_test(str_contains($jsSrc, 'attempt_suffix'), 'P17g: logs usam sufixo, nun
 assert_test(str_contains($jsSrc, 'Verificar novamente'), 'P17h: retry controlado após timeout/abort');
 assert_test(str_contains($jsSrc, 'function renderTerminalError'), 'P17i: renderização terminal única e atômica');
 assert_test(str_contains($jsSrc, 'AbortController'), 'P17j: abort de request em voo');
+assert_test(str_contains($jsSrc, 'deviceState') && str_contains($jsSrc, 'startDeviceTracking'), 'P17l: gate de prontidão do device (loading/ready/unavailable)');
+assert_test(str_contains($jsSrc, 'Preparando pagamento seguro'), 'P17m: botão indica preparo enquanto loading');
+assert_test(str_contains($jsSrc, 'device_unavailable'), 'P17n: timeout do device pede reload sem pagar');
+assert_test(str_contains($jsSrc, 'function renderTerminalError'), 'P17i: renderização terminal única e atômica');
+assert_test(str_contains($jsSrc, 'AbortController'), 'P17j: abort de request em voo');
 assert_test(str_contains($jsSrc, 'action=') && str_contains($jsSrc, 'error=') && str_contains($jsSrc, 'function uiLog'), 'P17k: log com action/error separados');
 assert_test(str_contains($jsSrc, "'processing'") || str_contains($jsSrc, '"processing"'), 'P15c: pending mapeia para processing');
 assert_test(str_contains($jsSrc, 'meu_plano&subscribed=1'), 'P16a: active redireciona para sucesso');

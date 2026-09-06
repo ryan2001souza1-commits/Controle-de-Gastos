@@ -40,7 +40,7 @@ function makeNode() {
 function makeEnv() {
     const nodes = {};
     for (const id of ['mp-checkout-panel', 'mp-diag-line', 'mp-card-form',
-        'mp-pay-button', 'mp-checkout-error', 'mp-checkout-loading']) {
+        'mp-pay-button', 'mp-checkout-error', 'mp-checkout-loading', 'mp-pay-label']) {
         nodes[id] = makeNode();
     }
     const panel = nodes['mp-checkout-panel'];
@@ -76,7 +76,7 @@ function makeEnv() {
     return { doc, nodes, parent };
 }
 
-// ---------- tempo virtual (waitForDeviceId usa Date.now real) ----------
+// ---------- tempo virtual (polls + gate usam Date.now/setTimeout) ----------
 let VNOW = Date.now();
 const REAL_NOW = Date.now;
 global.Date.now = () => VNOW;
@@ -122,7 +122,7 @@ function ok(cond, name) {
 }
 
 // Carrega o arquivo UMA vez por cenário (IIFE faz bootstrap no require).
-function loadApp({ subscribeResponses, pollScript, deviceId, identity, panelToken }) {
+function loadApp({ subscribeResponses, pollScript, deviceId, identity, panelToken, winFlags }) {
     delete require.cache[require.resolve('../public/js/mp_subscribe.js')];
     const { doc, nodes, parent } = makeEnv();
     if (panelToken) {
@@ -147,9 +147,10 @@ function loadApp({ subscribeResponses, pollScript, deviceId, identity, panelToke
     const postBodies = [];
     let pollIdx = 0;
     let capturedSubmit = null;
+    let tokenCalls = 0;
 
     global.document = doc;
-    global.window = { location: { href: '' } };
+    global.window = Object.assign({ location: { href: '' } }, winFlags || {});
     global.setTimeout = T.set;
     global.clearTimeout = T.clear;
     global.console.info = (...a) => uiLogs.push(a.join(' '));
@@ -166,7 +167,7 @@ function loadApp({ subscribeResponses, pollScript, deviceId, identity, panelToke
         return {
             cardForm: (cfg) => {
                 capturedSubmit = cfg.callbacks.onSubmit;
-                return { getCardFormData: () => ({ token: 'tok_test_single_use' }) };
+                return { getCardFormData: () => { tokenCalls++; return { token: 'tok_test_single_use' }; } };
             },
         };
     };
@@ -189,7 +190,12 @@ function loadApp({ subscribeResponses, pollScript, deviceId, identity, panelToke
     return {
         nodes, parent, uiLogs, fetches, postBodies, T, api,
         submit: () => capturedSubmit({ preventDefault: () => {} }),
+        tokenCalls: () => tokenCalls,
+        btnDisabled: () => !!nodes['mp-pay-button'].disabled,
+        btnText: () => String((nodes['mp-pay-label'] && nodes['mp-pay-label'].textContent) || nodes['mp-pay-button'].textContent || ''),
+        errText: () => String(nodes['mp-checkout-error'].textContent || ''),
         polls: () => fetches.filter((u) => u.includes('subscription_status')).length,
+        posts: () => fetches.filter((u) => u.includes('subscribe_token')).length,
         retryBtn: () => parent.children.find((c) => c.type === 'button'),
         cleanup: () => {
             delete global.document; delete global.window;
@@ -434,11 +440,115 @@ const PENDING = { ok: true, status: 'pending', outcome: 'processing', linked: tr
         app.cleanup();
     }
     {
+        // Gate fail-closed: sem device, submit bloqueia (não é mais fail-open).
         const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], deviceId: null });
         await app.submit();
         await app.T.drain(10);
-        ok(app.postBodies.length >= 1 && !('device_id' in app.postBodies[0]), 'DID2: ausente -> chave omitida do POST');
-        ok(app.nodes['mp-checkout-loading'].style.display === 'block' || app.polls() >= 1, 'DID3: script atrasado/ausente não quebra o fluxo');
+        ok(app.posts() === 0, 'DID2: sem device -> ZERO POST (gate fail-closed)');
+        ok(app.tokenCalls() === 0, 'DID2b: sem device -> token nem é criado');
+        ok(app.btnDisabled() === true, 'DID2c: botão segue travado sem device');
+        app.cleanup();
+    }
+
+    // Avança o relógio virtual disparando o timer mais próximo.
+    async function fireEarliest(app) {
+        if (app.T.timers.size === 0) return false;
+        const ids = [...app.T.timers.keys()].sort((a, b) => app.T.timers.get(a).at - app.T.timers.get(b).at);
+        const id = ids[0];
+        const t = app.T.timers.get(id);
+        app.T.timers.delete(id);
+        if (t.at > VNOW) VNOW = t.at;
+        t.fn();
+        await Promise.resolve();
+        await new Promise((r) => setImmediate(r));
+        return true;
+    }
+
+    // ---- RACE: gate de prontidão fail-closed ----
+    console.log('--- RACE device gate ---');
+    {
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], deviceId: null });
+        await app.T.drain(5);
+        ok(app.btnDisabled() === true, 'RACE1: sem device ao abrir -> botão disabled');
+        ok(app.btnText().includes('Preparando'), 'RACE1b: texto "Preparando pagamento seguro…"');
+        app.cleanup();
+    }
+    {
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], deviceId: null });
+        await app.T.drain(5);
+        global.MP_DEVICE_SESSION_ID = 'dev-race2-12345678';
+        await app.T.drain(10);
+        ok(app.btnDisabled() === false, 'RACE2: device aparece -> botão habilita');
+        app.cleanup();
+    }
+    {
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], deviceId: null });
+        await app.T.drain(5);
+        await app.submit();
+        await app.T.drain(10);
+        ok(app.posts() === 0, 'RACE3: submit antes do device -> zero POST');
+        ok(app.tokenCalls() === 0, 'RACE9: token não é criado antes do device');
+        ok(app.errText().length > 0, 'RACE3b: mensagem orienta aguardar');
+        app.cleanup();
+    }
+    {
+        // RACE4: device demora 3s -> fluxo espera corretamente.
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], deviceId: null });
+        for (let i = 0; i < 30; i++) { await fireEarliest(app); }
+        global.MP_DEVICE_SESSION_ID = 'dev-race4-12345678';
+        await app.T.drain(10);
+        await app.submit();
+        await app.T.drain(20);
+        ok(app.postBodies.length >= 1 && app.postBodies[0].device_id === 'dev-race4-12345678', 'RACE4: 3s de atraso -> aguardado e enviado');
+        app.cleanup();
+    }
+    {
+        // RACE5: device demora 5s (dentro do limite de 8s) -> prossegue.
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], deviceId: null });
+        for (let i = 0; i < 50; i++) { await fireEarliest(app); }
+        global.MP_DEVICE_SESSION_ID = 'dev-race5-12345678';
+        await app.T.drain(10);
+        await app.submit();
+        await app.T.drain(20);
+        ok(app.postBodies.length >= 1 && app.postBodies[0].device_id === 'dev-race5-12345678', 'RACE5: 5s de atraso -> dentro do limite, enviado');
+        app.cleanup();
+    }
+    {
+        // RACE5b: além do limite (30s) -> erro amigável, zero POST.
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], deviceId: null });
+        await app.T.drain(200);
+        ok(app.errText().includes('Recarregue'), 'RACE5b: timeout -> pede reload, sem pagamento');
+        ok(app.btnDisabled() === true, 'RACE5b2: botão travado após timeout do device');
+        await app.submit();
+        await app.T.drain(10);
+        ok(app.posts() === 0, 'RACE5b3: zero POST após timeout do device');
+        app.cleanup();
+    }
+    {
+        // RACE6: script error -> erro amigável imediato.
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], deviceId: null, winFlags: { __mpSecurityFailed: true } });
+        await app.T.drain(10);
+        ok(app.errText().includes('Recarregue'), 'RACE6: script error -> erro amigável');
+        await app.submit();
+        await app.T.drain(10);
+        ok(app.posts() === 0, 'RACE6b: zero POST com script falhado');
+        app.cleanup();
+    }
+    {
+        // RACE7: reload recupera (estado fresco com device -> habilitado).
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], deviceId: 'dev-race7-12345678' });
+        await app.T.drain(10);
+        ok(app.btnDisabled() === false, 'RACE7: reload com device -> botão habilitado');
+        app.cleanup();
+    }
+    {
+        // RACE8: valor do device nunca em logs mesmo no fluxo com gate.
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], deviceId: 'dev-race8-secret-12345678' });
+        await app.T.drain(10);
+        await app.submit();
+        await app.T.drain(30);
+        const blob = app.uiLogs.join('\n');
+        ok(!blob.includes('dev-race8-secret-12345678'), 'RACE8: device nunca em logs');
         app.cleanup();
     }
 
@@ -470,76 +580,7 @@ const PENDING = { ok: true, status: 'pending', outcome: 'processing', linked: tr
         app.cleanup();
     }
 
-    // ---- DEV espera limitada: atrasado, falha e timeout ----
-    console.log('--- DEV device wait ---');
-    {
-        // Global aparece DURANTE a espera -> capturado (verbatim, sem gerar).
-        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], deviceId: null });
-        const p = app.submit();
-        for (let i = 0; i < 5; i++) { await new Promise((r) => setImmediate(r)); }
-        global.MP_DEVICE_SESSION_ID = 'dev-late-abcdef12345678';
-        await p;
-        await app.T.drain(30);
-        ok(app.postBodies.length >= 1 && app.postBodies[0].device_id === 'dev-late-abcdef12345678', 'DEV3: global atrasado -> aguardado e capturado');
-        const blob = app.uiLogs.join('\n');
-        ok(!blob.includes('dev-late-abcdef12345678'), 'DEV3b: valor tardio nunca logado');
-        app.cleanup();
-    }
-    {
-        // Nunca aparece -> prossegue sem device dentro do teto (fail-safe).
-        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], deviceId: null });
-        const t0 = VNOW;
-        const p = app.submit();
-        let tPost = -1;
-        for (let i = 0; i < 200 && app.postBodies.length === 0; i++) {
-            await Promise.resolve();
-            await new Promise((r) => setImmediate(r));
-            if (app.postBodies.length > 0) break;
-            if (app.T.timers.size > 0) {
-                const ids = [...app.T.timers.keys()].sort((a, b) => app.T.timers.get(a).at - app.T.timers.get(b).at);
-                const id = ids[0];
-                const t = app.T.timers.get(id);
-                app.T.timers.delete(id);
-                if (t.at > VNOW) VNOW = t.at;
-                t.fn();
-            }
-        }
-        tPost = VNOW;
-        await p;
-        await app.T.drain(60);
-        ok(app.postBodies.length >= 1 && !('device_id' in app.postBodies[0]), 'DEV4: timeout controlado -> prossegue sem device');
-        ok(tPost >= 0 && tPost - t0 >= 1500 && tPost - t0 <= 5000, 'DEV4b: espera limitada (~2s), sem spinner infinito');
-        app.cleanup();
-    }
-    {
-        // Script falhou (onerror) -> prossegue IMEDIATO, sem espera.
-        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], deviceId: null });
-        global.window.__mpSecurityFailed = true;
-        const t0 = VNOW;
-        const p = app.submit();
-        let tPost = -1;
-        for (let i = 0; i < 200 && app.postBodies.length === 0; i++) {
-            await Promise.resolve();
-            await new Promise((r) => setImmediate(r));
-            if (app.postBodies.length > 0) break;
-            if (app.T.timers.size > 0) {
-                const ids = [...app.T.timers.keys()].sort((a, b) => app.T.timers.get(a).at - app.T.timers.get(b).at);
-                const id = ids[0];
-                const t = app.T.timers.get(id);
-                app.T.timers.delete(id);
-                if (t.at > VNOW) VNOW = t.at;
-                t.fn();
-            }
-        }
-        tPost = VNOW;
-        await p;
-        await app.T.drain(30);
-        ok(app.postBodies.length >= 1, 'DEV-fail: script com erro -> checkout prossegue');
-        ok(tPost >= 0 && tPost - t0 < 1500, 'DEV-fail b: sem espera inútil quando script falhou');
-        delete global.window.__mpSecurityFailed;
-        app.cleanup();
-    }
-
+    // ---- RACE10b: sem device nunca há subscribe_token (consolidado RACE) ----
     console.log(`\nTotal: ${passed} passed`);
 })().catch((e) => {
     console.error('FATAL', e);

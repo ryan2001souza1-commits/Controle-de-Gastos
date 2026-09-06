@@ -144,7 +144,7 @@ $errText = $errMessages[$errKey] ?? null;
                 <button type="submit" id="mp-pay-button" class="btn"
                     style="justify-content:center;display:flex;align-items:center;gap:6px;cursor:pointer">
                     <?= render_icon('lock', 15) ?>
-                    Pagar e assinar
+                    <span id="mp-pay-label">Pagar e assinar</span>
                 </button>
             </div>
         </form>

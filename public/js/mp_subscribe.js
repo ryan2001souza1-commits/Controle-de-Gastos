@@ -24,6 +24,8 @@
     var USER_MESSAGES = {
         invalid_card: 'Verifique os dados do cartão e tente novamente.',
         invalid_identity: 'Verifique nome, e-mail e documento do titular antes de pagar.',
+        device_unavailable: 'Não foi possível preparar a verificação de segurança. Recarregue a página e tente novamente.',
+        device_loading: 'Aguarde a verificação de segurança terminar e tente novamente.',
         card_declined: 'Pagamento recusado. Tente outro cartão ou fale com seu banco.',
         rejected: 'Pagamento recusado. Tente outro cartão ou fale com o banco.',
         cancelled: 'Pagamento cancelado ou não autorizado.',
@@ -312,9 +314,11 @@
     function setBusy(busy) {
         submitted = busy;
         if (payButton) {
-            payButton.disabled = busy;
-            payButton.style.opacity = busy ? '0.6' : '';
-            payButton.style.cursor = busy ? 'wait' : 'pointer';
+            // Gate antifraude: sem device pronto, o botão NUNCA reabilita
+            // (mesmo setBusy(false) respeita — fail-closed).
+            payButton.disabled = busy || isSubmitBlocked();
+            payButton.style.opacity = payButton.disabled ? '0.6' : '';
+            payButton.style.cursor = payButton.disabled ? 'wait' : 'pointer';
         }
         if (loadingBox) loadingBox.style.display = busy ? 'block' : 'none';
         if (!busy && errorBox) errorBox.style.display = 'none';
@@ -352,9 +356,17 @@
 
     var pollAborter = null;
 
-    // Limites da espera pelo Device ID (fail-safe: nunca bloqueia o checkout).
-    var DEVICE_WAIT_MS = 2000;
+    // GATE DE PRONTIDÃO DO DEVICE (fail-closed durante investigação WCS-49458):
+    // o checkout NÃO tokeniza nem faz POST enquanto o Device ID oficial não
+    // estiver disponível, salvo impossibilidade comprovada (script falhou ou
+    // teto estourado → erro amigável pedindo reload, sem pagamento).
+    // Estados: 'loading' (aguardando) | 'ready' (global presente) |
+    // 'unavailable' (script falhou ou timeout — terminal, pede reload).
+    var DEVICE_READY_TIMEOUT_MS = 8000;
     var DEVICE_POLL_MS = 100;
+    var deviceState = 'loading';
+    var deviceGateOn = false;
+    var payLabelOriginalText = null;
 
     // Estado do script oficial de segurança (flags do onload/onerror da tag).
     function securityScriptState() {
@@ -383,47 +395,103 @@
         return { tag: tag, load: securityScriptState(), present: readDeviceIdNow() !== '' };
     }
 
-    function logDeviceDiag() {
+    function logDeviceDiag(extra) {
         try {
             var st = deviceDiagLine();
+            var ready = (deviceState === 'ready');
+            var blocked = (deviceGateOn && deviceState !== 'ready');
             if (typeof console !== 'undefined' && console.info) {
                 console.info('[mp-device-ui] script_tag=' + (st.tag ? 'yes' : 'no')
                     + ' script_loaded=' + (st.load === 'loaded' ? 'yes' : (st.load === 'failed' ? 'no' : 'unknown'))
-                    + ' device_id_present=' + (st.present ? 'yes' : 'no'));
+                    + ' device_id_present=' + (st.present ? 'yes' : 'no')
+                    + ' device_ready=' + (ready ? 'yes' : 'no')
+                    + ' submit_blocked=' + (blocked ? 'yes' : 'no')
+                    + (extra ? ' ' + extra : ''));
             }
         } catch (e) {}
     }
 
-    // Espera LIMITADA pelo Device ID oficial. Resolve com o valor (verbatim
-    // do global oficial — sem gerar, sem falsificar) ou '' no timeout/falha.
-    // Nunca rejeita; checkout sempre prossegue (fail-safe documentado).
-    function waitForDeviceId() {
-        return new Promise(function (resolve) {
-            var done = false;
-            function finish(v) {
-                if (done) return;
-                done = true;
-                resolve(v);
-            }
-            var now = readDeviceIdNow();
-            if (now !== '') { finish(now); return; }
-            if (securityScriptState() === 'failed') { finish(''); return; }
-            var deadline = (typeof Date !== 'undefined' && Date.now) ? Date.now() + DEVICE_WAIT_MS : 0;
-            (function tick() {
-                if (done) return;
-                var v = readDeviceIdNow();
-                if (v !== '') { finish(v); return; }
-                if (securityScriptState() === 'failed') { finish(''); return; }
-                var remaining = 0;
-                try { remaining = deadline - Date.now(); } catch (e) {}
-                if (remaining <= 0) { finish(''); return; }
-                try {
-                    setTimeout(tick, Math.min(DEVICE_POLL_MS, remaining));
-                } catch (e) {
-                    finish('');
+    // O gate bloqueia o botão enquanto não-ready (fail-closed). setBusy()
+    // consulta esta função: mesmo setBusy(false) NÃO reabilita sem device.
+    function isSubmitBlocked() {
+        return deviceGateOn && deviceState !== 'ready';
+    }
+
+    // Texto do botão via textContent do span dedicado (sem HTML dinâmico).
+    function payLabel() {
+        try {
+            if (typeof document === 'undefined') return null;
+            return document.getElementById('mp-pay-label');
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function setDeviceState(next) {
+        if (deviceState === next) return;
+        deviceState = next;
+        if (next === 'ready') {
+            try {
+                var lbl = payLabel();
+                if (lbl && payLabelOriginalText !== null && payLabelOriginalText !== undefined) {
+                    lbl.textContent = payLabelOriginalText;
                 }
-            })();
-        });
+            } catch (e) {}
+            if (!submitted && payButton) {
+                payButton.disabled = false;
+                payButton.style.opacity = '';
+                payButton.style.cursor = 'pointer';
+            }
+            try {
+                if (errorBox && errorBox.textContent === USER_MESSAGES.device_unavailable) {
+                    errorBox.style.display = 'none';
+                }
+            } catch (e) {}
+            logDeviceDiag('transition=ready');
+            return;
+        }
+        if (next === 'unavailable') {
+            setBusy(false);
+            showError(USER_MESSAGES.device_unavailable);
+            logDeviceDiag('transition=unavailable');
+        }
+    }
+
+    // Inicia o rastreamento na abertura do checkout (paralelo ao preenchimento).
+    function startDeviceTracking() {
+        deviceGateOn = true;
+        try {
+            if (payButton) {
+                var lbl0 = payLabel();
+                if (lbl0 && payLabelOriginalText === null) {
+                    payLabelOriginalText = lbl0.textContent;
+                }
+                payButton.disabled = true;
+                payButton.style.opacity = '0.6';
+                payButton.style.cursor = 'wait';
+                if (lbl0) {
+                    lbl0.textContent = 'Preparando pagamento seguro…';
+                }
+            }
+        } catch (e) {}
+        logDeviceDiag('tracking=start');
+        if (readDeviceIdNow() !== '') { setDeviceState('ready'); return; }
+        if (securityScriptState() === 'failed') { setDeviceState('unavailable'); return; }
+        var deadline = 0;
+        try { deadline = Date.now() + DEVICE_READY_TIMEOUT_MS; } catch (e) {}
+        (function tick() {
+            if (deviceState !== 'loading') return;
+            if (readDeviceIdNow() !== '') { setDeviceState('ready'); return; }
+            if (securityScriptState() === 'failed') { setDeviceState('unavailable'); return; }
+            var remaining = 0;
+            try { remaining = deadline - Date.now(); } catch (e) {}
+            if (remaining <= 0 || deadline <= 0) { setDeviceState('unavailable'); return; }
+            try {
+                setTimeout(tick, Math.min(DEVICE_POLL_MS, remaining));
+            } catch (e) {
+                setDeviceState('unavailable');
+            }
+        })();
     }
 
     // stopSubscriptionPolling — ÚNICA função que encerra o poll. Chamada em
@@ -619,6 +687,10 @@
             showError('Valor do plano indisponível. Tente novamente mais tarde.');
             return;
         }
+        // Gate antifraude: trava o botão e rastreia o Device ID oficial
+        // desde a abertura do checkout (paralelo ao preenchimento), para
+        // que o submit nunca ocorra antes da prontidão.
+        startDeviceTracking();
         var mp;
         try {
             mp = new MercadoPago(PUBLIC_KEY);
@@ -656,6 +728,15 @@
             onSubmit: function (event) {
                 event.preventDefault();
                 if (submitted) return;
+                // GATE ANTIFRAUDE (fail-closed): sem device pronto, NEM
+                // tokeniza, NEM faz POST. Botão desabilitado já barra o
+                // clique; este guarda cobre Enter/submit programático.
+                if (deviceGateOn && deviceState !== 'ready') {
+                    showError(deviceState === 'loading'
+                        ? USER_MESSAGES.device_loading
+                        : USER_MESSAGES.device_unavailable);
+                    return;
+                }
                 setBusy(true);
 
                 // Contexto antifraude (WCS-49458): identidade do titular
@@ -690,22 +771,18 @@
                     return;
                 }
 
-                // Device ID oficial com espera LIMITADA (fail-safe): se o
-                // security.js ainda não publicou o global, aguarda até o
-                // teto e prossegue sem ele (backend omite o header). Nunca
-                // gera/falsifica valor; nunca loga o valor (só booleanos).
+                // Device ID oficial: o gate garante prontidão — lê o valor
+                // atual (verbatim, sem gerar). Fallback '' é defensivo
+                // (backend omite o header); nunca logado, nunca em URL.
                 // Captura cópias e limpa os originais JÁ (strings são por
-                // valor; o callback usa as cópias — token nunca persiste).
+                // valor; continueSubmit usa as cópias — token nunca persiste).
                 logDeviceDiag();
+                var deviceCopy = readDeviceIdNow();
                 var tokenCopy = token;
                 var formCopy = formData;
                 token = '';
                 formData = {};
-                waitForDeviceId().then(function (deviceId) {
-                    continueSubmit(tokenCopy, formCopy, deviceId || '');
-                }).catch(function () {
-                    continueSubmit(tokenCopy, formCopy, '');
-                });
+                continueSubmit(tokenCopy, formCopy, deviceCopy);
             },
         },
             });
