@@ -118,7 +118,7 @@ include __DIR__ . '/../partials/admin_layout_start.php';
             </div>
             <div style="display:flex;gap:12px;align-items:flex-start">
                 <div style="width:36px;height:36px;border-radius:8px;background:var(--admin-accent-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--admin-accent)"><?= render_icon('x', 16) ?></div>
-                <div><div style="font-weight:700;font-size:13.5px;margin-bottom:3px">Cancelamento</div><div style="font-size:12px;color:var(--admin-text-soft)">Ao cancelar, mude plano para 'gratuito' e plano_status para 'cancelado'.</div></div>
+                <div><div style="font-weight:700;font-size:13.5px;margin-bottom:3px">Cancelamento</div><div style="font-size:12px;color:var(--admin-text-soft)">Ao cancelar e reverter para 'gratuito', defina plano_status = 'ativo'. Somente 'cancelado' se o plano continuar 'pro'/'premium'.</div></div>
             </div>
             <div style="display:flex;gap:12px;align-items:flex-start">
                 <div style="width:36px;height:36px;border-radius:8px;background:var(--admin-purple-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--admin-purple)"><?= render_icon('book', 16) ?></div>

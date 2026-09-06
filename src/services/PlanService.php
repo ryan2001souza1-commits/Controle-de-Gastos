@@ -242,6 +242,9 @@ class PlanService
      */
     public function isPlanoAtivo(User $user): bool
     {
+        if ($this->isFree($user)) {
+            return true;
+        }
         if ($this->normalizeStatus($user->plano_status) !== self::STATUS_ATIVO) {
             return false;
         }
