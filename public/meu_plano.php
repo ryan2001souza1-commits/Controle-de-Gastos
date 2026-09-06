@@ -86,6 +86,52 @@ $errText = $errMessages[$errKey] ?? null;
     </div>
 <?php endif; ?>
 
+<?php if (!empty($checkoutAttempt) && !empty($mpPublicKey)): ?>
+<section class="panel" style="margin-bottom:var(--space-5)" id="mp-checkout-panel"
+    data-mp-public-key="<?= htmlspecialchars($mpPublicKey, ENT_QUOTES) ?>"
+    data-attempt-token="<?= htmlspecialchars($checkoutAttempt['attempt_token'], ENT_QUOTES) ?>">
+    <div class="panel-header">
+        <div class="panel-title">Pagamento — <?= htmlspecialchars($checkoutAttempt['plan_slug'] === 'premium' ? 'Premium' : 'Pro') ?></div>
+        <div class="panel-subtitle">Os dados do cartão são tokenizados pelo Mercado Pago e nunca passam pelo nosso servidor.</div>
+    </div>
+    <div class="panel-body-sm">
+        <form id="mp-card-form" novalidate>
+            <div style="display:flex;flex-direction:column;gap:var(--space-3);max-width:440px">
+                <label style="font-size:13px;color:var(--color-text-2)">Número do cartão
+                    <div id="mp-cardNumber" style="height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px"></div>
+                </label>
+                <div style="display:flex;gap:var(--space-3)">
+                    <label style="font-size:13px;color:var(--color-text-2);flex:1">Validade (MM/AA)
+                        <div id="mp-expirationDate" style="height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px"></div>
+                    </label>
+                    <label style="font-size:13px;color:var(--color-text-2);flex:1">CVV
+                        <div id="mp-securityCode" style="height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px"></div>
+                    </label>
+                </div>
+                <label style="font-size:13px;color:var(--color-text-2)">Nome impresso no cartão
+                    <input type="text" id="mp-cardholderName" autocomplete="cc-name"
+                        style="width:100%;height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px;background:var(--color-surface-1);color:var(--color-text-1)">
+                </label>
+                <label style="font-size:13px;color:var(--color-text-2)">E-mail do titular
+                    <input type="email" id="mp-cardholderEmail" autocomplete="email" value="<?= htmlspecialchars($userEmail, ENT_QUOTES) ?>"
+                        style="width:100%;height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px;background:var(--color-surface-1);color:var(--color-text-1)">
+                </label>
+                <div id="mp-checkout-error" class="alert alert-error" role="alert" style="display:none;margin:0"></div>
+                <div id="mp-checkout-loading" style="display:none;font-size:13px;color:var(--color-text-2)">Processando pagamento… não feche esta página.</div>
+                <?= csrf_field() ?>
+                <button type="submit" id="mp-pay-button" class="btn"
+                    style="justify-content:center;display:flex;align-items:center;gap:6px;cursor:pointer">
+                    <?= render_icon('lock', 15) ?>
+                    Pagar e assinar
+                </button>
+            </div>
+        </form>
+    </div>
+</section>
+<script src="https://sdk.mercadopago.com/js/v2"></script>
+<script src="/js/mp_subscribe.js?v=1"></script>
+<?php endif; ?>
+
 <section class="panel" style="margin-bottom:var(--space-5)">
     <div class="panel-body" style="display:flex;gap:var(--space-5);align-items:center;flex-wrap:wrap">
         <div style="flex:0 0 auto;text-align:center;min-width:100px">

@@ -117,6 +117,7 @@ $csrfProtectedActions = [
     'store_goal', 'update_goal', 'delete_goal', 'update_profile',
     'update_password', 'feedback_create', 'reportar', 'reportar_create',
     'admin_bug_update', 'admin_feedback_update', 'ai_chat', 'logout', 'cancel',
+    'subscribe', 'subscribe_token',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -232,9 +233,6 @@ if ($action === 'register') {
         header('Location: /index.php?action=login');
         exit;
     }
-    $email = (string)($userRow->email ?? '');
-
-    $externalReference = 'user_' . $userId . '_' . $slug;
 
     $planRow = $planModel->findBySlug($slug);
     if ($planRow === null) {
@@ -331,69 +329,206 @@ if ($action === 'register') {
         }
     }
 
-    // Forca criacao de novo registro pending.
-    // Cada clique em "Assinar" gera uma preapproval diferente.
-    $stmtInsert = $db->prepare(
-        'INSERT INTO subscriptions (user_id, plan_id, plan_slug, status, raw_status, external_reference)
-         VALUES (:uid, :pid, :slug, :status, :raw, :ext_ref)
-         RETURNING id'
+    // Tentativa local opaca (attempt_token UUID). Reutilizada em double-click,
+    // refresh e retry — nunca cria tentativas infinitas. NENHUM POST ao MP
+    // acontece aqui: a assinatura e criada depois, via action=subscribe_token
+    // com o card_token_id gerado pelo JS SDK no navegador.
+    // O fluxo antigo (POST /preapproval sem token + redirect a init_point)
+    // foi removido: a API exige card_token_id (HTTP 400 sem ele).
+    $attempt = $subscriptionModel->createAttempt($userId, $slug, $planId);
+    header(
+        'Location: /index.php?action=meu_plano&checkout=' . $attempt['attempt_token'],
+        true,
+        302
     );
-    $stmtInsert->execute([
-        ':uid'   => $userId,
-        ':pid'   => $planId,
-        ':slug'  => $slug,
-        ':status'=> Subscription::STATUS_PENDING,
-        ':raw'   => 'pending',
-        ':ext_ref'=> $externalReference,
-    ]);
-    $newPendingId = (int)$stmtInsert->fetchColumn();
+    exit;
+} elseif ($action === 'subscribe_token') {
+    requireLogin();
+    header('Content-Type: application/json; charset=utf-8');
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['ok' => false, 'error' => 'method_not_allowed']);
+        exit;
+    }
 
-    // ---- B) NOVA ASSINATURA: chamar createPreapproval SEMPRE ----
-    // NAO redirecionar para storedInitPoint. O init_point retornado
-    // pela nova preapproval e o unico usado.
-    $pendingSub = ['id' => $newPendingId];
+    $userId = (int)($_SESSION['user_id'] ?? 0);
+    if ($userId <= 0) {
+        http_response_code(401);
+        echo json_encode(['ok' => false, 'error' => 'unauthorized']);
+        exit;
+    }
+
+    $input = $_POST;
+    if (empty($input)) {
+        $rawBody = file_get_contents('php://input');
+        $decoded = json_decode($rawBody ?: '', true);
+        if (is_array($decoded)) {
+            $input = $decoded;
+        }
+    }
+    $attemptToken = strtolower(trim((string)($input['attempt_token'] ?? '')));
+    // NUNCA logar card_token_id: extrai para variavel local e nao o inclui
+    // em nenhuma mensagem de erro, log ou resposta.
+    $cardTokenId = (string)($input['card_token_id'] ?? '');
+
+    if (!Subscription::isAttemptToken($attemptToken)) {
+        http_response_code(400);
+        echo json_encode(['ok' => false, 'error' => 'invalid_attempt']);
+        exit;
+    }
+    if ($cardTokenId === '') {
+        http_response_code(400);
+        echo json_encode(['ok' => false, 'error' => 'invalid_card_token']);
+        exit;
+    }
 
     try {
-        $planId = MercadoPagoService::getPlanIdForSlug($slug);
-        if ($planId === null || $planId === '') {
-            header('Location: /index.php?action=meu_plano&error=plan_not_found');
+        $subscriptionModel = new Subscription($db);
+        $mpService = new MercadoPagoService();
+    } catch (Throwable $e) {
+        error_log('[subscribe_token] service init failed');
+        http_response_code(503);
+        echo json_encode(['ok' => false, 'error' => 'service_unavailable']);
+        exit;
+    }
+
+    try {
+        $db->beginTransaction();
+        // Trava a linha da tentativa: dois POST simultaneos da mesma tentativa
+        // sao serializados; o segundo enxerga o mp_preapproval_id do primeiro.
+        $attempt = $subscriptionModel->findByAttemptTokenForUpdate($attemptToken);
+        if ($attempt === null || (int)($attempt['user_id'] ?? 0) !== $userId) {
+            $db->rollBack();
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'attempt_not_found']);
+            exit;
+        }
+        $attemptId = (int)$attempt['id'];
+        $slug = (string)($attempt['plan_slug'] ?? '');
+        if (!in_array($slug, ['pro', 'premium'], true)) {
+            $db->rollBack();
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'invalid_plan']);
+            exit;
+        }
+
+        // Idempotencia: tentativa ja vinculada — nao faz novo POST ao MP.
+        // Reconcilia pelo estado autoritativo (GET /preapproval).
+        $existingMpId = (string)($attempt['mp_preapproval_id'] ?? '');
+        if ($existingMpId !== '') {
+            $db->rollBack();
+            $check = $mpService->getPreapproval($existingMpId);
+            $mpStatus = 'unknown';
+            if ($check['ok'] === true && is_array($check['data'])) {
+                $mpStatus = strtolower((string)($check['data']['status'] ?? 'unknown'));
+            }
+            echo json_encode([
+                'ok' => true,
+                'already' => true,
+                'status' => $mpStatus,
+                'redirect' => '/index.php?action=meu_plano&subscribed=1',
+            ]);
+            exit;
+        }
+
+        // Tudo derivado do servidor: plan_id do .env, email do usuario
+        // autenticado, external_reference = attempt_token. O frontend nao
+        // tem autoridade sobre nenhum desses valores.
+        $mpPlanId = MercadoPagoService::getPlanIdForSlug($slug);
+        $userRow = $userModel->findById($userId);
+        $email = (string)($userRow->email ?? '');
+        if ($mpPlanId === null || $mpPlanId === '' || $email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $db->rollBack();
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'invalid_plan']);
             exit;
         }
         $backUrl = rtrim((string)(getenv('APP_URL') ?: 'https://controle-de-gastos-one-silk.vercel.app'), '/')
             . '/mercadopago_return.php';
-        $result = $mpService->createPreapproval($planId, $email, $externalReference, $backUrl);
+
+        $result = $mpService->createPreapproval(
+            $mpPlanId,
+            $email,
+            $attemptToken,
+            $backUrl,
+            $cardTokenId,
+            $attemptToken
+        );
+        if ($result['ok'] === false) {
+            $db->rollBack();
+            $mpHttp = (int)($result['status'] ?? 0);
+            $code = ($mpHttp === 0 || $mpHttp >= 500) ? 502 : 400;
+            http_response_code($code);
+            echo json_encode(['ok' => false, 'error' => 'payment_failed']);
+            exit;
+        }
+
+        $mpPreapprovalId = (string)$result['preapproval_id'];
+        // Guarda cross-account: este MP ID nao pode pertencer a outra linha.
+        $other = $subscriptionModel->findByMpId($mpPreapprovalId);
+        if ($other !== null && (int)$other['id'] !== $attemptId) {
+            $db->rollBack();
+            error_log('[subscribe_token] mp_preapproval_id ja vinculado a outra assinatura');
+            http_response_code(409);
+            echo json_encode(['ok' => false, 'error' => 'conflict']);
+            exit;
+        }
+
+        $subscriptionModel->attachMpPreapprovalId($attemptId, $mpPreapprovalId);
+        $mpStatus = strtolower(trim((string)($result['mp_status'] ?? 'authorized')));
+        $internalStatus = MercadoPagoWebhookService::mapMpStatusToInternal($mpStatus);
+        if ($internalStatus === null) {
+            $internalStatus = Subscription::STATUS_PENDING;
+        }
+        $subscriptionModel->updateStatusById($attemptId, $internalStatus, $mpStatus, null, null);
+        if ($internalStatus === Subscription::STATUS_ACTIVE) {
+            $fresh = $subscriptionModel->findById($attemptId);
+            if ($fresh !== null) {
+                $subscriptionModel->applyStatusToUser($fresh);
+            }
+        }
+        $db->commit();
+        echo json_encode([
+            'ok' => true,
+            'status' => $internalStatus,
+            'redirect' => '/index.php?action=meu_plano&subscribed=1',
+        ]);
+        exit;
     } catch (Throwable $e) {
-        error_log('[subscribe] ' . $e->getMessage());
-        header('Location: /index.php?action=meu_plano&error=service_error');
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        error_log('[subscribe_token] ' . get_class($e));
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'error' => 'internal_error']);
         exit;
     }
+} elseif ($action === 'subscription_status') {
+    requireLogin();
+    header('Content-Type: application/json; charset=utf-8');
 
-    if ($result['ok'] === false) {
-        $errMap = [
-            'invalid_plan_id'          => 'plan_not_found',
-            'plan_not_found'           => 'plan_not_found',
-            'invalid_email'            => 'invalid_plan',
-            'invalid_external_reference' => 'invalid_plan',
-            'invalid_back_url'         => 'service_error',
-            'network_error'            => 'service_error',
-            'invalid_response'         => 'service_error',
-            'missing_init_point'       => 'service_error',
-        ];
-        $err = $errMap[$result['error']] ?? 'service_error';
-        header('Location: /index.php?action=meu_plano&error=' . rawurlencode($err));
+    $userId = (int)($_SESSION['user_id'] ?? 0);
+    if ($userId <= 0) {
+        http_response_code(401);
+        echo json_encode(['ok' => false, 'error' => 'unauthorized']);
         exit;
     }
-
-    $initPoint = (string)($result['init_point'] ?? '');
-    $preapprovalId = (string)($result['preapproval_id'] ?? '');
-    if ($initPoint === '' || $preapprovalId === '') {
-        header('Location: /index.php?action=meu_plano&error=service_error');
+    // Polling autenticado da propria tentativa (para retry apos timeout).
+    // Resposta identica para inexistente vs. de outro usuario: nao vaza existencia.
+    $attemptToken = strtolower(trim((string)($_GET['attempt'] ?? '')));
+    $subscriptionModel = new Subscription($db);
+    $row = $subscriptionModel->findByAttemptToken($attemptToken);
+    if ($row === null || (int)($row['user_id'] ?? 0) !== $userId) {
+        http_response_code(404);
+        echo json_encode(['ok' => false, 'error' => 'not_found']);
         exit;
     }
-    if ($pendingSub !== null) {
-        $subscriptionModel->storeInitPoint((int)$pendingSub['id'], $initPoint);
-    }
-    header('Location: ' . $initPoint, true, 302);
+    echo json_encode([
+        'ok' => true,
+        'status' => (string)($row['status'] ?? 'pending'),
+        'plan_slug' => (string)($row['plan_slug'] ?? ''),
+        'linked' => ((string)($row['mp_preapproval_id'] ?? '') !== ''),
+    ]);
     exit;
 } elseif ($action === 'cancel') {
     requireLogin();

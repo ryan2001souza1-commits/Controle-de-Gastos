@@ -155,6 +155,30 @@ class ProfileController
             $canCancelSubscription = ($activeSub !== null);
         }
 
+        // Checkout com tokenizacao (JS SDK): se a URL traz ?checkout=<attempt>,
+        // e a tentativa pertence ao usuario autenticado e esta pendente, a view
+        // exibe o CardForm. PUBLIC_KEY pode ir ao frontend por design do MP;
+        // ACCESS_TOKEN jamais sai do backend.
+        $checkoutAttempt = null;
+        $mpPublicKey = '';
+        $checkoutToken = strtolower(trim((string)($_GET['checkout'] ?? '')));
+        if ($checkoutToken !== '' && Subscription::isAttemptToken($checkoutToken)) {
+            $attemptModel = new Subscription($this->db);
+            $attemptRow = $attemptModel->findByAttemptToken($checkoutToken);
+            if (
+                $attemptRow !== null
+                && (int)($attemptRow['user_id'] ?? 0) === $userId
+                && in_array($attemptRow['plan_slug'] ?? '', ['pro', 'premium'], true)
+                && (string)($attemptRow['status'] ?? '') === Subscription::STATUS_PENDING
+            ) {
+                $checkoutAttempt = [
+                    'attempt_token' => $checkoutToken,
+                    'plan_slug' => (string)$attemptRow['plan_slug'],
+                ];
+                $mpPublicKey = (string)getenv('MERCADOPAGO_PUBLIC_KEY');
+            }
+        }
+
         $featureLabels = [
             'relatorios'          => ['label' => 'Relatórios',          'icon' => 'chart',     'desc' => 'Acesso à tela completa de relatórios'],
             'historico'           => ['label' => 'Histórico',            'icon' => 'clock',     'desc' => 'Histórico de transações por mais meses'],

@@ -243,8 +243,26 @@ class MercadoPagoWebhookService
         $mpPlanId = (string)($data['preapproval_plan_id'] ?? '');
         $nextBillingDate = isset($data['next_payment_date']) ? (string)$data['next_payment_date'] : null;
 
-        if ($externalRef === '' || $mpPlanId === '' || $mpStatus === '') {
+        if ($mpPlanId === '' || $mpStatus === '') {
             return ['ok' => true, 'action' => 'incomplete_payload', 'http_status' => 200];
+        }
+
+        // Via deterministica: external_reference = attempt_token UUID gerado
+        // pelo backend. Resolve attempt -> user -> plan sem nenhuma heuristica
+        // (sem "ultimo pending", sem plano sozinho, sem email, sem ordem).
+        if (Subscription::isAttemptToken($externalRef)) {
+            return $this->processAttempt(
+                $mpPreapprovalId,
+                $externalRef,
+                $mpPlanId,
+                $mpStatus,
+                $nextBillingDate
+            );
+        }
+
+        // Sem identidade transportada: nao adivinhar dono. No-op seguro.
+        if ($externalRef === '') {
+            return ['ok' => true, 'action' => 'no_identity_noop', 'http_status' => 200];
         }
 
         $parsed = self::parseExternalReference($externalRef);
@@ -320,6 +338,116 @@ class MercadoPagoWebhookService
                 $mpStatus,
                 $nextBillingDate
             );
+        }
+
+        $sub = $this->subscriptionModel->findById($subscriptionId);
+        if ($sub === null) {
+            return ['ok' => false, 'action' => 'subscription_disappeared', 'http_status' => 500];
+        }
+
+        $previousStatus = (string)$sub['status'];
+        $this->subscriptionModel->updateStatusById(
+            $subscriptionId,
+            $internalStatus,
+            $mpStatus,
+            $nextBillingDate,
+            $gracePeriodEnd
+        );
+
+        if ($previousStatus !== $internalStatus) {
+            $fresh = $this->subscriptionModel->findById($subscriptionId);
+            if ($fresh !== null) {
+                $this->subscriptionModel->applyStatusToUser($fresh);
+            }
+        }
+
+        return ['ok' => true, 'action' => 'processed', 'http_status' => 200];
+    }
+
+    /**
+     * Processa webhook de assinatura criada via tokenizacao (attempt UUID).
+     *
+     * Correlacao deterministica: external_reference -> attempt_token ->
+     * (user_id, plan_slug) lidos DA LINHA LOCAL, nunca do request.
+     * Funciona em qualquer ordem (webhook antes/depois do POST, duplicado):
+     * o primeiro a chegar vincula (attach condicional); os demais atualizam.
+     *
+     * @return array{ok:bool, action:string, http_status:int}
+     */
+    private function processAttempt(
+        string $mpPreapprovalId,
+        string $attemptToken,
+        string $mpPlanId,
+        string $mpStatus,
+        ?string $nextBillingDate
+    ): array {
+        $attempt = $this->subscriptionModel->findByAttemptToken($attemptToken);
+        if ($attempt === null) {
+            return ['ok' => true, 'action' => 'attempt_unknown', 'http_status' => 200];
+        }
+        $subscriptionId = (int)$attempt['id'];
+        $userId = (int)($attempt['user_id'] ?? 0);
+        $attemptPlanSlug = (string)($attempt['plan_slug'] ?? '');
+        if ($userId <= 0 || $attemptPlanSlug === '') {
+            return ['ok' => true, 'action' => 'attempt_invalid', 'http_status' => 200];
+        }
+
+        $planFromMp = self::resolvePlanSlugFromMpPlanId($mpPlanId);
+        if ($planFromMp === null) {
+            error_log('[MPWebhook] preapproval_plan_id nao reconhecido');
+            return ['ok' => true, 'action' => 'unknown_plan', 'http_status' => 200];
+        }
+        if ($planFromMp !== $attemptPlanSlug) {
+            error_log('[MPWebhook] inconsistencia: attempt e ' . $attemptPlanSlug . ' mas plan_id indica ' . $planFromMp);
+            return ['ok' => true, 'action' => 'plan_mismatch', 'http_status' => 200];
+        }
+
+        $internalStatus = self::mapMpStatusToInternal($mpStatus);
+        if ($internalStatus === null) {
+            error_log('[MPWebhook] status nao mapeado: ' . $mpStatus);
+            return ['ok' => true, 'action' => 'unmapped_status', 'http_status' => 200];
+        }
+
+        $planRow = $this->planModel->findBySlug($planFromMp);
+        if ($planRow === null) {
+            return ['ok' => true, 'action' => 'plan_not_in_db', 'http_status' => 200];
+        }
+
+        $stmt = $this->db->prepare('SELECT id FROM usuarios WHERE id = :uid LIMIT 1');
+        $stmt->execute([':uid' => $userId]);
+        if ($stmt->fetchColumn() === false) {
+            return ['ok' => true, 'action' => 'user_not_found', 'http_status' => 200];
+        }
+
+        // Guardas anti cross-account: este MP ID nao pode pertencer a outra
+        // linha, e esta tentativa nao pode estar ligada a outro MP ID.
+        $existing = $this->subscriptionModel->findByMpId($mpPreapprovalId);
+        if ($existing !== null && (int)$existing['id'] !== $subscriptionId) {
+            error_log('[MPWebhook] mp_preapproval_id pertence a outra assinatura');
+            return ['ok' => true, 'action' => 'mp_conflict', 'http_status' => 200];
+        }
+        $rowMpId = (string)($attempt['mp_preapproval_id'] ?? '');
+        if ($rowMpId !== '' && $rowMpId !== $mpPreapprovalId) {
+            error_log('[MPWebhook] tentativa ja vinculada a outro mp_preapproval_id');
+            return ['ok' => true, 'action' => 'mp_conflict', 'http_status' => 200];
+        }
+        if ($rowMpId === '') {
+            $this->subscriptionModel->attachMpPreapprovalId($subscriptionId, $mpPreapprovalId);
+        }
+        $this->subscriptionModel->updateMpData(
+            $subscriptionId,
+            $mpPreapprovalId,
+            $mpStatus,
+            $nextBillingDate
+        );
+
+        $gracePeriodEnd = null;
+        if ($internalStatus === Subscription::STATUS_REJECTED) {
+            if ($nextBillingDate !== null) {
+                $gracePeriodEnd = $nextBillingDate;
+            } else {
+                $gracePeriodEnd = date('Y-m-d H:i:s', time() + 7 * 24 * 60 * 60);
+            }
         }
 
         $sub = $this->subscriptionModel->findById($subscriptionId);

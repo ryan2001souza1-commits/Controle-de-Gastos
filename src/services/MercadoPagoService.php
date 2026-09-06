@@ -49,24 +49,43 @@ class MercadoPagoService
     /**
      * Cria uma assinatura (preapproval) via POST /preapproval na API do Mercado Pago.
      *
-     * FLUXO OFICIAL:
-     * - Recebe o preapproval_plan_id ja resolvido, o email do pagador e o
-     *   external_reference no corpo do POST.
-     * - O MP persiste esses campos e os retorna na resposta.
-     * - O caller usa init_point da resposta para redirecionar o usuario.
+     * FLUXO OFICIAL (tokenizacao via JS SDK + POST com card_token_id):
+     * - O frontend tokeniza o cartao com MercadoPago.js (PUBLIC_KEY) e envia
+     *   ao backend SOMENTE o card_token_id opaco (nunca numero/CVV).
+     * - O backend monta external_reference a partir do attempt_token local,
+     *   resolve plan_id/.env e payer_email do usuario autenticado, e chama
+     *   este metodo com status=authorized.
+     * - O MP persiste external_reference e o devolve no GET/webhook, o que
+     *   permite correlacao deterministica attempt -> assinatura.
+     *
+     * Nunca criar preapproval sem card_token_id: a API responde HTTP 400.
      *
      * @param string $planId             preapproval_plan_id do MP (ex: 0d0a31c3...)
-     * @param string $payerEmail         email do pagador
-     * @param string $externalReference  formato: user_<id>_<slug> (ex: user_15_pro)
+     * @param string $payerEmail         email do pagador (do usuario autenticado)
+     * @param string $externalReference  attempt_token UUID hex (32 chars) ou
+     *                                   legado user_<id>_<slug>
      * @param string $backUrl            URL de retorno apos checkout
+     * @param string $cardTokenId        token opaco gerado pelo JS SDK (uso unico)
+     * @param string $idempotencyKey     chave de idempotencia (UUID da tentativa).
+     *                                   DECISAO (hardening): suporte oficial em
+     *                                   POST /preapproval = PROVAVEL (spec da
+     *                                   Subscriptions API menciona o header;
+     *                                   sem pagina oficial dedicada). Header
+     *                                   mantido por ser inofensivo e adotado
+     *                                   pelos proprios SDKs do MP; a SEGURANCA
+     *                                   NAO depende dele — a protecao primaria
+     *                                   e a idempotencia local transacional.
      * @return array{ok:bool, preapproval_id?:string, init_point?:string,
-     *               external_reference?:string, plan_id?:string, status?:int, error?:string}
+     *               external_reference?:string, plan_id?:string, status?:int,
+     *               mp_status?:string, error?:string}
      */
     public function createPreapproval(
         string $planId,
         string $payerEmail,
         string $externalReference,
-        string $backUrl
+        string $backUrl,
+        string $cardTokenId,
+        string $idempotencyKey = ''
     ): array {
         $planId = trim($planId);
         if ($planId === '') {
@@ -75,32 +94,54 @@ class MercadoPagoService
         if ($payerEmail === '' || !filter_var($payerEmail, FILTER_VALIDATE_EMAIL)) {
             return ['ok' => false, 'status' => 0, 'error' => 'invalid_email'];
         }
-        if (!preg_match('/^user_\d+_(pro|premium)$/', $externalReference)) {
+        if (
+            !preg_match('/^[0-9a-f]{32}$/', $externalReference)
+            && !preg_match('/^user_\d+_(pro|premium)$/', $externalReference)
+        ) {
             return ['ok' => false, 'status' => 0, 'error' => 'invalid_external_reference'];
         }
         if ($backUrl === '' || !filter_var($backUrl, FILTER_VALIDATE_URL)) {
             return ['ok' => false, 'status' => 0, 'error' => 'invalid_back_url'];
+        }
+        if (
+            $cardTokenId === ''
+            || strlen($cardTokenId) > 256
+            || !preg_match('/^[A-Za-z0-9._\-]+$/', $cardTokenId)
+        ) {
+            return ['ok' => false, 'status' => 0, 'error' => 'invalid_card_token'];
+        }
+        $idempotencyKey = trim($idempotencyKey);
+        if (
+            $idempotencyKey !== ''
+            && (strlen($idempotencyKey) > 128 || preg_match('/[\r\n]/', $idempotencyKey) === 1)
+        ) {
+            return ['ok' => false, 'status' => 0, 'error' => 'invalid_idempotency_key'];
         }
 
         $payload = [
             'preapproval_plan_id' => $planId,
             'external_reference'  => $externalReference,
             'payer_email'        => $payerEmail,
+            'card_token_id'      => $cardTokenId,
             'back_url'           => $backUrl,
-            'status'             => 'pending',
+            'status'             => 'authorized',
         ];
 
         $url = self::BASE_URL . '/preapproval';
+        $headers = [
+            'Authorization: Bearer ' . $this->accessToken,
+            'Content-Type: application/json',
+            'X-Integrator-Id: dev_controle_de_gastos',
+        ];
+        if ($idempotencyKey !== '') {
+            $headers[] = 'X-Idempotency-Key: ' . $idempotencyKey;
+        }
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST           => true,
             CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-            CURLOPT_HTTPHEADER     => [
-                'Authorization: Bearer ' . $this->accessToken,
-                'Content-Type: application/json',
-                'X-Integrator-Id: dev_controle_de_gastos',
-            ],
+            CURLOPT_HTTPHEADER     => $headers,
             CURLOPT_TIMEOUT => 20,
         ]);
 
@@ -126,16 +167,37 @@ class MercadoPagoService
         }
 
         $preapprovalId = $data['id'] ?? null;
-        $initPoint     = $data['init_point'] ?? null;
-
-        if (!is_string($preapprovalId) || $preapprovalId === '' ||
-            !is_string($initPoint)     || $initPoint     === '') {
-            error_log('[MercadoPagoService] createPreapproval sem id/init_point');
-            return ['ok' => false, 'status' => $httpStatus, 'error' => 'missing_init_point'];
+        if (!is_string($preapprovalId) || $preapprovalId === '') {
+            error_log('[MercadoPagoService] createPreapproval sem id');
+            return ['ok' => false, 'status' => $httpStatus, 'error' => 'missing_id'];
         }
 
         if (!preg_match('/^[a-zA-Z0-9_\-]{1,80}$/', $preapprovalId)) {
             return ['ok' => false, 'status' => $httpStatus, 'error' => 'invalid_id'];
+        }
+
+        // Consistencia: o MP deve ecoar o external_reference e o plano enviados.
+        // Divergencia indica resposta inesperada — nao persistir vinculo.
+        // Nota (hardening): validar preapproval_plan_id contra .env e suficiente
+        // aqui porque (a) o access token so enxerga objetos da propria conta
+        // (id estrangeiro retorna 404, nunca dados de outro vendedor) e (b) em
+        // assinatura com plano associado, valor/moeda/frequencia vêm DO PLANO
+        // (este POST nao envia transaction_amount) — plano correto implica
+        // valores corretos. application_id/collector_id nao tem valor esperado
+        // configurado no servidor e nada agregariam a esse vinculo.
+        if (isset($data['external_reference']) && (string)$data['external_reference'] !== $externalReference) {
+            error_log('[MercadoPagoService] createPreapproval external_reference divergente');
+            return ['ok' => false, 'status' => $httpStatus, 'error' => 'external_reference_mismatch'];
+        }
+        if (isset($data['preapproval_plan_id']) && (string)$data['preapproval_plan_id'] !== $planId) {
+            error_log('[MercadoPagoService] createPreapproval preapproval_plan_id divergente');
+            return ['ok' => false, 'status' => $httpStatus, 'error' => 'plan_mismatch'];
+        }
+
+        // init_point e opcional no fluxo authorized (pode nao vir na resposta).
+        $initPoint = $data['init_point'] ?? null;
+        if ($initPoint !== null && !is_string($initPoint)) {
+            $initPoint = null;
         }
 
         return [
@@ -145,6 +207,7 @@ class MercadoPagoService
             'init_point'         => $initPoint,
             'external_reference' => $externalReference,
             'plan_id'            => $planId,
+            'mp_status'          => is_string($data['status'] ?? null) ? (string)$data['status'] : null,
         ];
     }
 

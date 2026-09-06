@@ -2,27 +2,21 @@
 /**
  * Mercado Pago Return — pagina para onde o MP redireciona apos o checkout.
  *
- * FLUXO:
- *  1. Antes do redirect (action=subscribe): cria pending local com user_id + plan_slug
- *  2. Usuario paga no checkout do MP
- *  3. MP redireciona para ca com ?preapproval_id=...
- *  4. Este arquivo: reconcilia via API do MP (fonte confiavel)
- *     a. preapproval_plan_id valido contra .env
- *     b. Busca pending local por user_id + plan_slug
- *     c. Vincula preapproval_id ao pending
- *     d. Ativa plano se status=authorized
+ * PAGINA DE UX APOS PAGAMENTO (nao e mecanismo de identidade).
+ *
+ * Com o fluxo de tokenizacao, a assinatura e criada e vinculada pelo
+ * backend (action=subscribe_token) ou pelo webhook — nunca por esta pagina.
+ * Este arquivo APENAS exibe o estado:
+ *  1. Le ?preapproval_id=... (nao confiavel sozinho).
+ *  2. Consulta GET /preapproval/{id} (fonte confiavel).
+ *  3. Mostra sucesso SOMENTE se a assinatura pertence ao usuario autenticado.
+ *  4. NUNCA vincula, cria ou ativa nada a partir de query param.
  *
  * SEGURANCA:
  *  - NUNCA ativa plano apenas com parametros da URL.
- *  - Consulta sempre a API do MP antes de qualquer modificacao.
- *  - Valida preapproval_plan_id contra .env.
- *  - Usuario precisa estar autenticado.
- *
- * CONDICAO DE CORRIDA:
- *  - Webhook pode chegar ANTES do return.
- *  - Webhook nao encontra por mp_preapproval_id (ainda NULL no pending).
- *  - Webhook retorna 200 sem alterar nada.
- *  - Return faz a reconciliacao normalmente.
+ *  - NUNCA vincula mp_preapproval_id a partir daqui.
+ *  - Owner verificado: findByMpId + user_id === sessao.
+ *  - ID desconhecido ou de outro usuario: tela neutra de "verificando".
  */
 
 require_once __DIR__ . '/../src/config/config.php';
@@ -107,13 +101,45 @@ if ($isLoggedIn && $sessionUserId > 0 && $mpPreapprovalId !== null) {
         try {
             $db = getDBConnection();
             $mpService = new MercadoPagoService();
-            $reconciler = new SubscriptionReconciler($db, $mpService);
-            $reconcileResult = $reconciler->reconcileFromReturn(
-                (string)$mpPreapprovalId,
-                $sessionUserId
-            );
+            // Somente-leitura: confirma na API do MP e verifica ownership.
+            // Nenhum vinculo e criado aqui: a correlacao deterministica
+            // (attempt_token) ja ocorreu no subscribe_token ou no webhook.
+            $check = $mpService->getPreapproval((string)$mpPreapprovalId);
+            if ($check['ok'] === true && is_array($check['data'])) {
+                $mpStatus = strtolower(trim((string)($check['data']['status'] ?? '')));
+                $mpPlanId = (string)($check['data']['preapproval_plan_id'] ?? '');
+                $planSlug = MercadoPagoWebhookService::resolvePlanSlugFromMpPlanId($mpPlanId);
+                $subscriptionModel = new Subscription($db);
+                $owned = $subscriptionModel->findByMpId((string)$mpPreapprovalId);
+                if (
+                    $planSlug !== null
+                    && $owned !== null
+                    && (int)($owned['user_id'] ?? 0) === $sessionUserId
+                ) {
+                    $internal = MercadoPagoWebhookService::mapMpStatusToInternal($mpStatus);
+                    if ($internal === Subscription::STATUS_ACTIVE) {
+                        $reconcileResult = [
+                            'ok' => true,
+                            'action' => 'already_linked',
+                            'http_status' => 200,
+                            'details' => [
+                                'user_id' => $sessionUserId,
+                                'plan_slug' => $planSlug,
+                                'status' => $internal,
+                            ],
+                        ];
+                    } else {
+                        $reconcileResult = [
+                            'ok' => false,
+                            'action' => 'not_authorized',
+                            'http_status' => 200,
+                            'details' => ['mp_status' => $mpStatus],
+                        ];
+                    }
+                }
+            }
         } catch (Throwable $e) {
-            error_log('[mercadopago_return] reconciliacao: ' . $e->getMessage());
+            error_log('[mercadopago_return] verificacao: ' . get_class($e));
         }
     }
 }

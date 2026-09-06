@@ -144,16 +144,19 @@ $ext = (string)($payload['external_reference'] ?? '');
 $planId = (string)($payload['preapproval_plan_id'] ?? '');
 $status = strtolower(trim((string)($payload['status'] ?? '')));
 assert_test($ext === '' && $planId !== '' && $status !== '', 'OR02a: payload incompleto detectado');
-$action = ($ext === '' || $planId === '' || $status === '') ? 'incomplete_payload' : 'continue';
-assert_test($action === 'incomplete_payload', 'OR02b: action = incomplete_payload (REJEITADO)');
+// PREMISSA ALTERADA (motivo: sem identidade transportada, o webhook faz
+// 200/no-op seguro em vez de rejeitar como incomplete_payload; o efeito —
+// nenhum vinculo criado — e identico).
+$action = ($ext === '' && $planId !== '' && $status !== '') ? 'no_identity_noop' : 'continue';
+assert_test($action === 'no_identity_noop', 'OR02b: action = no_identity_noop (SEM VINCULO)');
 
 echo "\n--- OR03: Webhook simulado e2b9... com external_reference antigo/invalido ---\n";
 echo "Cenário: external_reference corrompido (e.g., 'user_X_pro' em vez de user_5_pro)\n";
 $ext = 'user_X_pro';
 $parsed = parseExternalReference($ext);
 assert_test($parsed === null, 'OR03a: external_reference invalido -> parseExternalReference retorna null');
-$action = ($parsed === null) ? 'invalid_external_reference' : 'continue';
-assert_test($action === 'invalid_external_reference', 'OR03b: action = invalid_external_reference (REJEITADO)');
+$action = ($parsed === null) ? 'no_identity_noop' : 'continue';
+assert_test($action === 'no_identity_noop', 'OR03b: action = no_identity_noop (SEM VINCULO)');
 
 echo "\n--- OR04: Webhook simulado com external_reference AUSENTE (campo nao retornado) ---\n";
 $payload = ['status'=>'authorized', 'preapproval_plan_id'=>'plan_pro_xxx'];
@@ -161,8 +164,8 @@ $ext = (string)($payload['external_reference'] ?? '');
 $planId = (string)($payload['preapproval_plan_id'] ?? '');
 $status = (string)($payload['status'] ?? '');
 assert_test($ext === '', 'OR04a: external_reference ausente -> string vazia');
-$action = ($ext === '' || $planId === '' || $status === '') ? 'incomplete_payload' : 'continue';
-assert_test($action === 'incomplete_payload', 'OR04b: action = incomplete_payload (REJEITADO)');
+$action = ($ext === '') ? 'no_identity_noop' : 'continue';
+assert_test($action === 'no_identity_noop', 'OR04b: action = no_identity_noop (SEM VINCULO)');
 
 echo "\n--- OR05: Webhook com external_reference VALIDO + subscription local INEXISTENTE ---\n";
 echo "Cenário: e2b9... chega com external_reference = 'user_5_pro' (apontando user 5)\n";
@@ -257,10 +260,14 @@ assert_test($user5['plano'] === 'pro', 'OR11c: user 5 plano = pro (preservado)')
 assert_test($user5['active_subscription_id'] === 10, 'OR11d: active_subscription_id = 10 (preservado)');
 
 echo "\n--- OR12: Mecanismo de identificacao do usuario ---\n";
-echo "RESPOSTA: external_reference (validado contra regex user_{id}_{plan})\n";
-echo "  + preapproval_plan_id (validado contra .env)\n";
-echo "  + usuario existe no DB (SELECT id FROM usuarios WHERE id = :uid)\n";
-echo "  NUNCA usa payer_id, payer_email, body, ou dados do request\n";
+echo "RESPOSTA (legado): external_reference user_{id}_{plan} + plan_id vs .env + usuario existe.\n";
+echo "RESPOSTA (novo): external_reference = attempt_token UUID -> linha local -> (user_id, plan_slug).\n";
+echo "  NUNCA usa payer_id, payer_email, body, ordem temporal ou plano sozinho.\n";
+echo "  Sem identidade transportada: 200/no-op (nenhum vinculo).\n";
+assert_test(Subscription::isAttemptToken('a1b2c3d4e5f60718293a4b5c6d7e8f90'), 'OR12a: UUID valido reconhecido como attempt');
+assert_test(!Subscription::isAttemptToken('user_5_pro'), 'OR12b: legado NAO e attempt UUID');
+assert_test(!Subscription::isAttemptToken(''), 'OR12c: vazio NAO e attempt UUID');
+assert_test(!Subscription::isAttemptToken('ZZZ'), 'OR12d: malformado NAO e attempt UUID');
 
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;

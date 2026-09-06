@@ -254,6 +254,12 @@ function runMigrations(PDO $db): void
             INTEGER REFERENCES subscriptions(id) ON DELETE SET NULL",
         // Mercado Pago: correlacionar com a assinatura externa
         "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS mp_preapproval_id VARCHAR(80)",
+        // attempt_token: identificador opaco da tentativa local (UUID hex, 32 chars).
+        // Enviado ao Mercado Pago como external_reference; resolve
+        // attempt -> user_id -> plan_slug de forma deterministica, sem
+        // depender de ordem temporal, plano ou email do pagador.
+        // Registros historicos permanecem com attempt_token NULL.
+        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS attempt_token VARCHAR(64)",
         // external_reference: rastreio do formato user_{ID}_{plano}
         "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS external_reference VARCHAR(120)",
         // raw_status: status original retornado pelo Mercado Pago (auditoria)
@@ -395,6 +401,36 @@ SQL;
         }
     } catch (Throwable $e) {
         error_log('[migrations] falha ao criar uq_subscriptions_mp_preapproval_id: ' . $e->getMessage());
+    }
+
+    // attempt_token e unico por tentativa: impede que dois webhooks/retries
+    // vinculem a mesma tentativa duas vezes e permite resolver
+    // external_reference -> tentativa de forma deterministica.
+    try {
+        $dupAttemptStmt = $db->query(
+            "SELECT attempt_token, COUNT(*) as cnt
+               FROM subscriptions
+              WHERE attempt_token IS NOT NULL
+                AND attempt_token <> ''
+              GROUP BY attempt_token
+             HAVING COUNT(*) > 1"
+        );
+        $attemptDuplicates = $dupAttemptStmt->fetchAll(PDO::FETCH_ASSOC);
+        if (count($attemptDuplicates) === 0) {
+            $db->exec(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_subscriptions_attempt_token
+                    ON subscriptions(attempt_token)
+                   WHERE attempt_token IS NOT NULL
+                     AND attempt_token <> ''"
+            );
+        } else {
+            error_log(
+                '[migrations] attempt_token tem duplicatas — UNIQUE index nao criado: '
+                . json_encode($attemptDuplicates)
+            );
+        }
+    } catch (Throwable $e) {
+        error_log('[migrations] falha ao criar uq_subscriptions_attempt_token: ' . $e->getMessage());
     }
 
     try {

@@ -171,6 +171,119 @@ class Subscription
         return null;
     }
 
+    /**
+     * Gera um identificador opaco de tentativa: 32 hex aleatorios (128 bits).
+     * Nao sequencial, sem PII, adequado para external_reference do MP.
+     */
+    public static function newAttemptToken(): string
+    {
+        return bin2hex(random_bytes(16));
+    }
+
+    /**
+     * Valida o formato de attempt_token (exatamente 32 hex).
+     * Usado para rejeitar input malformado antes de qualquer query.
+     */
+    public static function isAttemptToken(string $token): bool
+    {
+        return preg_match('/^[0-9a-f]{32}$/', $token) === 1;
+    }
+
+    /**
+     * Busca assinatura pelo attempt_token (identificador opaco da tentativa).
+     * Retorna null se formato invalido ou nao encontrada.
+     */
+    public function findByAttemptToken(string $attemptToken): ?array
+    {
+        if (!self::isAttemptToken($attemptToken)) {
+            return null;
+        }
+        $stmt = $this->db->prepare(
+            'SELECT * FROM subscriptions WHERE attempt_token = :token ORDER BY id DESC LIMIT 1'
+        );
+        $stmt->execute([':token' => $attemptToken]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
+     * Variante com trava de linha (SELECT ... FOR UPDATE).
+     * Deve ser chamada dentro de transacao: serializa dois POST simultaneos
+     * da mesma tentativa — o segundo espera e enxerga o mp_preapproval_id
+     * gravado pelo primeiro, em vez de criar segunda assinatura no MP.
+     */
+    public function findByAttemptTokenForUpdate(string $attemptToken): ?array
+    {
+        if (!self::isAttemptToken($attemptToken)) {
+            return null;
+        }
+        $stmt = $this->db->prepare(
+            'SELECT * FROM subscriptions WHERE attempt_token = :token ORDER BY id DESC LIMIT 1 FOR UPDATE'
+        );
+        $stmt->execute([':token' => $attemptToken]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
+     * Prova que a tentativa pertence ao usuario (ownership).
+     * Nunca confia em user_id vindo do request: o caller passa o da sessao.
+     */
+    public function ownsAttempt(int $userId, string $attemptToken): bool
+    {
+        if ($userId <= 0) {
+            return false;
+        }
+        $row = $this->findByAttemptToken($attemptToken);
+        return $row !== null && (int)($row['user_id'] ?? 0) === $userId;
+    }
+
+    /**
+     * Cria ou reutiliza a tentativa de assinatura de um usuario para um plano.
+     *
+     * Reutiliza a tentativa pendente existente (sem mp_preapproval_id) para o
+     * mesmo usuario/plano: double-click, refresh e retry nao criam tentativas
+     * infinitas. Tentativas ja vinculadas ao MP nunca sao reutilizadas.
+     *
+     * @return array{id:int, attempt_token:string, created:bool}
+     */
+    public function createAttempt(int $userId, string $planSlug, int $planId): array
+    {
+        $existing = $this->findActiveOrPendingByUserAndPlan($userId, $planSlug);
+        if (
+            $existing !== null
+            && empty($existing['mp_preapproval_id'])
+            && !empty($existing['attempt_token'])
+            && self::isAttemptToken((string)$existing['attempt_token'])
+        ) {
+            return [
+                'id' => (int)$existing['id'],
+                'attempt_token' => (string)$existing['attempt_token'],
+                'created' => false,
+            ];
+        }
+
+        $token = self::newAttemptToken();
+        $stmt = $this->db->prepare(
+            'INSERT INTO subscriptions
+                (user_id, plan_id, plan_slug, status, raw_status, external_reference, attempt_token)
+              VALUES
+                (:user_id, :plan_id, :plan_slug, :status, :raw_status, :external_reference, :attempt_token)
+              RETURNING id'
+        );
+        $stmt->execute([
+            ':user_id'            => $userId,
+            ':plan_id'            => $planId,
+            ':plan_slug'          => $planSlug,
+            ':status'             => self::STATUS_PENDING,
+            ':raw_status'         => 'pending',
+            ':external_reference' => $token,
+            ':attempt_token'      => $token,
+        ]);
+        $id = (int)$stmt->fetchColumn();
+        return ['id' => $id, 'attempt_token' => $token, 'created' => true];
+    }
+
     public function createPending(
         int $userId,
         string $planSlug,
