@@ -299,6 +299,44 @@ const PENDING = { ok: true, status: 'pending', outcome: 'processing', linked: tr
         app.cleanup();
     }
 
+    // ---- D11: sufixo hex preserva dígitos (regressão do "de") ----
+    console.log('--- D11 sufixo com dígitos ---');
+    {
+        delete require.cache[require.resolve('../public/js/mp_subscribe.js')];
+        const { doc } = makeEnv();
+        // Reescreve o token do painel com dígitos antes do require.
+        const panel = doc.getElementById('mp-checkout-panel');
+        const tight = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
+        panel.getAttribute = (k) => (k === 'data-attempt-token' ? tight : (k === 'data-mp-amount' ? '9.90' : 'TEST-x'));
+        panel.removeAttribute = () => {};
+        const uiLogs = [];
+        global.document = doc;
+        global.window = { location: { href: '' } };
+        global.console.info = (...a) => uiLogs.push(a.join(' '));
+        global.MercadoPago = function () {
+            return { cardForm: () => ({ getCardFormData: () => ({ token: 't' }) }) };
+        };
+        let submitFn = null;
+        global.MercadoPago = function () {
+            return {
+                cardForm: (cfg) => {
+                    submitFn = cfg.callbacks.onSubmit;
+                    return { getCardFormData: () => ({ token: 't' }) };
+                },
+            };
+        };
+        global.fetch = () => Promise.resolve({ status: 200, json: () => Promise.resolve({ ok: true, status: 'pending', outcome: 'processing' }) });
+        require('../public/js/mp_subscribe.js');
+        await submitFn({ preventDefault: () => {} });
+        await new Promise((r) => setImmediate(r));
+        await new Promise((r) => setImmediate(r));
+        const blob = uiLogs.join('\n');
+        ok(blob.includes('attempt_suffix=6d7e8f90'), 'sufixo hex com dígitos preservado (não vira "de")');
+        ok(!blob.includes(tight), 'token completo nunca logado');
+        delete global.document; delete global.window;
+        delete global.MercadoPago; delete global.fetch;
+    }
+
     console.log(`\nTotal: ${passed} passed`);
 })().catch((e) => {
     console.error('FATAL', e);

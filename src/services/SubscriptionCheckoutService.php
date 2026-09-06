@@ -227,6 +227,15 @@ class SubscriptionCheckoutService
                     'card_declined' => 402,
                     default => 400,
                 };
+                // Forense sanitizada do erro do MP: fase + http do MP +
+                // código seguro + sufixo da attempt. Sem ids, tokens, emails.
+                error_log(sprintf(
+                    '[subscribe_token] mp_error phase=%s mp_http=%d user_code=%s attempt_suffix=%s',
+                    preg_replace('/[^a-z_]/', '', $this->currentPhase),
+                    (int)($result['status'] ?? 0),
+                    preg_replace('/[^a-z_]/', '', $userCode),
+                    substr($attemptToken, -8)
+                ));
                 return $this->out($httpCode, ['ok' => false, 'error' => $userCode], $this->currentPhase);
             }
 

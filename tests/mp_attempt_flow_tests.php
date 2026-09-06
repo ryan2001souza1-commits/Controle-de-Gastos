@@ -1129,6 +1129,7 @@ $hasSuffix = str_contains($svcSrc, 'attempt_suffix');
 assert_test($hasSuffix, 'AT54b: logs de desfecho carregam attempt_suffix (forense futura)');
 $indexSrc = (string)file_get_contents($ROOT . '/public/index.php');
 assert_test(!preg_match('/attempt=%s/', $indexSrc), 'AT54c: log de 500 usa attempt_suffix (não token completo)');
+assert_test(str_contains($svcSrc, '[subscribe_token] mp_error phase='), 'AT54d: ramo de erro do MP loga fase+http+código+sufixo (forense de 4xx)');
 
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;

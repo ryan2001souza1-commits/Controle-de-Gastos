@@ -439,6 +439,7 @@ assert_test(MercadoPagoService::mapErrorToUserCode(['ok' => false, 'status' => 4
 assert_test(MercadoPagoService::mapErrorToUserCode(['ok' => false, 'status' => 401, 'error' => 'unauthorized']) === 'service_error', '401 -> service_error');
 assert_test(MercadoPagoService::mapErrorToUserCode(['ok' => false, 'status' => 500, 'error' => 'mp_error']) === 'service_error', '500 -> service_error');
 assert_test(MercadoPagoService::mapErrorToUserCode(['ok' => false, 'status' => 400, 'error' => 'algo_estranho']) === 'payment_failed', 'desconhecido -> payment_failed (generico seguro)');
+assert_test(MercadoPagoService::mapErrorToUserCode(['ok' => false, 'status' => 400, 'error' => 'CC_VAL_433 Credit card validation has failed']) === 'invalid_card', 'CC_VAL_433 (caso real 06/09) -> invalid_card (orienta conferir dados)');
 
 echo "\n--- status_detail sanitizado (nunca vaza token) ---\n";
 

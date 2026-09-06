@@ -302,8 +302,14 @@
     }
 
     // ---------- Wiring UI (browser) ----------
+    // Sufixo hex preservando dígitos (correlator forense). safeWord() genérico
+    // remove 0-9 e DESTRUIRIA o sufixo (ex.: "4d834025" viraria "d") — por
+    // isso a validação aqui é charset hex explícito, nunca o safeWord.
     var ATTEMPT_SUFFIX = (function () {
-        try { return String(ATTEMPT_TOKEN || '').slice(-8); } catch (e) { return ''; }
+        try {
+            var t = String(ATTEMPT_TOKEN || '').toLowerCase().slice(-8);
+            return (/^[0-9a-f]{8}$/.test(t)) ? t : 'invalid';
+        } catch (e) { return 'invalid'; }
     })();
     var activePoll = null;
     var retryButton = null;
@@ -311,7 +317,8 @@
     function uiLog(source, status, outcome, action) {
         try {
             if (typeof console !== 'undefined' && console.info) {
-                console.info('[subscription-ui] attempt_suffix=' + safeWord(ATTEMPT_SUFFIX)
+                // ATTEMPT_SUFFIX já é charset hex validado (ou 'invalid').
+                console.info('[subscription-ui] attempt_suffix=' + ATTEMPT_SUFFIX
                     + ' source=' + safeWord(source)
                     + ' status=' + safeWord(status)
                     + ' outcome=' + safeWord(outcome)

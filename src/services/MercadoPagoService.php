@@ -264,6 +264,7 @@ class MercadoPagoService
         if (
             str_contains($blob, 'card_token') || str_contains($blob, 'invalid_card')
             || str_contains($blob, 'bad_request') || str_contains($blob, 'invalid_param')
+            || str_contains($blob, 'cc_val_')
         ) {
             return 'invalid_card';
         }
