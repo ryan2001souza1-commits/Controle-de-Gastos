@@ -11,6 +11,192 @@
 (function () {
     'use strict';
 
+    // =====================================================================
+    // STATE MACHINE PURA — sem DOM, sem rede, testável em Node.
+    // Vocabulário canônico da UI: active|cancelled|rejected|paused|expired|
+    // pending|unknown. Mapeia TODAS as grafias do backend (status interno +
+    // outcome + variantes toleradas) para esse enum — §2 nunca diverge.
+    // =====================================================================
+    var POLL_INTERVAL_MS = 2500;
+    var POLL_MAX_ATTEMPTS = 24;
+    var POLL_MAX_TRANSPORT_ERRORS = 3;
+
+    var USER_MESSAGES = {
+        invalid_card: 'Verifique os dados do cartão e tente novamente.',
+        card_declined: 'Pagamento recusado. Tente outro cartão ou fale com seu banco.',
+        rejected: 'Pagamento recusado. Tente outro cartão ou fale com o banco.',
+        cancelled: 'Pagamento cancelado ou não autorizado.',
+        paused: 'Assinatura pausada. Fale com o suporte se precisar de ajuda.',
+        expired: 'Assinatura expirada. Inicie uma nova tentativa.',
+        service_error: 'Serviço indisponível no momento. Tente novamente em instantes.',
+        payment_failed: 'Não foi possível concluir o pagamento. Confira os dados do cartão.'
+    };
+
+    function safeWord(v) {
+        var s = '';
+        try { s = String(v == null ? '' : v); } catch (e) { s = ''; }
+        s = s.toLowerCase().replace(/[^a-z_]/g, '');
+        return s.slice(0, 40);
+    }
+
+    // Normaliza qualquer payload do backend para o enum da UI.
+    function normalizePollStatus(data) {
+        if (!data || typeof data !== 'object') return 'unknown';
+        var o = safeWord(data.outcome);
+        var s = safeWord(data.status);
+        if (o === 'active' || s === 'active' || o === 'authorized' || s === 'authorized') return 'active';
+        if (o === 'cancelled' || s === 'cancelled' || o === 'canceled' || s === 'canceled') return 'cancelled';
+        if (o === 'rejected' || s === 'rejected') return 'rejected';
+        if (o === 'paused' || s === 'paused') return 'paused';
+        if (o === 'expired' || s === 'expired') return 'expired';
+        if (o === 'processing' || s === 'pending' || s === 'processing') return 'pending';
+        return 'unknown';
+    }
+
+    // Decisão da RESPOSTA IMEDIATA do POST subscribe_token.
+    // success SOMENTE com outcome active. ok:true sozinho NUNCA é sucesso.
+    function decideInitialAction(http, data) {
+        data = (data && typeof data === 'object') ? data : {};
+        var outcome = data.outcome
+            || (data.status === 'active' ? 'active'
+                : (data.ok === true ? 'processing' : 'error'));
+        if (outcome === 'active') {
+            return { action: 'success', redirect: data.redirect || '/index.php?action=meu_plano&subscribed=1' };
+        }
+        if (outcome === 'processing' || http === 502 || http === 500) {
+            return { action: 'start_poll' };
+        }
+        return { action: 'show_error', key: data.error || outcome || 'payment_failed' };
+    }
+
+    // Decisão de UM tick do poll com payload parseado.
+    function decidePollTick(data) {
+        if (!data || typeof data !== 'object' || data.ok !== true) {
+            return { action: 'stop_terminal', key: 'payment_failed' };
+        }
+        var st = normalizePollStatus(data);
+        if (st === 'active') return { action: 'success' };
+        if (st === 'cancelled' || st === 'rejected' || st === 'paused' || st === 'expired') {
+            return { action: 'stop_terminal', key: st };
+        }
+        return { action: 'continue' };
+    }
+
+    // Controller do poll com dependências injetáveis (testável sem DOM/rede).
+    // Garante: UMA request por vez, stop único com limpeza de timer, guarda
+    // de geração (resposta atrasada nunca sobrescreve terminal), teto de
+    // erros de transporte, deadline limitado. Nenhum timer órfão.
+    function createPollController(deps) {
+        var gen = 0;
+        var timerId = null;
+        var remaining = POLL_MAX_ATTEMPTS;
+        var transportErrors = 0;
+        var running = false;
+
+        function clearTimer() {
+            if (timerId !== null) {
+                try { deps.clearTimeoutFn(timerId); } catch (e) {}
+                timerId = null;
+            }
+        }
+        // stopSubscriptionPolling interno: PARA TUDO (timers + geração).
+        // Chamado em active/cancelled/rejected/paused/expired/timeout/fatal.
+        function stop() {
+            gen++;
+            clearTimer();
+            running = false;
+        }
+        function schedule() {
+            clearTimer();
+            var myGen = gen;
+            timerId = deps.setTimeoutFn(function () {
+                timerId = null;
+                tick(myGen);
+            }, POLL_INTERVAL_MS);
+        }
+        function tick(myGen) {
+            if (myGen !== gen || !running) return;
+            if (remaining <= 0) {
+                stop();
+                deps.onTimeout(myGen);
+                return;
+            }
+            remaining--;
+            var fetchGen = gen;
+            var url = deps.url;
+            deps.fetchFn(url).then(function (resp) {
+                return resp.json().then(function (data) {
+                    return { httpOk: !!resp.ok, data: data };
+                });
+            }).then(function (result) {
+                if (fetchGen !== gen || !running) return; // resposta atrasada: ignora
+                var data = result.data;
+                if (!result.httpOk || !data || typeof data !== 'object') {
+                    transportErrors++;
+                    if (transportErrors >= POLL_MAX_TRANSPORT_ERRORS) {
+                        stop();
+                        deps.onTransportAbort(fetchGen);
+                        return;
+                    }
+                    schedule();
+                    return;
+                }
+                var d = decidePollTick(data);
+                if (d.action === 'success') {
+                    stop();
+                    deps.onSuccess(fetchGen);
+                    return;
+                }
+                if (d.action === 'stop_terminal') {
+                    stop();
+                    deps.onTerminal(fetchGen, d.key);
+                    return;
+                }
+                transportErrors = 0;
+                schedule();
+            }).catch(function () {
+                if (fetchGen !== gen || !running) return; // resposta atrasada: ignora
+                transportErrors++;
+                if (transportErrors >= POLL_MAX_TRANSPORT_ERRORS) {
+                    stop();
+                    deps.onTransportAbort(fetchGen);
+                    return;
+                }
+                schedule();
+            });
+        }
+        return {
+            start: function () {
+                stop(); // encerra qualquer geração anterior antes de começar
+                running = true;
+                remaining = POLL_MAX_ATTEMPTS;
+                transportErrors = 0;
+                tick(gen);
+            },
+            stop: stop,
+            pendingTimers: function () { return timerId === null ? 0 : 1; },
+        };
+    }
+
+    // Exporta a state machine para testes Node. No browser, `module` não
+    // existe e a execução segue para o bootstrap do DOM abaixo.
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = {
+            POLL_INTERVAL_MS: POLL_INTERVAL_MS,
+            POLL_MAX_ATTEMPTS: POLL_MAX_ATTEMPTS,
+            POLL_MAX_TRANSPORT_ERRORS: POLL_MAX_TRANSPORT_ERRORS,
+            USER_MESSAGES: USER_MESSAGES,
+            safeWord: safeWord,
+            normalizePollStatus: normalizePollStatus,
+            decideInitialAction: decideInitialAction,
+            decidePollTick: decidePollTick,
+            createPollController: createPollController,
+        };
+    }
+    if (typeof document === 'undefined') {
+        return;
+    }
+
     var panel = document.getElementById('mp-checkout-panel');
     var diagLine = document.getElementById('mp-diag-line');
     if (!panel) {
@@ -115,54 +301,110 @@
         if (!busy && errorBox) errorBox.style.display = 'none';
     }
 
-    var POLL_INTERVAL_MS = 2500;
-    var POLL_MAX_ATTEMPTS = 24;
+    // ---------- Wiring UI (browser) ----------
+    var ATTEMPT_SUFFIX = (function () {
+        try { return String(ATTEMPT_TOKEN || '').slice(-8); } catch (e) { return ''; }
+    })();
+    var activePoll = null;
+    var retryButton = null;
 
-    // Polling real e limitado: repete ate estado terminal ou deadline.
-    // Termina em: active (sucesso), rejected/cancelled/expired (falha),
-    // ou esgotamento (mensagem para voltar mais tarde). Nunca spinner infinito.
-    function pollStatus(done) {
-        var remaining = POLL_MAX_ATTEMPTS;
-        var finished = false;
-        function stop() {
-            finished = true;
-        }
-        function tick() {
-            if (finished) return;
-            if (remaining <= 0) {
-                stop();
-                done();
-                return;
+    function uiLog(source, status, outcome, action) {
+        try {
+            if (typeof console !== 'undefined' && console.info) {
+                console.info('[subscription-ui] attempt_suffix=' + safeWord(ATTEMPT_SUFFIX)
+                    + ' source=' + safeWord(source)
+                    + ' status=' + safeWord(status)
+                    + ' outcome=' + safeWord(outcome)
+                    + ' action=' + safeWord(action));
             }
-            remaining--;
-            fetch('/index.php?action=subscription_status&attempt=' + encodeURIComponent(ATTEMPT_TOKEN), {
-                method: 'GET',
-                credentials: 'same-origin',
-            }).then(function (resp) {
-                return resp.json();
-            }).then(function (data) {
-                if (finished) return;
-                if (data && data.ok === true) {
-                    // Sucesso SOMENTE com status/outcome active (nunca ok sozinho).
-                    var effStatus = (data.outcome === 'active') ? 'active' : data.status;
-                    if (effStatus === 'active') {
-                        stop();
-                        window.location.href = '/index.php?action=meu_plano&subscribed=1';
-                        return;
-                    }
-                    if (effStatus === 'rejected' || effStatus === 'cancelled' || effStatus === 'expired') {
-                        stop();
-                        setBusy(false);
-                        showError('Pagamento não aprovado. Confira os dados ou tente outro cartão.');
-                        return;
-                    }
-                }
-                setTimeout(tick, POLL_INTERVAL_MS);
-            }).catch(function () {
-                setTimeout(tick, POLL_INTERVAL_MS);
-            });
+        } catch (e) {}
+    }
+
+    // stopSubscriptionPolling — ÚNICA função que encerra o poll. Chamada em
+    // active/cancelled/rejected/paused/expired/timeout/fatal. Limpa timers,
+    // invalida gerações (respostas atrasadas morrem) e remove o retry.
+    function stopSubscriptionPolling() {
+        if (activePoll) {
+            try { activePoll.stop(); } catch (e) {}
         }
-        tick();
+        hideRetryButton();
+    }
+
+    function showRetryButton() {
+        hideRetryButton();
+        try {
+            if (!errorBox || !errorBox.parentNode) return;
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = 'Verificar novamente';
+            btn.className = 'btn';
+            btn.style.marginTop = '8px';
+            btn.style.cursor = 'pointer';
+            btn.onclick = function () {
+                hideRetryButton();
+                if (errorBox) errorBox.style.display = 'none';
+                setBusy(true);
+                uiLog('retry', '', '', 'repoll');
+                startUiPoll();
+            };
+            errorBox.parentNode.insertBefore(btn, errorBox.nextSibling);
+            retryButton = btn;
+        } catch (e) {}
+    }
+
+    function hideRetryButton() {
+        try {
+            if (retryButton && retryButton.parentNode) {
+                retryButton.parentNode.removeChild(retryButton);
+            }
+        } catch (e) {}
+        retryButton = null;
+    }
+
+    function messageFor(key) {
+        return USER_MESSAGES[key] || USER_MESSAGES.payment_failed;
+    }
+
+    // Inicia UM poll limitado para a attempt atual. Chamadas repetidas
+    // encerram a geração anterior antes (nunca dois polls simultâneos).
+    function startUiPoll() {
+        stopSubscriptionPolling();
+        setBusy(true);
+        var poll = createPollController({
+            url: '/index.php?action=subscription_status&attempt=' + encodeURIComponent(ATTEMPT_TOKEN),
+            fetchFn: function (url) {
+                return fetch(url, { method: 'GET', credentials: 'same-origin' });
+            },
+            setTimeoutFn: function (fn, ms) { return setTimeout(fn, ms); },
+            clearTimeoutFn: function (id) { clearTimeout(id); },
+            onSuccess: function () {
+                stopSubscriptionPolling();
+                uiLog('poll', 'active', 'active', 'success');
+                window.location.href = '/index.php?action=meu_plano&subscribed=1';
+            },
+            onTerminal: function (gen, key) {
+                stopSubscriptionPolling();
+                uiLog('poll', key, key, 'stop_' + key);
+                setBusy(false);
+                showError(messageFor(key));
+            },
+            onTimeout: function () {
+                stopSubscriptionPolling();
+                uiLog('poll', 'pending', 'processing', 'timeout');
+                setBusy(false);
+                showError('Pagamento ainda não foi confirmado. Você pode verificar novamente mais tarde.');
+                showRetryButton();
+            },
+            onTransportAbort: function () {
+                stopSubscriptionPolling();
+                uiLog('poll', '', '', 'transport_abort');
+                setBusy(false);
+                showError('Não foi possível verificar o pagamento. Verifique sua conexão e tente novamente.');
+                showRetryButton();
+            },
+        });
+        activePoll = poll;
+        poll.start();
     }
 
     function boot(attemptsLeft) {
@@ -265,43 +507,37 @@
                     token = '';
                     formData = {};
                     var data = result.data || {};
-                    // REGRA DE OURO: sucesso SOMENTE com outcome/status active.
+                    var decision = decideInitialAction(result.http, data);
+                    uiLog('initial', data.status, data.outcome, decision.action
+                        + (decision.key ? ':' + decision.key : ''));
+                    // REGRA DE OURO: sucesso SOMENTE com outcome active.
                     // ok:true sozinho (pending/vinculado) NUNCA celebra compra.
-                    var outcome = data.outcome
-                        || (data.status === 'active' ? 'active'
-                            : (data.ok === true ? 'processing' : 'error'));
-                    if (outcome === 'active') {
-                        window.location.href = data.redirect || '/index.php?action=meu_plano&subscribed=1';
+                    if (decision.action === 'success') {
+                        stopSubscriptionPolling();
+                        window.location.href = decision.redirect;
                         return;
                     }
-                    // Timeout/rede/processing apos criacao no MP: reconcilia por
-                    // polling da tentativa (sem reenviar token de uso unico).
-                    if (outcome === 'processing' || result.http === 502 || result.http === 500) {
+                    // Somente pending/processing (ou 502/500) inicia polling da
+                    // tentativa — sem reenviar o token de uso unico. Terminais
+                    // (cancelled/rejected/paused/expired/erro) NUNCA entram
+                    // em poll: exibem o desfecho imediatamente.
+                    if (decision.action === 'start_poll') {
                         setBusy(true);
                         showError('Pagamento em processamento. Aguardando confirmação…');
-                        pollStatus(function () {
-                            setBusy(false);
-                            showError('Pagamento ainda em processamento. Você pode voltar mais tarde.');
-                        });
+                        startUiPoll();
                         return;
                     }
+                    stopSubscriptionPolling();
                     setBusy(false);
-                    var userMessages = {
-                        invalid_card: 'Verifique os dados do cartão e tente novamente.',
-                        card_declined: 'Pagamento recusado. Tente outro cartão ou fale com seu banco.',
-                        rejected: 'Pagamento não aprovado. Confira os dados ou tente outro cartão.',
-                        cancelled: 'Assinatura cancelada antes da conclusão.',
-                        paused: 'Assinatura pausada. Fale com o suporte se precisar de ajuda.',
-                        service_error: 'Serviço indisponível no momento. Tente novamente em instantes.',
-                        payment_failed: 'Não foi possível concluir o pagamento. Confira os dados do cartão.'
-                    };
-                    showError(userMessages[data.error] || userMessages[outcome] || userMessages.payment_failed);
+                    showError(messageFor(decision.key));
                 }).catch(function () {
                     token = '';
-                    pollStatus(function () {
-                        setBusy(false);
-                        showError('Pagamento ainda em processamento. Você pode voltar mais tarde.');
-                    });
+                    uiLog('initial', '', '', 'fetch_error_repoll');
+                    // Falha de rede/timeout no POST: tenta reconciliar por
+                    // polling limitado (sem reenviar token de uso unico).
+                    setBusy(true);
+                    showError('Pagamento em processamento. Aguardando confirmação…');
+                    startUiPoll();
                 });
             },
         },

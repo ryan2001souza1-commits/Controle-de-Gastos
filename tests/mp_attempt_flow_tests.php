@@ -762,7 +762,7 @@ echo "\n--- AT34: poll limitado no frontend (sem spinner infinito) ---\n";
 $jsSrc = (string)file_get_contents($ROOT . '/public/js/mp_subscribe.js');
 assert_test(str_contains($jsSrc, 'POLL_MAX_ATTEMPTS'), 'AT34a: limite de tentativas definido');
 assert_test(str_contains($jsSrc, 'POLL_INTERVAL_MS'), 'AT34b: intervalo definido');
-assert_test(str_contains($jsSrc, 'voltar mais tarde'), 'AT34c: mensagem de deadline sem spinner infinito');
+assert_test(str_contains($jsSrc, 'verificar novamente mais tarde'), 'AT34c: deadline encerra com mensagem + retry (sem spinner infinito)');
 assert_test(str_contains($jsSrc, "'rejected'") && str_contains($jsSrc, "'cancelled'"), 'AT34d: estados terminais encerram o poll');
 
 echo "\n--- AT35: falha SQL aborta txn -> rollback imediato, sem cascata 25P02 ---\n";

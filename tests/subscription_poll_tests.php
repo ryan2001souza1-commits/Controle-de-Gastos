@@ -437,8 +437,22 @@ assert_test($db->inTransaction() === false, 'P14d: sem txn residual');
 
 echo "\n--- P15/P16: contrato semântico do frontend ---\n";
 $jsSrc = (string)file_get_contents($ROOT . '/public/js/mp_subscribe.js');
-assert_test(str_contains($jsSrc, "data.outcome === 'active'"), 'P15a: sucesso exige outcome active');
-assert_test(!preg_match('/if\s*\(\s*data\.ok\s*\)\s*\{\s*[^}]*sucess/si', $jsSrc), 'P15b: nenhum if(data.ok) => sucesso');
+assert_test(str_contains($jsSrc, 'decideInitialAction'), 'P15a: resposta inicial passa pela state machine (sucesso só via outcome active)');
+assert_test(str_contains($jsSrc, 'stopSubscriptionPolling'), 'P15a2: stop único existe');
+assert_test(str_contains($jsSrc, "data.outcome === 'active'") || str_contains($jsSrc, "o === 'active'"), 'P15b: gate active via outcome');
+assert_test(!preg_match('/if\s*\(\s*data\.ok\s*\)\s*\{\s*[^}]*sucess/si', $jsSrc), 'P15c: nenhum if(data.ok) => sucesso');
+
+echo "\n--- P17: wiring do stop único + sem timers órfãos + observabilidade ---\n";
+$calls = substr_count($jsSrc, 'stopSubscriptionPolling()');
+assert_test($calls >= 6, 'P17a: stop chamado em todos os desfechos (terminais+timeout+abort+success)', 'calls=' . $calls);
+assert_test(str_contains($jsSrc, 'clearTimeout'), 'P17b: timers com limpeza explícita');
+assert_test(strpos($jsSrc, 'setInterval') === false, 'P17c: nenhum setInterval (só timeouts rastreados)');
+assert_test(str_contains($jsSrc, 'pollGeneration') || str_contains($jsSrc, 'myGen') || str_contains($jsSrc, 'fetchGen'), 'P17d: guarda de geração contra resposta atrasada');
+assert_test(str_contains($jsSrc, '[subscription-ui]'), 'P17e: observabilidade sanitizada presente');
+$consoleLeak = preg_match('/console\.(info|log|debug|warn|error)\s*\([^)]*(ATTEMPT_TOKEN|card_token|cardToken|cardholderEmail|identificationNumber|PUBLIC_KEY)/', $jsSrc);
+assert_test($consoleLeak === 0, 'P17f: nenhum log de console com token/cartão/email/chave');
+assert_test(str_contains($jsSrc, 'attempt_suffix'), 'P17g: logs usam sufixo, nunca correlator completo');
+assert_test(str_contains($jsSrc, 'Verificar novamente'), 'P17h: retry controlado após timeout/abort');
 assert_test(str_contains($jsSrc, "'processing'") || str_contains($jsSrc, '"processing"'), 'P15c: pending mapeia para processing');
 assert_test(str_contains($jsSrc, 'meu_plano&subscribed=1'), 'P16a: active redireciona para sucesso');
 
