@@ -435,7 +435,23 @@ assert_test($db->beginCalls === 0, 'P14b: BEGIN_CALLS=0', 'beginCalls=' . $db->b
 assert_test($db->commitCalls === 0, 'P14c: COMMIT_CALLS=0', 'commitCalls=' . $db->commitCalls);
 assert_test($db->inTransaction() === false, 'P14d: sem txn residual');
 
+echo "\n--- P18: forma do JSON do endpoint por estado (§5) ---\n";
+$db = new FakePollPDO();
+$mp = new FakePollMP();
+$id = $db->addAttempt('77777777777777777777777777777777', 'pro', 'pending', 'mp_shape_1', '2000-01-01 00:00:00');
+$mp->fixtures['mp_shape_1'] = ['id' => 'mp_shape_1', 'status' => 'pending', 'preapproval_plan_id' => 'x', 'next_payment_date' => null];
+$svc = new SubscriptionPollService($db, $mp);
+$r = $svc->getStatus(5, '77777777777777777777777777777777');
+$keys = array_keys($r['body']);
+foreach (['ok', 'status', 'plan_slug', 'linked', 'outcome', 'synced'] as $k) {
+    assert_test(in_array($k, $keys, true), "P18a: chave '$k' presente no 200");
+}
+assert_test($r['body']['linked'] === true, 'P18b: linked=true com mp id');
+$r404 = $svc->getStatus(5, '00000000000000000000000000000000');
+assert_test(array_keys($r404['body']) === ['ok', 'error'], 'P18c: 404 só {ok,error} (sem vazar estado)');
+
 echo "\n--- P15/P16: contrato semântico do frontend ---\n";
+$jsSrc = (string)file_get_contents($ROOT . '/public/js/mp_subscribe.js');
 $jsSrc = (string)file_get_contents($ROOT . '/public/js/mp_subscribe.js');
 assert_test(str_contains($jsSrc, 'decideInitialAction'), 'P15a: resposta inicial passa pela state machine (sucesso só via outcome active)');
 assert_test(str_contains($jsSrc, 'stopSubscriptionPolling'), 'P15a2: stop único existe');
