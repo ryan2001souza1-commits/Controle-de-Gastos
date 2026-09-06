@@ -76,15 +76,24 @@ function makeEnv() {
     return { doc, nodes, parent };
 }
 
+// ---------- tempo virtual (waitForDeviceId usa Date.now real) ----------
+let VNOW = Date.now();
+const REAL_NOW = Date.now;
+global.Date.now = () => VNOW;
+
 // ---------- timers falsos ----------
 function makeTimers() {
     const timers = new Map();
     let nextId = 1;
     return {
         timers,
-        set: (fn) => { const id = nextId++; timers.set(id, fn); return id; },
+        set: (fn, ms) => {
+            const id = nextId++;
+            timers.set(id, { fn, at: VNOW + (ms || 0) });
+            return id;
+        },
         clear: (id) => { timers.delete(id); },
-        async drain(rounds = 500) {
+        async drain(rounds = 2000) {
             for (let r = 0; r < rounds; r++) {
                 await Promise.resolve();
                 await new Promise((res) => setImmediate(res));
@@ -94,10 +103,12 @@ function makeTimers() {
                     if (timers.size === 0) break;
                     continue;
                 }
-                for (const id of [...timers.keys()]) {
-                    const fn = timers.get(id);
+                const ids = [...timers.keys()].sort((a, b) => timers.get(a).at - timers.get(b).at);
+                for (const id of ids) {
+                    const t = timers.get(id);
                     timers.delete(id);
-                    fn();
+                    if (t.at > VNOW) VNOW = t.at;
+                    t.fn();
                 }
             }
         },
@@ -111,9 +122,14 @@ function ok(cond, name) {
 }
 
 // Carrega o arquivo UMA vez por cenário (IIFE faz bootstrap no require).
-function loadApp({ subscribeResponses, pollScript, deviceId, identity }) {
+function loadApp({ subscribeResponses, pollScript, deviceId, identity, panelToken }) {
     delete require.cache[require.resolve('../public/js/mp_subscribe.js')];
     const { doc, nodes, parent } = makeEnv();
+    if (panelToken) {
+        const panel = doc.getElementById('mp-checkout-panel');
+        panel.getAttribute = (k) => (k === 'data-attempt-token' ? panelToken : (k === 'data-mp-amount' ? '9.90' : 'TEST-x'));
+        panel.removeAttribute = () => {};
+    }
     // Inputs próprios de identidade (fora dos iframes): default VÁLIDOS.
     const ident = Object.assign(
         { name: 'Ada Lovelace', email: 'a@ex.com', doc: '12345678901' },
@@ -137,10 +153,14 @@ function loadApp({ subscribeResponses, pollScript, deviceId, identity }) {
     global.setTimeout = T.set;
     global.clearTimeout = T.clear;
     global.console.info = (...a) => uiLogs.push(a.join(' '));
-    if (deviceId !== undefined) {
+    if (deviceId !== undefined && deviceId !== null) {
         global.MP_DEVICE_SESSION_ID = deviceId;
-    } else {
+    } else if (deviceId === null) {
         delete global.MP_DEVICE_SESSION_ID;
+    } else {
+        // Default: device presente (caminho imediato). Ausência explícita
+        // usa deviceId:null (caminho de espera/timeout com tempo virtual).
+        global.MP_DEVICE_SESSION_ID = 'dev-harness-12345678';
     }
     global.MercadoPago = function () {
         return {
@@ -322,39 +342,14 @@ const PENDING = { ok: true, status: 'pending', outcome: 'processing', linked: tr
     // ---- D11: sufixo hex preserva dígitos (regressão do "de") ----
     console.log('--- D11 sufixo com dígitos ---');
     {
-        delete require.cache[require.resolve('../public/js/mp_subscribe.js')];
-        const { doc } = makeEnv();
-        // Reescreve o token do painel com dígitos antes do require.
-        const panel = doc.getElementById('mp-checkout-panel');
         const tight = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
-        panel.getAttribute = (k) => (k === 'data-attempt-token' ? tight : (k === 'data-mp-amount' ? '9.90' : 'TEST-x'));
-        panel.removeAttribute = () => {};
-        const uiLogs = [];
-        global.document = doc;
-        global.window = { location: { href: '' } };
-        global.console.info = (...a) => uiLogs.push(a.join(' '));
-        global.MercadoPago = function () {
-            return { cardForm: () => ({ getCardFormData: () => ({ token: 't' }) }) };
-        };
-        let submitFn = null;
-        global.MercadoPago = function () {
-            return {
-                cardForm: (cfg) => {
-                    submitFn = cfg.callbacks.onSubmit;
-                    return { getCardFormData: () => ({ token: 't' }) };
-                },
-            };
-        };
-        global.fetch = () => Promise.resolve({ status: 200, json: () => Promise.resolve({ ok: true, status: 'pending', outcome: 'processing' }) });
-        require('../public/js/mp_subscribe.js');
-        await submitFn({ preventDefault: () => {} });
-        await new Promise((r) => setImmediate(r));
-        await new Promise((r) => setImmediate(r));
-        const blob = uiLogs.join('\n');
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], panelToken: tight });
+        await app.submit();
+        await app.T.drain(30);
+        const blob = app.uiLogs.join('\n');
         ok(blob.includes('attempt_suffix=6d7e8f90'), 'sufixo hex com dígitos preservado (não vira "de")');
         ok(!blob.includes(tight), 'token completo nunca logado');
-        delete global.document; delete global.window;
-        delete global.MercadoPago; delete global.fetch;
+        app.cleanup();
     }
 
     // ---- D12: duplo submit -> UM único POST (sem reuso de token) ----
@@ -439,7 +434,7 @@ const PENDING = { ok: true, status: 'pending', outcome: 'processing', linked: tr
         app.cleanup();
     }
     {
-        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING] });
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], deviceId: null });
         await app.submit();
         await app.T.drain(10);
         ok(app.postBodies.length >= 1 && !('device_id' in app.postBodies[0]), 'DID2: ausente -> chave omitida do POST');
@@ -472,6 +467,76 @@ const PENDING = { ok: true, status: 'pending', outcome: 'processing', linked: tr
         await new Promise((r) => setImmediate(r));
         await new Promise((r) => setImmediate(r));
         ok(app.fetches.filter((u) => u.includes('subscribe_token')).length === 1, 'CTX-ident válida: 1 POST (fluxo segue)');
+        app.cleanup();
+    }
+
+    // ---- DEV espera limitada: atrasado, falha e timeout ----
+    console.log('--- DEV device wait ---');
+    {
+        // Global aparece DURANTE a espera -> capturado (verbatim, sem gerar).
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], deviceId: null });
+        const p = app.submit();
+        for (let i = 0; i < 5; i++) { await new Promise((r) => setImmediate(r)); }
+        global.MP_DEVICE_SESSION_ID = 'dev-late-abcdef12345678';
+        await p;
+        await app.T.drain(30);
+        ok(app.postBodies.length >= 1 && app.postBodies[0].device_id === 'dev-late-abcdef12345678', 'DEV3: global atrasado -> aguardado e capturado');
+        const blob = app.uiLogs.join('\n');
+        ok(!blob.includes('dev-late-abcdef12345678'), 'DEV3b: valor tardio nunca logado');
+        app.cleanup();
+    }
+    {
+        // Nunca aparece -> prossegue sem device dentro do teto (fail-safe).
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], deviceId: null });
+        const t0 = VNOW;
+        const p = app.submit();
+        let tPost = -1;
+        for (let i = 0; i < 200 && app.postBodies.length === 0; i++) {
+            await Promise.resolve();
+            await new Promise((r) => setImmediate(r));
+            if (app.postBodies.length > 0) break;
+            if (app.T.timers.size > 0) {
+                const ids = [...app.T.timers.keys()].sort((a, b) => app.T.timers.get(a).at - app.T.timers.get(b).at);
+                const id = ids[0];
+                const t = app.T.timers.get(id);
+                app.T.timers.delete(id);
+                if (t.at > VNOW) VNOW = t.at;
+                t.fn();
+            }
+        }
+        tPost = VNOW;
+        await p;
+        await app.T.drain(60);
+        ok(app.postBodies.length >= 1 && !('device_id' in app.postBodies[0]), 'DEV4: timeout controlado -> prossegue sem device');
+        ok(tPost >= 0 && tPost - t0 >= 1500 && tPost - t0 <= 5000, 'DEV4b: espera limitada (~2s), sem spinner infinito');
+        app.cleanup();
+    }
+    {
+        // Script falhou (onerror) -> prossegue IMEDIATO, sem espera.
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], deviceId: null });
+        global.window.__mpSecurityFailed = true;
+        const t0 = VNOW;
+        const p = app.submit();
+        let tPost = -1;
+        for (let i = 0; i < 200 && app.postBodies.length === 0; i++) {
+            await Promise.resolve();
+            await new Promise((r) => setImmediate(r));
+            if (app.postBodies.length > 0) break;
+            if (app.T.timers.size > 0) {
+                const ids = [...app.T.timers.keys()].sort((a, b) => app.T.timers.get(a).at - app.T.timers.get(b).at);
+                const id = ids[0];
+                const t = app.T.timers.get(id);
+                app.T.timers.delete(id);
+                if (t.at > VNOW) VNOW = t.at;
+                t.fn();
+            }
+        }
+        tPost = VNOW;
+        await p;
+        await app.T.drain(30);
+        ok(app.postBodies.length >= 1, 'DEV-fail: script com erro -> checkout prossegue');
+        ok(tPost >= 0 && tPost - t0 < 1500, 'DEV-fail b: sem espera inútil quando script falhou');
+        delete global.window.__mpSecurityFailed;
         app.cleanup();
     }
 

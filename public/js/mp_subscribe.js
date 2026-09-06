@@ -352,6 +352,80 @@
 
     var pollAborter = null;
 
+    // Limites da espera pelo Device ID (fail-safe: nunca bloqueia o checkout).
+    var DEVICE_WAIT_MS = 2000;
+    var DEVICE_POLL_MS = 100;
+
+    // Estado do script oficial de segurança (flags do onload/onerror da tag).
+    function securityScriptState() {
+        try {
+            if (typeof window !== 'undefined' && window.__mpSecurityFailed) return 'failed';
+            if (typeof window !== 'undefined' && window.__mpSecurityLoaded) return 'loaded';
+        } catch (e) {}
+        return 'unknown';
+    }
+
+    function readDeviceIdNow() {
+        try {
+            if (typeof MP_DEVICE_SESSION_ID !== 'undefined' && MP_DEVICE_SESSION_ID) {
+                return String(MP_DEVICE_SESSION_ID).slice(0, 160);
+            }
+        } catch (e) {}
+        return '';
+    }
+
+    // Diagnóstico sanitizado (booleanos apenas — NUNCA o valor).
+    function deviceDiagLine() {
+        var tag = false;
+        try {
+            tag = (typeof document !== 'undefined') && !!document.getElementById('mp-security-script');
+        } catch (e) {}
+        return { tag: tag, load: securityScriptState(), present: readDeviceIdNow() !== '' };
+    }
+
+    function logDeviceDiag() {
+        try {
+            var st = deviceDiagLine();
+            if (typeof console !== 'undefined' && console.info) {
+                console.info('[mp-device-ui] script_tag=' + (st.tag ? 'yes' : 'no')
+                    + ' script_loaded=' + (st.load === 'loaded' ? 'yes' : (st.load === 'failed' ? 'no' : 'unknown'))
+                    + ' device_id_present=' + (st.present ? 'yes' : 'no'));
+            }
+        } catch (e) {}
+    }
+
+    // Espera LIMITADA pelo Device ID oficial. Resolve com o valor (verbatim
+    // do global oficial — sem gerar, sem falsificar) ou '' no timeout/falha.
+    // Nunca rejeita; checkout sempre prossegue (fail-safe documentado).
+    function waitForDeviceId() {
+        return new Promise(function (resolve) {
+            var done = false;
+            function finish(v) {
+                if (done) return;
+                done = true;
+                resolve(v);
+            }
+            var now = readDeviceIdNow();
+            if (now !== '') { finish(now); return; }
+            if (securityScriptState() === 'failed') { finish(''); return; }
+            var deadline = (typeof Date !== 'undefined' && Date.now) ? Date.now() + DEVICE_WAIT_MS : 0;
+            (function tick() {
+                if (done) return;
+                var v = readDeviceIdNow();
+                if (v !== '') { finish(v); return; }
+                if (securityScriptState() === 'failed') { finish(''); return; }
+                var remaining = 0;
+                try { remaining = deadline - Date.now(); } catch (e) {}
+                if (remaining <= 0) { finish(''); return; }
+                try {
+                    setTimeout(tick, Math.min(DEVICE_POLL_MS, remaining));
+                } catch (e) {
+                    finish('');
+                }
+            })();
+        });
+    }
+
     // stopSubscriptionPolling — ÚNICA função que encerra o poll. Chamada em
     // active/cancelled/rejected/paused/expired/timeout/fatal. Aborta request
     // em voo, limpa timers, invalida gerações (respostas atrasadas morrem)
@@ -461,6 +535,63 @@
         poll.start();
     }
 
+    // Continua o submit APÓS a espera do Device ID: monta o body (com
+    // device_id SOMENTE se não-vazio), limpa cópias locais e dispara o POST.
+    function continueSubmit(token, formData, deviceId) {
+        var subscribeBody = {
+            card_token_id: token,
+            attempt_token: ATTEMPT_TOKEN,
+            csrf_token: csrfInput ? csrfInput.value : '',
+        };
+        if (deviceId !== '') {
+            subscribeBody.device_id = deviceId;
+        }
+        // Limpa as cópias locais assim que serializadas (backend valida).
+        token = '';
+        formData = {};
+        deviceId = '';
+
+        fetch('/index.php?action=subscribe_token', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(subscribeBody),
+        }).then(function (resp) {
+            return resp.json().then(function (data) {
+                return { http: resp.status, data: data };
+            });
+        }).then(function (result) {
+            var data = result.data || {};
+            var decision = decideInitialAction(result.http, data);
+            uiLog('initial', data.status, data.outcome, decision.action, decision.key || '');
+            // REGRA DE OURO: sucesso SOMENTE com outcome active.
+            // ok:true sozinho (pending/vinculado) NUNCA celebra compra.
+            if (decision.action === 'success') {
+                stopSubscriptionPolling();
+                window.location.href = decision.redirect;
+                return;
+            }
+            // Somente pending/processing (ou 502/500) inicia polling da
+            // tentativa — sem reenviar o token de uso unico. Terminais
+            // (cancelled/rejected/paused/expired/erro) NUNCA entram
+            // em poll: render terminal atômico imediato.
+            if (decision.action === 'start_poll') {
+                setBusy(true);
+                showError('Pagamento em processamento. Aguardando confirmação…');
+                startUiPoll();
+                return;
+            }
+            renderTerminalError(messageFor(decision.key));
+        }).catch(function () {
+            uiLog('initial', '', '', 'fetch_error_repoll', 'fetch');
+            // Falha de rede/timeout no POST: tenta reconciliar por
+            // polling limitado (sem reenviar token de uso unico).
+            setBusy(true);
+            showError('Pagamento em processamento. Aguardando confirmação…');
+            startUiPoll();
+        });
+    }
+
     function boot(attemptsLeft) {
         // Aguarda o SDK (CDN pode chegar depois deste script) em vez de
         // falhar silenciosamente. Apos esgotar, exibe erro LOUD.
@@ -559,72 +690,21 @@
                     return;
                 }
 
-                // Device ID oficial (security.js): lido UMA vez por submit a
-                // partir do global MP_DEVICE_SESSION_ID. Ausente/lento ==
-                // string vazia (fail-safe: backend omite o header, checkout
-                // nunca bloqueia). Nunca logado, nunca em URL.
-                var deviceId = '';
-                try {
-                    if (typeof MP_DEVICE_SESSION_ID !== 'undefined' && MP_DEVICE_SESSION_ID) {
-                        deviceId = String(MP_DEVICE_SESSION_ID).slice(0, 160);
-                    }
-                } catch (e) {
-                    deviceId = '';
-                }
-
-                var subscribeBody = {
-                    card_token_id: token,
-                    attempt_token: ATTEMPT_TOKEN,
-                    csrf_token: csrfInput ? csrfInput.value : '',
-                };
-                if (deviceId !== '') {
-                    subscribeBody.device_id = deviceId;
-                }
-                // Limpa a cópia local assim que serializada (o backend valida).
-                deviceId = '';
-
-                fetch('/index.php?action=subscribe_token', {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(subscribeBody),
-                }).then(function (resp) {
-                    return resp.json().then(function (data) {
-                        return { http: resp.status, data: data };
-                    });
-                }).then(function (result) {
-                    // Limpa o token da memoria asim que possivel.
-                    token = '';
-                    formData = {};
-                    var data = result.data || {};
-                    var decision = decideInitialAction(result.http, data);
-                    uiLog('initial', data.status, data.outcome, decision.action, decision.key || '');
-                    // REGRA DE OURO: sucesso SOMENTE com outcome active.
-                    // ok:true sozinho (pending/vinculado) NUNCA celebra compra.
-                    if (decision.action === 'success') {
-                        stopSubscriptionPolling();
-                        window.location.href = decision.redirect;
-                        return;
-                    }
-                    // Somente pending/processing (ou 502/500) inicia polling da
-                    // tentativa — sem reenviar o token de uso unico. Terminais
-                    // (cancelled/rejected/paused/expired/erro) NUNCA entram
-                    // em poll: render terminal atômico imediato.
-                    if (decision.action === 'start_poll') {
-                        setBusy(true);
-                        showError('Pagamento em processamento. Aguardando confirmação…');
-                        startUiPoll();
-                        return;
-                    }
-                    renderTerminalError(messageFor(decision.key));
+                // Device ID oficial com espera LIMITADA (fail-safe): se o
+                // security.js ainda não publicou o global, aguarda até o
+                // teto e prossegue sem ele (backend omite o header). Nunca
+                // gera/falsifica valor; nunca loga o valor (só booleanos).
+                // Captura cópias e limpa os originais JÁ (strings são por
+                // valor; o callback usa as cópias — token nunca persiste).
+                logDeviceDiag();
+                var tokenCopy = token;
+                var formCopy = formData;
+                token = '';
+                formData = {};
+                waitForDeviceId().then(function (deviceId) {
+                    continueSubmit(tokenCopy, formCopy, deviceId || '');
                 }).catch(function () {
-                    token = '';
-                    uiLog('initial', '', '', 'fetch_error_repoll', 'fetch');
-                    // Falha de rede/timeout no POST: tenta reconciliar por
-                    // polling limitado (sem reenviar token de uso unico).
-                    setBusy(true);
-                    showError('Pagamento em processamento. Aguardando confirmação…');
-                    startUiPoll();
+                    continueSubmit(tokenCopy, formCopy, '');
                 });
             },
         },

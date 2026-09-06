@@ -151,7 +151,7 @@ $errText = $errMessages[$errKey] ?? null;
     </div>
 </section>
 <script src="https://sdk.mercadopago.com/js/v2"></script>
-<script src="https://www.mercadopago.com/v2/security.js" view="checkout"></script>
+<script id="mp-security-script" src="https://www.mercadopago.com/v2/security.js" view="checkout" onload="window.__mpSecurityLoaded=true" onerror="window.__mpSecurityFailed=true"></script>
 <script src="/js/mp_subscribe.js?v=3"></script>
 <?php endif; ?>
 
