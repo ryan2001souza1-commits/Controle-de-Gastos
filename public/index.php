@@ -244,6 +244,11 @@ if ($action === 'register') {
     $planId = (int)$planRow['id'];
 
     $subscriptionModel = new Subscription($db);
+    // ---- A) Assinatura ja existente para o mesmo plano ----
+    // Se existe subscription pending/ativa/pausada, NAO reutilizar
+    // storedInitPoint nem redirect para init_point do MP antigo.
+    // Em vez disso, redirecionar para a pagina de retorno do MP
+    // (o usuario pode continuar de onde parou).
     $existing = $subscriptionModel->findActiveOrPendingByUserAndPlan($userId, $slug);
     if ($existing !== null) {
         $existingMpId = (string)($existing['mp_preapproval_id'] ?? '');
@@ -252,17 +257,14 @@ if ($action === 'register') {
             $reuse = $mpService->getPreapproval($existingMpId);
             if ($reuse['ok'] === true && is_array($reuse['data'])) {
                 $status = strtolower((string)($reuse['data']['status'] ?? ''));
-                $init = $reuse['data']['init_point'] ?? null;
                 if ($status === 'authorized') {
                     header('Location: /index.php?action=meu_plano&subscribed=1', true, 302);
                     exit;
                 }
-                if ($status === 'pending' && is_string($init) && $init !== '') {
-                    header('Location: ' . $init, true, 302);
-                    exit;
-                }
             }
         }
+        header('Location: /mercadopago_return.php', true, 302);
+        exit;
     }
 
     if ($slug === 'premium' || $slug === 'pro') {
@@ -328,15 +330,10 @@ if ($action === 'register') {
 
     $subscriptionModel->createPending($userId, $slug, $planId, $externalReference);
 
+    // ---- B) NOVA ASSINATURA: chamar createPreapproval SEMPRE ----
+    // NAO redirecionar para storedInitPoint. O init_point retornado
+    // pela nova preapproval e o unico usado.
     $pendingSub = $subscriptionModel->findActiveOrPendingByUserAndPlan($userId, $slug);
-    $storedInitPoint = null;
-    if ($pendingSub !== null) {
-        $storedInitPoint = $subscriptionModel->getStoredInitPoint((int)$pendingSub['id']);
-    }
-    if ($storedInitPoint !== null && $storedInitPoint !== '') {
-        header('Location: ' . $storedInitPoint, true, 302);
-        exit;
-    }
 
     try {
         $planId = MercadoPagoService::getPlanIdForSlug($slug);
