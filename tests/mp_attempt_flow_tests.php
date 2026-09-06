@@ -1131,6 +1131,28 @@ $indexSrc = (string)file_get_contents($ROOT . '/public/index.php');
 assert_test(!preg_match('/attempt=%s/', $indexSrc), 'AT54c: log de 500 usa attempt_suffix (não token completo)');
 assert_test(str_contains($svcSrc, '[subscribe_token] mp_error phase='), 'AT54d: ramo de erro do MP loga fase+http+código+sufixo (forense de 4xx)');
 
+echo "\n--- AT55: MP 400 CC_VAL_433 (mock do caso real 06/09) ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$mp->createQueue = [
+    ['ok' => false, 'status' => 400, 'error' => 'CC_VAL_433 Credit card validation has failed'],
+    ['ok' => false, 'status' => 400, 'error' => 'CC_VAL_433 Credit card validation has failed'],
+];
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 400, 'AT55a: http 400 (erro de validação, não 500)');
+assert_test(($r['body']['error'] ?? '') === 'invalid_card', 'AT55b: user_code invalid_card (orienta conferir dados)');
+assert_test(!isset($r['body']['outcome']), 'AT55c: sem outcome (frontend deriva error, sem poll)');
+$row = $sm->findByAttemptToken($a['attempt_token']);
+assert_test(($row['mp_preapproval_id'] ?? '') === '', 'AT55d: nada vinculado (sem preapproval criada)');
+assert_test(($row['status'] ?? '') === 'pending', 'AT55e: linha segue pending (sem forçar estado)');
+$userA = null;
+foreach ($db->tables['usuarios'] as $u) { if ((int)$u['id'] === 5) $userA = $u; }
+assert_test(($userA['plano'] ?? '') === 'gratuito', 'AT55f: usuário segue FREE');
+$r2 = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_novo_def');
+assert_test($mp->postCount === 2, 'AT55g: cada submit = 1 POST (sem retry automático com mesmo token)');
+assert_test(($r2['body']['error'] ?? '') === 'invalid_card', 'AT55h: segundo submit também 400 invalid_card');
+
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;
 echo "Total: $total | \033[32mPassed: $passed\033[0m | \033[31mFailed: $failed\033[0m\n";

@@ -337,6 +337,32 @@ const PENDING = { ok: true, status: 'pending', outcome: 'processing', linked: tr
         delete global.MercadoPago; delete global.fetch;
     }
 
+    // ---- D12: duplo submit -> UM único POST (sem reuso de token) ----
+    console.log('--- D12 double submit ---');
+    {
+        const app = loadApp({ subscribeResponses: [{ http: 400, body: { ok: false, error: 'invalid_card' } }], pollScript: [{ ok: true, status: 'pending', outcome: 'processing' }] });
+        await app.submit();
+        await app.submit(); // segundo clique imediato: guardado por `submitted`
+        await app.T.drain(30);
+        const posts = app.fetches.filter((u) => u.includes('subscribe_token')).length;
+        ok(posts === 1, 'duplo clique = 1 POST subscribe_token (' + posts + ')');
+        ok(app.polls() === 0, 'erro 400 invalid_card NÃO inicia poll');
+        ok(app.nodes['mp-checkout-error'].textContent.includes('Verifique os dados do cartão'), 'msg orienta conferir dados');
+        app.cleanup();
+    }
+
+    // ---- D13: initial invalid_card (CC_VAL_433 mapeado) ----
+    console.log('--- D13 initial invalid_card ---');
+    {
+        const app = loadApp({ subscribeResponses: [{ http: 400, body: { ok: false, error: 'invalid_card' } }], pollScript: [] });
+        await app.submit();
+        await app.T.drain(20);
+        ok(app.nodes['mp-checkout-error'].textContent.includes('Verifique os dados do cartão'), 'msg adequada, sem spinner infinito');
+        ok(app.nodes['mp-pay-button'].disabled === false, 'botão reabilitado para corrigir e tentar de novo');
+        ok(app.T.timers.size === 0, 'zero timers');
+        app.cleanup();
+    }
+
     console.log(`\nTotal: ${passed} passed`);
 })().catch((e) => {
     console.error('FATAL', e);
