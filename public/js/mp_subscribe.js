@@ -115,21 +115,52 @@
         if (!busy && errorBox) errorBox.style.display = 'none';
     }
 
+    var POLL_INTERVAL_MS = 2500;
+    var POLL_MAX_ATTEMPTS = 24;
+
+    // Polling real e limitado: repete ate estado terminal ou deadline.
+    // Termina em: active (sucesso), rejected/cancelled/expired (falha),
+    // ou esgotamento (mensagem para voltar mais tarde). Nunca spinner infinito.
     function pollStatus(done) {
-        fetch('/index.php?action=subscription_status&attempt=' + encodeURIComponent(ATTEMPT_TOKEN), {
-            method: 'GET',
-            credentials: 'same-origin',
-        }).then(function (resp) {
-            return resp.json();
-        }).then(function (data) {
-            if (data && data.ok === true && (data.status === 'active' || data.linked === true)) {
-                window.location.href = '/index.php?action=meu_plano&subscribed=1';
-            } else {
+        var remaining = POLL_MAX_ATTEMPTS;
+        var finished = false;
+        function stop() {
+            finished = true;
+        }
+        function tick() {
+            if (finished) return;
+            if (remaining <= 0) {
+                stop();
                 done();
+                return;
             }
-        }).catch(function () {
-            done();
-        });
+            remaining--;
+            fetch('/index.php?action=subscription_status&attempt=' + encodeURIComponent(ATTEMPT_TOKEN), {
+                method: 'GET',
+                credentials: 'same-origin',
+            }).then(function (resp) {
+                return resp.json();
+            }).then(function (data) {
+                if (finished) return;
+                if (data && data.ok === true) {
+                    if (data.status === 'active') {
+                        stop();
+                        window.location.href = '/index.php?action=meu_plano&subscribed=1';
+                        return;
+                    }
+                    if (data.status === 'rejected' || data.status === 'cancelled' || data.status === 'expired') {
+                        stop();
+                        setBusy(false);
+                        showError('Pagamento não aprovado. Confira os dados ou tente outro cartão.');
+                        return;
+                    }
+                }
+                setTimeout(tick, POLL_INTERVAL_MS);
+            }).catch(function () {
+                setTimeout(tick, POLL_INTERVAL_MS);
+            });
+        }
+        tick();
     }
 
     function boot(attemptsLeft) {
@@ -241,7 +272,7 @@
                     if (result.http === 502 || result.http === 500) {
                         pollStatus(function () {
                             setBusy(false);
-                            showError('Pagamento em processamento. Aguarde alguns instantes e recarregue a página.');
+                            showError('Pagamento ainda em processamento. Você pode voltar mais tarde.');
                         });
                         return;
                     }
@@ -257,7 +288,7 @@
                     token = '';
                     pollStatus(function () {
                         setBusy(false);
-                        showError('Falha de conexão. Verifique se a assinatura foi criada antes de tentar de novo.');
+                        showError('Pagamento ainda em processamento. Você pode voltar mais tarde.');
                     });
                 });
             },

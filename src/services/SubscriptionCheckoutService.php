@@ -9,10 +9,17 @@
  * DA LINHA. external_reference enviado ao MP e o proprio attempt_token; o MP
  * o ecoa no GET/webhook, fechando o ciclo sem heuristicas.
  *
+ * REGRA ESTRUTURAL: NENHUMA chamada HTTP ao Mercado Pago ocorre dentro de
+ * transacao SQL aberta. Transacoes sao curtas (re-ler, verificar, anexar,
+ * commitar — milissegundos) e nunca esperam rede.
+ *
+ * Ordem: validate -> lookup (leitura) -> reconcile_search (rede, sem txn) ->
+ * derive (leituras) -> mp_create (rede, sem txn) -> txn curta atomica.
+ *
  * Fases instrumentadas (para diagnostico seguro em logs):
- *   validate_input, begin, lock_attempt, reconcile_linked, reconcile_search,
- *   derive_server_data, mp_create, resolve_timeout, guard_mpid, persist_link,
- *   commit, done
+ *   pre_validation, attempt_lookup, reconcile_linked, reconcile_search,
+ *   derive_server_data, mp_create, resolve_timeout, txn_begin, txn_lock,
+ *   txn_attach, txn_status, plan_apply, txn_commit, done
  *
  * Em erro inesperado retorna http=500 com 'debug' sanitizado
  * (Subscription::describeDbError) em vez de lancar excecao.
@@ -38,7 +45,7 @@ class SubscriptionCheckoutService
      */
     public function processTokenPayment(int $userId, string $attemptToken, string $cardTokenId): array
     {
-        $phase = 'validate_input';
+        $phase = 'pre_validation';
         try {
             if ($userId <= 0) {
                 return $this->out(401, ['ok' => false, 'error' => 'unauthorized'], $phase);
@@ -51,26 +58,23 @@ class SubscriptionCheckoutService
                 return $this->out(400, ['ok' => false, 'error' => 'invalid_card_token'], $phase);
             }
 
-            $phase = 'begin';
-            $this->db->beginTransaction();
-
-            $phase = 'lock_attempt';
-            $attempt = $this->subscriptionModel->findByAttemptTokenForUpdate($attemptToken);
+            // Leitura SEM transacao: nenhuma trava e mantida durante rede.
+            $phase = 'attempt_lookup';
+            $attempt = $this->subscriptionModel->findByAttemptToken($attemptToken);
             if ($attempt === null || (int)($attempt['user_id'] ?? 0) !== $userId) {
-                $this->db->rollBack();
                 return $this->out(404, ['ok' => false, 'error' => 'attempt_not_found'], $phase);
             }
             $attemptId = (int)$attempt['id'];
             $slug = (string)($attempt['plan_slug'] ?? '');
             if (!in_array($slug, ['pro', 'premium'], true)) {
-                $this->db->rollBack();
                 return $this->out(400, ['ok' => false, 'error' => 'invalid_plan'], $phase);
             }
 
+            // Idempotencia: tentativa ja vinculada — reconcilia por leitura,
+            // sem transacao e sem novo POST ao MP.
             $phase = 'reconcile_linked';
             $existingMpId = (string)($attempt['mp_preapproval_id'] ?? '');
             if ($existingMpId !== '') {
-                $this->db->rollBack();
                 $check = $this->mpService->getPreapproval($existingMpId);
                 $mpStatus = 'unknown';
                 if ($check['ok'] === true && is_array($check['data'])) {
@@ -84,22 +88,21 @@ class SubscriptionCheckoutService
                 ], $phase);
             }
 
-            // Reconciliacao antes de POST: se o MP ja possui preapproval com
-            // este exact external_reference (ex.: timeout pos-criacao anterior
-            // ou webhook ainda nao processado), vincula em vez de duplicar.
+            // Reconciliacao (rede, SEM transacao): se o MP ja possui preapproval
+            // com este exact external_reference, vincula em vez de duplicar.
             $phase = 'reconcile_search';
             $found = $this->findOwnPreapproval($attempt);
             if ($found === 'conflict') {
-                $this->db->rollBack();
                 error_log('[subscribe_token] phase=reconcile_search multiplos registros MP para o attempt');
                 return $this->out(409, ['ok' => false, 'error' => 'conflict'], $phase);
             }
             if (is_array($found)) {
-                $body = $this->linkAttempt($attemptId, $found['mp_id'], $found['mp_status']);
+                $body = $this->linkAttempt($attemptId, $userId, $slug, $attemptToken, $found['mp_id'], $found['mp_status']);
                 $body['reconciled'] = true;
-                return $this->out(200, $body, $phase);
+                return $this->out(200, $body, 'txn_commit');
             }
 
+            // Tudo derivado do servidor (leituras, sem transacao).
             $phase = 'derive_server_data';
             $mpPlanId = MercadoPagoService::getPlanIdForSlug($slug);
             $userRow = $this->userModel->findById($userId);
@@ -107,12 +110,13 @@ class SubscriptionCheckoutService
                 ? (string)($userRow['email'] ?? '')
                 : (string)($userRow->email ?? '');
             if ($mpPlanId === null || $mpPlanId === '' || $email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                $this->db->rollBack();
                 return $this->out(400, ['ok' => false, 'error' => 'invalid_plan'], $phase);
             }
             $backUrl = rtrim((string)(getenv('APP_URL') ?: 'https://controle-de-gastos-one-silk.vercel.app'), '/')
                 . '/mercadopago_return.php';
 
+            // POST ao MP com idempotency key = attempt (SEM transacao aberta).
+            // Retry do mesmo attempt reenvia a MESMA chave: o MP deduplica.
             $phase = 'mp_create';
             $result = $this->mpService->createPreapproval(
                 $mpPlanId,
@@ -129,16 +133,14 @@ class SubscriptionCheckoutService
                     $phase = 'resolve_timeout';
                     $foundAfter = $this->findOwnPreapproval($attempt);
                     if (is_array($foundAfter)) {
-                        $body = $this->linkAttempt($attemptId, $foundAfter['mp_id'], $foundAfter['mp_status']);
+                        $body = $this->linkAttempt($attemptId, $userId, $slug, $attemptToken, $foundAfter['mp_id'], $foundAfter['mp_status']);
                         $body['reconciled'] = true;
-                        return $this->out(200, $body, $phase);
+                        return $this->out(200, $body, 'txn_commit');
                     }
                     if ($foundAfter === 'conflict') {
-                        $this->db->rollBack();
                         return $this->out(409, ['ok' => false, 'error' => 'conflict'], $phase);
                     }
                 }
-                $this->db->rollBack();
                 $userCode = MercadoPagoService::mapErrorToUserCode($result);
                 $httpCode = match ($userCode) {
                     'processing', 'service_error' => 502,
@@ -152,10 +154,13 @@ class SubscriptionCheckoutService
             $mpPreapprovalId = (string)$result['preapproval_id'];
             $body = $this->linkAttempt(
                 $attemptId,
+                $userId,
+                $slug,
+                $attemptToken,
                 $mpPreapprovalId,
                 strtolower(trim((string)($result['mp_status'] ?? 'authorized')))
             );
-            return $this->out(200, $body, $phase);
+            return $this->out(200, $body, 'txn_commit');
         } catch (Throwable $e) {
             if ($this->db->inTransaction()) {
                 try {
@@ -167,6 +172,9 @@ class SubscriptionCheckoutService
             if ($e instanceof RuntimeException && $e->getMessage() === 'mp_conflict') {
                 error_log('[subscribe_token] phase=' . $phase . ' mp_preapproval_id ja vinculado a outra assinatura');
                 return $this->out(409, ['ok' => false, 'error' => 'conflict'], $phase);
+            }
+            if ($e instanceof RuntimeException && $e->getMessage() === 'attempt_changed') {
+                return $this->out(404, ['ok' => false, 'error' => 'attempt_not_found'], $phase);
             }
             return [
                 'http' => 500,
@@ -218,35 +226,76 @@ class SubscriptionCheckoutService
     }
 
     /**
-     * Vincula mp_id a tentativa (com guardas), atualiza status, aplica plano,
-     * faz commit. Lanca RuntimeException('mp_conflict') em conflito.
+     * Vincula mp_id a tentativa em transacao CURTA e deterministica.
+     *
+     * NENHUMA rede acontece aqui dentro: re-le a linha com trava, revalida
+     * ownership + estado + idempotencia, anexa, atualiza, aplica plano e faz
+     * commit em milissegundos. Lanca RuntimeException('mp_conflict') em
+     * conflito (fail closed, sem persistir nada).
      *
      * @return array corpo de resposta de sucesso
      */
-    private function linkAttempt(int $attemptId, string $mpPreapprovalId, string $mpStatusRaw): array
-    {
-        $other = $this->subscriptionModel->findByMpId($mpPreapprovalId);
-        if ($other !== null && (int)$other['id'] !== $attemptId) {
-            throw new RuntimeException('mp_conflict');
-        }
-        $this->subscriptionModel->attachMpPreapprovalId($attemptId, $mpPreapprovalId);
-        $internalStatus = MercadoPagoWebhookService::mapMpStatusToInternal($mpStatusRaw);
-        if ($internalStatus === null) {
-            $internalStatus = Subscription::STATUS_PENDING;
-        }
-        $this->subscriptionModel->updateStatusById($attemptId, $internalStatus, $mpStatusRaw, null, null);
-        if ($internalStatus === Subscription::STATUS_ACTIVE) {
-            $fresh = $this->subscriptionModel->findById($attemptId);
-            if ($fresh !== null) {
-                $this->subscriptionModel->applyStatusToUser($fresh);
+    private function linkAttempt(
+        int $attemptId,
+        int $userId,
+        string $planSlug,
+        string $attemptToken,
+        string $mpPreapprovalId,
+        string $mpStatusRaw
+    ): array {
+        $this->db->beginTransaction();
+        try {
+            $fresh = $this->subscriptionModel->findByAttemptTokenForUpdate($attemptToken);
+            if ($fresh === null || (int)$fresh['id'] !== $attemptId || (int)($fresh['user_id'] ?? 0) !== $userId) {
+                throw new RuntimeException('attempt_changed');
             }
+            if ((string)($fresh['plan_slug'] ?? '') !== $planSlug) {
+                throw new RuntimeException('attempt_changed');
+            }
+            $rowMpId = (string)($fresh['mp_preapproval_id'] ?? '');
+            if ($rowMpId !== '') {
+                if ($rowMpId !== $mpPreapprovalId) {
+                    throw new RuntimeException('mp_conflict');
+                }
+                $this->db->commit();
+                return [
+                    'ok' => true,
+                    'already' => true,
+                    'status' => (string)($fresh['status'] ?? 'pending'),
+                    'redirect' => '/index.php?action=meu_plano&subscribed=1',
+                ];
+            }
+            $other = $this->subscriptionModel->findByMpId($mpPreapprovalId);
+            if ($other !== null && (int)$other['id'] !== $attemptId) {
+                throw new RuntimeException('mp_conflict');
+            }
+            $this->subscriptionModel->attachMpPreapprovalId($attemptId, $mpPreapprovalId);
+            $internalStatus = MercadoPagoWebhookService::mapMpStatusToInternal($mpStatusRaw);
+            if ($internalStatus === null) {
+                $internalStatus = Subscription::STATUS_PENDING;
+            }
+            $this->subscriptionModel->updateStatusById($attemptId, $internalStatus, $mpStatusRaw, null, null);
+            if ($internalStatus === Subscription::STATUS_ACTIVE) {
+                $applied = $this->subscriptionModel->findById($attemptId);
+                if ($applied !== null) {
+                    $this->subscriptionModel->applyStatusToUser($applied);
+                }
+            }
+            $this->db->commit();
+            return [
+                'ok' => true,
+                'status' => $internalStatus,
+                'redirect' => '/index.php?action=meu_plano&subscribed=1',
+            ];
+        } catch (Throwable $t) {
+            if ($this->db->inTransaction()) {
+                try {
+                    $this->db->rollBack();
+                } catch (Throwable $ignored) {
+                }
+            }
+            throw $t;
         }
-        $this->db->commit();
-        return [
-            'ok' => true,
-            'status' => $internalStatus,
-            'redirect' => '/index.php?action=meu_plano&subscribed=1',
-        ];
     }
 
     private function out(int $http, array $body, string $phase): array

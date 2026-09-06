@@ -221,6 +221,25 @@ class FakeAttemptStmt extends PDOStatement
     public function rowCount(): int { return $this->pdo->lastAffected; }
 }
 
+class TestEvents
+{
+    public static array $log = [];
+    public static function rec(string $e): void { self::$log[] = $e; }
+    public static function reset(): void { self::$log = []; }
+    public static function assertNoMpInsideTxn(string $name): bool
+    {
+        $depth = 0;
+        foreach (self::$log as $e) {
+            if ($e === 'db:begin') $depth++;
+            if ($e === 'db:commit' || $e === 'db:rollback') $depth = max(0, $depth - 1);
+            if ($depth > 0 && str_starts_with($e, 'mp:')) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
 class FakeAttemptPDO extends PDO
 {
     public array $tables = [];
@@ -252,9 +271,9 @@ class FakeAttemptPDO extends PDO
         return FakeAttemptStmt::make($this, $query);
     }
     public function exec(string $statement): int|false { return 0; }
-    public function beginTransaction(): bool { $this->txDepth++; return true; }
-    public function commit(): bool { $this->txDepth = max(0, $this->txDepth - 1); return true; }
-    public function rollBack(): bool { $this->txDepth = max(0, $this->txDepth - 1); return true; }
+    public function beginTransaction(): bool { $this->txDepth++; TestEvents::rec('db:begin'); return true; }
+    public function commit(): bool { $this->txDepth = max(0, $this->txDepth - 1); TestEvents::rec('db:commit'); return true; }
+    public function rollBack(): bool { $this->txDepth = max(0, $this->txDepth - 1); TestEvents::rec('db:rollback'); return true; }
     public function inTransaction(): bool { return $this->txDepth > 0; }
     public function lastInsertId(?string $name = null): string|false { return (string)$this->lastId; }
 }
@@ -282,6 +301,7 @@ class FakeAttemptMP extends MercadoPagoService
         if ($cardTokenId === '') {
             return ['ok' => false, 'status' => 0, 'error' => 'invalid_card_token'];
         }
+        TestEvents::rec('mp:post');
         $this->postCount++;
         $mock = array_shift($this->createQueue);
         if ($mock !== null) {
@@ -303,6 +323,7 @@ class FakeAttemptMP extends MercadoPagoService
 
     public function searchPreapprovalsByExternalReference(string $ext, int $limit = 10): array
     {
+        TestEvents::rec('mp:search');
         if ($this->searchFail) {
             return ['ok' => false, 'error' => 'network_error', 'matches' => []];
         }
@@ -323,6 +344,7 @@ class FakeAttemptMP extends MercadoPagoService
 
     public function getPreapproval(string $id): array
     {
+        TestEvents::rec('mp:get');
         if (!isset($this->preapprovals[$id])) {
             return ['ok' => false, 'status' => 404, 'error' => 'not_found'];
         }
@@ -556,7 +578,7 @@ echo "\n--- AT21: validacoes de entrada (sem DB) ---\n";
 $r = $svc->processTokenPayment(0, $a['attempt_token'], 'tok_valid_abc');
 assert_test(($r['http'] ?? 0) === 401, 'AT21a: user 0 -> 401');
 $r = $svc->processTokenPayment(5, 'zzz', 'tok_valid_abc');
-assert_test(($r['http'] ?? 0) === 400 && ($r['phase'] ?? '') === 'validate_input', 'AT21b: attempt malformado -> 400 phase=validate_input');
+assert_test(($r['http'] ?? 0) === 400 && ($r['phase'] ?? '') === 'pre_validation', 'AT21b: attempt malformado -> 400 phase=pre_validation');
 $r = $svc->processTokenPayment(5, $a['attempt_token'], '');
 assert_test(($r['body']['error'] ?? '') === 'invalid_card_token', 'AT21c: token vazio -> invalid_card_token');
 
@@ -660,6 +682,49 @@ assert_test(($r['http'] ?? 0) === 500, 'AT30a: http 500');
 assert_test(($r['body']['error'] ?? '') === 'internal_error', 'AT30b: erro generico ao cliente');
 assert_test(isset($r['phase']) && isset($r['debug']['sqlstate']), 'AT30c: fase+debug presentes p/ log');
 assert_test(strpos(json_encode($r['body']), '08006') === false, 'AT30d: sqlstate NAO vaza ao cliente');
+
+echo "\n--- AT31: NENHUMA rede dentro de transacao (prova por eventos) ---\n";
+foreach (['happy' => 'tok_valid_abc', 'timeout' => 'tok_valid_abc'] as $mode => $tok) {
+    [$db, $mp, $sm] = makeAttemptEnv();
+    $a = $sm->createAttempt(5, 'pro', 2);
+    if ($mode === 'timeout') {
+        $mp->createQueue = [['ok' => false, 'status' => 0, 'error' => 'network_error']];
+    }
+    TestEvents::reset();
+    $svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+    $svc->processTokenPayment(5, $a['attempt_token'], $tok);
+    assert_test(TestEvents::assertNoMpInsideTxn('x'), "AT31-$mode: zero chamadas MP entre begin e commit/rollback");
+}
+
+echo "\n--- AT32: webhook vence a corrida, subscribe retorna already ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$mp->addPreapproval('mp_RACE', 'authorized', $a['attempt_token'], 'plan_pro_xyz');
+$ws = new MercadoPagoWebhookService($db, $mp);
+$wr = $ws->process('mp_RACE');
+assert_test($wr['action'] === 'processed', 'AT32a: webhook vinculou primeiro');
+TestEvents::reset();
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['body']['already'] ?? false) === true, 'AT32b: subscribe retorna already:true');
+assert_test($mp->postCount === 0, 'AT32c: zero POST (webhook venceu, sem duplicata)');
+assert_test(TestEvents::assertNoMpInsideTxn('x'), 'AT32d: ordem rede/txn preservada');
+
+echo "\n--- AT33: retry apos falha local nao duplica no MP ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(12, 'premium', 3);
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r1 = $svc->processTokenPayment(12, $a['attempt_token'], 'tok_valid_abc');
+$r2 = $svc->processTokenPayment(12, $a['attempt_token'], 'tok_valid_abc');
+assert_test($mp->postCount === 1, 'AT33a: 2 chamadas locais = 1 POST ao MP');
+assert_test(($r2['body']['already'] ?? false) === true, 'AT33b: segunda retorna already');
+
+echo "\n--- AT34: poll limitado no frontend (sem spinner infinito) ---\n";
+$jsSrc = (string)file_get_contents($ROOT . '/public/js/mp_subscribe.js');
+assert_test(str_contains($jsSrc, 'POLL_MAX_ATTEMPTS'), 'AT34a: limite de tentativas definido');
+assert_test(str_contains($jsSrc, 'POLL_INTERVAL_MS'), 'AT34b: intervalo definido');
+assert_test(str_contains($jsSrc, 'voltar mais tarde'), 'AT34c: mensagem de deadline sem spinner infinito');
+assert_test(str_contains($jsSrc, "'rejected'") && str_contains($jsSrc, "'cancelled'"), 'AT34d: estados terminais encerram o poll');
 
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;
