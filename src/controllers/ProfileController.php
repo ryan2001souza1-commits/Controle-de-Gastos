@@ -171,9 +171,16 @@ class ProfileController
                 && in_array($attemptRow['plan_slug'] ?? '', ['pro', 'premium'], true)
                 && (string)($attemptRow['status'] ?? '') === Subscription::STATUS_PENDING
             ) {
+                $checkoutSlug = (string)$attemptRow['plan_slug'];
                 $checkoutAttempt = [
                     'attempt_token' => $checkoutToken,
-                    'plan_slug' => (string)$attemptRow['plan_slug'],
+                    'plan_slug' => $checkoutSlug,
+                    // CardForm exige amount > 0 para buscar emissor/parcelas.
+                    // Valor vem do catalogo do servidor, nunca do request.
+                    'amount' => number_format(
+                        (float)($upgrades[$checkoutSlug]['numeric_price'] ?? 0),
+                        2, '.', ''
+                    ),
                 ];
                 $mpPublicKey = (string)getenv('MERCADOPAGO_PUBLIC_KEY');
             }

@@ -89,11 +89,13 @@ $errText = $errMessages[$errKey] ?? null;
 <?php if (!empty($checkoutAttempt) && !empty($mpPublicKey)): ?>
 <section class="panel" style="margin-bottom:var(--space-5)" id="mp-checkout-panel"
     data-mp-public-key="<?= htmlspecialchars($mpPublicKey, ENT_QUOTES) ?>"
-    data-attempt-token="<?= htmlspecialchars($checkoutAttempt['attempt_token'], ENT_QUOTES) ?>">
+    data-attempt-token="<?= htmlspecialchars($checkoutAttempt['attempt_token'], ENT_QUOTES) ?>"
+    data-mp-amount="<?= htmlspecialchars($checkoutAttempt['amount'] ?? '', ENT_QUOTES) ?>">
     <div class="panel-header">
         <div class="panel-title">Pagamento — <?= htmlspecialchars($checkoutAttempt['plan_slug'] === 'premium' ? 'Premium' : 'Pro') ?></div>
         <div class="panel-subtitle">Os dados do cartão são tokenizados pelo Mercado Pago e nunca passam pelo nosso servidor.</div>
     </div>
+    <div id="mp-diag-line" style="font-size:12px;color:var(--color-text-3);padding:0 var(--space-5);display:none"></div>
     <div class="panel-body-sm">
         <form id="mp-card-form" novalidate>
             <div style="display:flex;flex-direction:column;gap:var(--space-3);max-width:440px">
