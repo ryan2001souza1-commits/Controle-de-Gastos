@@ -1137,6 +1137,13 @@ assert_test($hasSuffix, 'AT54b: logs de desfecho carregam attempt_suffix (forens
 $indexSrc = (string)file_get_contents($ROOT . '/public/index.php');
 assert_test(!preg_match('/attempt=%s/', $indexSrc), 'AT54c: log de 500 usa attempt_suffix (não token completo)');
 assert_test(str_contains($svcSrc, '[subscribe_token] mp_error phase='), 'AT54d: ramo de erro do MP loga fase+http+código+sufixo (forense de 4xx)');
+assert_test(str_contains($svcSrc, '[mp_device_forward] attempt_suffix='), 'AT54e: prova de encaminhamento presence-only (device_present/valid/header)');
+$leakFwd = false;
+foreach (explode("\n", $svcSrc) as $line) {
+    if (!str_contains($line, 'mp_device_forward')) continue;
+    if (preg_match('/\$deviceId\b/', $line) && !str_contains($line, 'is_string($deviceId)')) $leakFwd = true;
+}
+assert_test(!$leakFwd, 'AT54f: linha forward nunca interpola valor (só booleanos)');
 
 echo "\n--- AT55: MP 400 CC_VAL_433 (mock do caso real 06/09) ---\n";
 [$db, $mp, $sm] = makeAttemptEnv();

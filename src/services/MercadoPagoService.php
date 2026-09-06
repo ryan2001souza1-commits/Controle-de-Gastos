@@ -203,8 +203,18 @@ class MercadoPagoService
                     $detail = '';
                 }
             }
+            // Body sanitizado para forense de suporte (WCS-49458): preserva
+            // estrutura/codigos/mensagens, redige PII/segredos. Capado.
+            $safeBody = json_encode(
+                self::sanitizeMpErrorBody($data),
+                JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+            );
+            if (!is_string($safeBody) || strlen($safeBody) > 600) {
+                $safeBody = substr(is_string($safeBody) ? $safeBody : '{}', 0, 600);
+            }
             error_log('[MercadoPagoService] createPreapproval erro HTTP ' . $httpStatus . ': ' . $msg
-                . ($detail !== '' ? ' detail=' . $detail : ''));
+                . ($detail !== '' ? ' detail=' . $detail : '')
+                . ' body=' . $safeBody);
             return ['ok' => false, 'status' => $httpStatus, 'error' => $msg, 'mp_detail' => $detail];
         }
 
@@ -593,6 +603,68 @@ class MercadoPagoService
             return null;
         }
         return $reason;
+    }
+
+    /**
+     * Sanitiza o body de erro do MP para logging forense (suporte WCS-49458).
+     * Preserva estrutura/codigos/mensagens/tipos; redige PII e segredos:
+     * emails, chaves (TEST-/APP_USR-), Bearer, PAN (13-19 digitos), hex
+     * longo (tokens/ids opacos), com teto de tamanho. Causas aninhadas
+     * (cause/causes) sanitizadas um nivel. Nunca inclui Device ID, card
+     * token, Access Token ou Public Key (esses nunca entram no body lido).
+     *
+     * @param mixed $data body decodificado (ou qualquer valor)
+     */
+    public static function sanitizeMpErrorBody($data): array
+    {
+        if (!is_array($data)) {
+            return [];
+        }
+        $out = [];
+        $count = 0;
+        foreach ($data as $key => $value) {
+            if ($count >= 20) {
+                break;
+            }
+            $count++;
+            $safeKey = is_string($key) ? substr(preg_replace('/[^\w\-]/', '_', $key) ?? 'k', 0, 40) : 'k';
+            if (is_string($value)) {
+                $out[$safeKey] = self::redactSecretText(substr($value, 0, 200));
+            } elseif (is_int($value) || is_float($value) || is_bool($value) || $value === null) {
+                $out[$safeKey] = $value;
+            } elseif (is_array($value) && ($safeKey === 'cause' || $safeKey === 'causes')) {
+                $nested = [];
+                $n = 0;
+                foreach ($value as $ck => $cv) {
+                    if ($n >= 10) {
+                        break;
+                    }
+                    $n++;
+                    $nkey = is_string($ck) ? substr($ck, 0, 40) : (int)$ck;
+                    $nested[$nkey] = is_string($cv)
+                        ? self::redactSecretText(substr($cv, 0, 200))
+                        : (is_scalar($cv) || $cv === null ? $cv : '[nested]');
+                }
+                $out[$safeKey] = $nested;
+            } else {
+                $out[$safeKey] = '[omitted]';
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Redige segredos/PII de um texto livre (mesma politica de
+     * Subscription::describeDbError, aplicada a bodies do MP).
+     */
+    public static function redactSecretText(string $text): string
+    {
+        $text = preg_replace('/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/', '<email>', $text) ?? $text;
+        $text = preg_replace('/(TEST-|APP_USR-)[A-Za-z0-9_-]+/', '$1<redacted>', $text) ?? $text;
+        $text = preg_replace('/Bearer\s+[A-Za-z0-9._~+\/-]+/', 'Bearer <redacted>', $text) ?? $text;
+        $text = preg_replace('/\b\d{13,19}\b/', '<card-redacted>', $text) ?? $text;
+        $text = preg_replace('/\b[0-9a-fA-F]{16,}\b/', '<hex-redacted>', $text) ?? $text;
+        return $text;
     }
 
     /**

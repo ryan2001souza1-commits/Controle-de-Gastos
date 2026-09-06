@@ -634,6 +634,31 @@ foreach (['preapproval_plan_id', 'payer_email', 'card_token_id', 'external_refer
     assert_test(array_key_exists($k, $s->lastCall['postfields']), "CTX16: payload contém '$k'");
 }
 
+echo "\n--- sanitizeMpErrorBody (forense WCS-49458, sem vazar segredos) ---\n";
+$b = MercadoPagoService::sanitizeMpErrorBody([
+    'message' => 'CC_VAL_433 Credit card validation has failed',
+    'status' => 400,
+    'error' => 'bad_request',
+    'status_detail' => 'cc_rejected_high_risk',
+]);
+assert_test(($b['message'] ?? '') === 'CC_VAL_433 Credit card validation has failed', 'SAN1: message verbatim preservada');
+assert_test(($b['status'] ?? 0) === 400, 'SAN2: status numérico preservado');
+assert_test(($b['status_detail'] ?? '') === 'cc_rejected_high_risk', 'SAN3: status_detail preservado');
+$b2 = MercadoPagoService::sanitizeMpErrorBody([
+    'message' => 'fail payer@mail.com card 4111111111111111 hex abcdef0123456789 key APP_USR-zzz Bearer tok123',
+    'cause' => [['description' => 'x payer@mail.com'], 'plain'],
+    'nested_obj' => ['a' => 1],
+]);
+$blob2 = json_encode($b2);
+assert_test(strpos($blob2, 'payer@mail.com') === false, 'SAN4: e-mail redigido');
+assert_test(strpos($blob2, '4111111111111111') === false, 'SAN5: PAN redigido');
+assert_test(strpos($blob2, 'abcdef0123456789') === false, 'SAN6: hex redigido');
+assert_test(strpos($blob2, 'APP_USR-zzz') === false, 'SAN7: chave redigida');
+assert_test(strpos($blob2, 'Bearer tok123') === false, 'SAN8: bearer redigido');
+assert_test(($b2['nested_obj'] ?? '') === '[omitted]', 'SAN9: aninhado não-causa omitido');
+assert_test(MercadoPagoService::sanitizeMpErrorBody('str') === [], 'SAN10: não-array -> vazio');
+assert_test(MercadoPagoService::sanitizeMpErrorBody(['k' => str_repeat('z', 500)])['k'] !== str_repeat('z', 500), 'SAN11: teto de tamanho');
+
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed + $skipped;
 echo "Total: $total | \033[32mPassed: $passed\033[0m | \033[31mFailed: $failed\033[0m | \033[33mSkipped: $skipped\033[0m\n";

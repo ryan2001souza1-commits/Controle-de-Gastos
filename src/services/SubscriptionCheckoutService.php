@@ -219,12 +219,22 @@ class SubscriptionCheckoutService
             // Observabilidade presence-only (formato oficial [mp_context]):
             // jamais valores — só presença. Sem email/nome/doc/device.
             $ctx = self::contextPresence($userRow);
+            $devicePresent = (is_string($deviceId) && trim($deviceId) !== '');
             error_log(sprintf(
                 '[mp_context] attempt_suffix=%s payer_email=%s payer_name=%s payer_identification=%s device_id=%s device_header=%s',
                 substr($attemptToken, -8),
                 'yes',
                 $ctx['payer_name'],
                 $ctx['payer_identification'],
+                $sanitizedDeviceId !== null ? 'yes' : 'no',
+                $sanitizedDeviceId !== null ? 'yes' : 'no'
+            ));
+            // Prova de encaminhamento (WCS-49458): distingue "não recebido"
+            // de "recebido-mas-inválido". Booleanos apenas, nunca o valor.
+            error_log(sprintf(
+                '[mp_device_forward] attempt_suffix=%s device_present=%s device_valid=%s header_present=%s',
+                substr($attemptToken, -8),
+                $devicePresent ? 'yes' : 'no',
                 $sanitizedDeviceId !== null ? 'yes' : 'no',
                 $sanitizedDeviceId !== null ? 'yes' : 'no'
             ));
