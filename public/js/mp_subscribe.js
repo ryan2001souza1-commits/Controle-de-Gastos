@@ -36,6 +36,34 @@
         return msg.slice(0, 160);
     }
 
+    // Serializa erros do SDK (que vêm como ARRAY de objetos) expondo SOMENTE
+    // campos seguros de diagnóstico. Nunca imprime chaves, tokens ou PAN.
+    function safeSerializeError(err, depth) {
+        depth = depth || 0;
+        if (depth > 2) return '[nested]';
+        if (Array.isArray(err)) {
+            return '[' + err.map(function (e) { return safeSerializeError(e, depth + 1); }).join(' | ') + ']';
+        }
+        if (err && typeof err === 'object') {
+            var out = {};
+            ['message', 'type', 'code', 'cause', 'field', 'description', 'status'].forEach(function (k) {
+                if (err[k] !== undefined && err[k] !== null && typeof err[k] !== 'object') {
+                    out[k] = String(err[k]);
+                }
+            });
+            ['causes', 'errors'].forEach(function (k) {
+                if (Array.isArray(err[k])) {
+                    out[k] = err[k].map(function (e) { return safeSerializeError(e, depth + 1); }).join(' | ');
+                }
+            });
+            var keys = Object.keys(out);
+            if (keys.length === 0) return '[object-sem-campos-seguros]';
+            var s = keys.map(function (k) { return k + '=' + out[k]; }).join('; ');
+            return sanitizeError(s).slice(0, 400);
+        }
+        return sanitizeError(err);
+    }
+
     var PUBLIC_KEY = panel.getAttribute('data-mp-public-key') || '';
     var ATTEMPT_TOKEN = panel.getAttribute('data-attempt-token') || '';
     var AMOUNT = panel.getAttribute('data-mp-amount') || '';
@@ -135,7 +163,7 @@
         try {
             mp = new MercadoPago(PUBLIC_KEY);
         } catch (e) {
-            reportDiag('init-error: ' + sanitizeError(e));
+            reportDiag('init-error: ' + safeSerializeError(e));
             showError('Não foi possível iniciar o pagamento. Recarregue a página.');
             return;
         }
@@ -149,12 +177,16 @@
             expirationDate: { id: 'mp-expirationDate', placeholder: 'MM/AA' },
             securityCode: { id: 'mp-securityCode', placeholder: 'CVV' },
             cardholderName: { id: 'mp-cardholderName', placeholder: 'Nome impresso' },
+            issuer: { id: 'mp-issuer', placeholder: 'Banco emissor' },
+            installments: { id: 'mp-installments', placeholder: 'Parcelas' },
+            identificationType: { id: 'mp-identificationType', placeholder: 'Tipo de documento' },
+            identificationNumber: { id: 'mp-identificationNumber', placeholder: 'Número do documento' },
             cardholderEmail: { id: 'mp-cardholderEmail', placeholder: 'E-mail' },
         },
         callbacks: {
             onFormMounted: function (error) {
                 if (error) {
-                    reportDiag('mount-error: ' + sanitizeError(error));
+                    reportDiag('mount-error: ' + safeSerializeError(error));
                     showError('Não foi possível carregar o formulário de pagamento. Recarregue a página.');
                     return;
                 }
@@ -232,7 +264,7 @@
         },
             });
         } catch (e) {
-            reportDiag('cardform-error: ' + sanitizeError(e));
+            reportDiag('cardform-error: ' + safeSerializeError(e));
             showError('Não foi possível carregar o formulário de pagamento. Recarregue a página.');
             return;
         }

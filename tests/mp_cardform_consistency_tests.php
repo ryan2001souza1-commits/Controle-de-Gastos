@@ -62,6 +62,13 @@ assert_test(
 $leak = preg_match('/diagLine\s*\.\s*textContent\s*=\s*[^;]*PUBLIC_KEY[^;]*\+/', $js);
 assert_test($leak === 0, 'diagnostico nunca concatena a chave');
 
+echo "\n--- conformidade com formato documentado do CardForm ---\n";
+foreach (['issuer', 'installments', 'identificationType', 'identificationNumber'] as $field) {
+    assert_test(str_contains($js, $field . ':'), "CardForm configura '$field' (formato oficial)");
+}
+assert_test(str_contains($js, 'safeSerializeError'), 'serializador seguro de erros do SDK presente');
+assert_test(str_contains($js, '[object-sem-campos-seguros]') || str_contains($js, 'message'), 'serializador extrai campos seguros');
+
 echo "\n--- init robusta (anti-falha-silenciosa) ---\n";
 assert_test(str_contains($js, 'new MercadoPago'), 'SDK inicializado via new MercadoPago');
 assert_test(str_contains($js, 'cardForm = mp.cardForm'), 'CardForm inicializado');

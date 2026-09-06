@@ -110,6 +110,26 @@ $errText = $errMessages[$errKey] ?? null;
                         <div id="mp-securityCode" style="height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px"></div>
                     </label>
                 </div>
+                <div style="display:flex;gap:var(--space-3)">
+                    <label style="font-size:13px;color:var(--color-text-2);flex:1">Banco emissor
+                        <select id="mp-issuer"
+                            style="width:100%;height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px;background:var(--color-surface-1);color:var(--color-text-1)"></select>
+                    </label>
+                    <label style="font-size:13px;color:var(--color-text-2);flex:1">Parcelas
+                        <select id="mp-installments"
+                            style="width:100%;height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px;background:var(--color-surface-1);color:var(--color-text-1)"></select>
+                    </label>
+                </div>
+                <div style="display:flex;gap:var(--space-3)">
+                    <label style="font-size:13px;color:var(--color-text-2);flex:1">Tipo de documento
+                        <select id="mp-identificationType"
+                            style="width:100%;height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px;background:var(--color-surface-1);color:var(--color-text-1)"></select>
+                    </label>
+                    <label style="font-size:13px;color:var(--color-text-2);flex:1">Número do documento
+                        <input type="text" id="mp-identificationNumber" autocomplete="off" inputmode="numeric"
+                            style="width:100%;height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px;background:var(--color-surface-1);color:var(--color-text-1)">
+                    </label>
+                </div>
                 <label style="font-size:13px;color:var(--color-text-2)">Nome impresso no cartão
                     <input type="text" id="mp-cardholderName" autocomplete="cc-name"
                         style="width:100%;height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px;background:var(--color-surface-1);color:var(--color-text-1)">
