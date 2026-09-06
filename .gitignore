@@ -6,3 +6,8 @@ vendor/
 node_modules/
 node_modules/
 .vercel
+# Scripts temporários de diagnóstico (nunca versionar)
+read_prod_*.php
+api/db_read.php
+api/db_debug*.php
+api/db_diag*.php
