@@ -143,12 +143,14 @@
             }).then(function (data) {
                 if (finished) return;
                 if (data && data.ok === true) {
-                    if (data.status === 'active') {
+                    // Sucesso SOMENTE com status/outcome active (nunca ok sozinho).
+                    var effStatus = (data.outcome === 'active') ? 'active' : data.status;
+                    if (effStatus === 'active') {
                         stop();
                         window.location.href = '/index.php?action=meu_plano&subscribed=1';
                         return;
                     }
-                    if (data.status === 'rejected' || data.status === 'cancelled' || data.status === 'expired') {
+                    if (effStatus === 'rejected' || effStatus === 'cancelled' || effStatus === 'expired') {
                         stop();
                         setBusy(false);
                         showError('Pagamento não aprovado. Confira os dados ou tente outro cartão.');

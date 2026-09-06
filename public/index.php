@@ -70,6 +70,7 @@ require_once __DIR__ . '/../src/services/AiService.php';
 require_once __DIR__ . '/../src/services/MercadoPagoService.php';
 require_once __DIR__ . '/../src/services/MercadoPagoWebhookService.php';
 require_once __DIR__ . '/../src/services/SubscriptionCheckoutService.php';
+require_once __DIR__ . '/../src/services/SubscriptionPollService.php';
 require_once __DIR__ . '/../src/controllers/AiController.php';
 
 
@@ -439,20 +440,21 @@ if ($action === 'register') {
     }
     // Polling autenticado da propria tentativa (para retry apos timeout).
     // Resposta identica para inexistente vs. de outro usuario: nao vaza existencia.
+    // Delega a SubscriptionPollService: pending+linked+stale reconcilia com o
+    // MP de forma controlada (throttle); demais casos: leitura local, zero rede.
     $attemptToken = strtolower(trim((string)($_GET['attempt'] ?? '')));
-    $subscriptionModel = new Subscription($db);
-    $row = $subscriptionModel->findByAttemptToken($attemptToken);
-    if ($row === null || (int)($row['user_id'] ?? 0) !== $userId) {
-        http_response_code(404);
-        echo json_encode(['ok' => false, 'error' => 'not_found']);
+    try {
+        $mpService = new MercadoPagoService();
+    } catch (Throwable $e) {
+        error_log('[subscription_status] service init failed');
+        http_response_code(503);
+        echo json_encode(['ok' => false, 'error' => 'service_unavailable']);
         exit;
     }
-    echo json_encode([
-        'ok' => true,
-        'status' => (string)($row['status'] ?? 'pending'),
-        'plan_slug' => (string)($row['plan_slug'] ?? ''),
-        'linked' => ((string)($row['mp_preapproval_id'] ?? '') !== ''),
-    ]);
+    $pollService = new SubscriptionPollService($db, $mpService);
+    $res = $pollService->getStatus($userId, $attemptToken);
+    http_response_code((int)($res['http'] ?? 500));
+    echo json_encode($res['body'] ?? ['ok' => false, 'error' => 'internal_error']);
     exit;
 } elseif ($action === 'cancel') {
     requireLogin();

@@ -196,10 +196,24 @@ class MercadoPagoWebhookService
     }
 
     /**
-     * Mapeia o status do Mercado Pago para o status interno do sistema.
-     * Documentacao oficial do MP: preapproval status values.
+     * CANONICO: mapeia o status da assinatura no Mercado Pago para o status
+     * interno do sistema. UNICA fonte de verdade — todo o codigo (checkout,
+     * webhook, poll, reconciliacao, return, cancel) deve passar por aqui.
+     *
+     * Tabela explicita (valores oficiais da API de preapproval do MP):
+     *   authorized -> active      (assinatura paga/em cobranca)
+     *   active     -> active      (variante observada em conta)
+     *   pending    -> pending     (aguardando autorizacao — NAO e sucesso)
+     *   in_process -> pending     (variante de pending)
+     *   paused     -> paused
+     *   cancelled  -> cancelled
+     *   canceled   -> cancelled   (variante ortografica)
+     *   rejected   -> rejected
+     *   failure    -> rejected    (variante de recusa)
+     *   expired    -> expired
+     *   outro      -> null        (desconhecido: fail-open, nunca ativar)
      */
-    public static function mapMpStatusToInternal(string $mpStatus): ?string
+    public static function mapMercadoPagoSubscriptionStatus(string $mpStatus): ?string
     {
         $mpStatus = strtolower(trim($mpStatus));
         return match ($mpStatus) {
@@ -215,6 +229,16 @@ class MercadoPagoWebhookService
             'failure'      => Subscription::STATUS_REJECTED,
             default        => null,
         };
+    }
+
+    /**
+     * Mapeia o status do Mercado Pago para o status interno do sistema.
+     * Alias preservado por compatibilidade — delega ao canonico
+     * mapMercadoPagoSubscriptionStatus().
+     */
+    public static function mapMpStatusToInternal(string $mpStatus): ?string
+    {
+        return self::mapMercadoPagoSubscriptionStatus($mpStatus);
     }
 
     /**

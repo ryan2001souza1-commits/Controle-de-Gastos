@@ -80,7 +80,10 @@ class SubscriptionReconciler
             ];
         }
 
-        if ($mpStatus !== 'authorized') {
+        // Porta unica de ativacao: status interno precisa ser active pelo
+        // mapa canonico (authorized/active). Regra inline antiga exigia a
+        // string exata 'authorized' e divergia do restante do sistema.
+        if (MercadoPagoWebhookService::mapMercadoPagoSubscriptionStatus($mpStatus) !== Subscription::STATUS_ACTIVE) {
             return [
                 'ok' => false,
                 'action' => 'not_authorized',

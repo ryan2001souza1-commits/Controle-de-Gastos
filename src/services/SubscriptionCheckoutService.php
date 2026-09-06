@@ -390,6 +390,15 @@ class SubscriptionCheckoutService
                 }
             }
             $this->setPhase('link_complete');
+            // Forense sanitizada da resposta do MP (Fase 5): http/status do
+            // POST já passaram por aqui como mpStatusRaw→internal. Sem ids,
+            // tokens, emails ou dados do cartão — só o desfecho.
+            error_log(sprintf(
+                '[subscribe_token] link_complete mp_status=%s local=%s outcome=%s',
+                preg_replace('/[^a-z_]/', '', $mpStatusRaw),
+                preg_replace('/[^a-z_]/', '', $internalStatus),
+                preg_replace('/[^a-z_]/', '', self::outcomeFor($internalStatus))
+            ));
             return [
                 'ok' => true,
                 'status' => $internalStatus,
