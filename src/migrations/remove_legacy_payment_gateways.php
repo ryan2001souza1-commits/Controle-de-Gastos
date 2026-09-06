@@ -5,8 +5,11 @@
  * Remove colunas, indices e tabelas legadas dos gateways de pagamento
  * Asaas e Mercado Pago que foram descontinuados.
  *
- * IMPORTANTE: mp_preapproval_id NAO deve ser removido — e usado pelo
- * fluxo ativo de assinaturas via Mercado Pago (checkout hospedado).
+ * IMPORTANTE: este arquivo APENAS remove colunas/indíces já descontinuados
+ * (operações DROP IF EXISTS = no-op onde já aplicado). A integração Mercado
+ * Pago foi removida por completo do código; este arquivo NÃO toca em dados
+ * de assinaturas existentes e NÃO deve ganhar novas operações destrutivas
+ * sem revisão explícita.
  * A coluna e adicionada pela migration principal (migrations.php) e
  * mantida por este arquivo.
  *

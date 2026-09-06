@@ -1,6 +1,5 @@
 <?php
 require_once __DIR__ . '/../services/CpfValidator.php';
-require_once __DIR__ . '/../models/Subscription.php';
 
 class ProfileController
 {
@@ -148,43 +147,12 @@ class ProfileController
             ];
         }
 
+        // Sem gateway de pagamento ativo: sem cancelamento via app e sem
+        // checkout. Assinaturas temporariamente indisponíveis (Fase 4).
         $canCancelSubscription = false;
-        if ($currentPlanSlug !== 'gratuito') {
-            $subscriptionModel = new Subscription($this->db);
-            $activeSub = $subscriptionModel->findActiveByUser($userId);
-            $canCancelSubscription = ($activeSub !== null);
-        }
 
-        // Checkout com tokenizacao (JS SDK): se a URL traz ?checkout=<attempt>,
-        // e a tentativa pertence ao usuario autenticado e esta pendente, a view
-        // exibe o CardForm. PUBLIC_KEY pode ir ao frontend por design do MP;
-        // ACCESS_TOKEN jamais sai do backend.
         $checkoutAttempt = null;
         $mpPublicKey = '';
-        $checkoutToken = strtolower(trim((string)($_GET['checkout'] ?? '')));
-        if ($checkoutToken !== '' && Subscription::isAttemptToken($checkoutToken)) {
-            $attemptModel = new Subscription($this->db);
-            $attemptRow = $attemptModel->findByAttemptToken($checkoutToken);
-            if (
-                $attemptRow !== null
-                && (int)($attemptRow['user_id'] ?? 0) === $userId
-                && in_array($attemptRow['plan_slug'] ?? '', ['pro', 'premium'], true)
-                && (string)($attemptRow['status'] ?? '') === Subscription::STATUS_PENDING
-            ) {
-                $checkoutSlug = (string)$attemptRow['plan_slug'];
-                $checkoutAttempt = [
-                    'attempt_token' => $checkoutToken,
-                    'plan_slug' => $checkoutSlug,
-                    // CardForm exige amount > 0 para buscar emissor/parcelas.
-                    // Valor vem do catalogo do servidor, nunca do request.
-                    'amount' => number_format(
-                        (float)($upgrades[$checkoutSlug]['numeric_price'] ?? 0),
-                        2, '.', ''
-                    ),
-                ];
-                $mpPublicKey = (string)getenv('MERCADOPAGO_PUBLIC_KEY');
-            }
-        }
 
         $featureLabels = [
             'relatorios'          => ['label' => 'Relatórios',          'icon' => 'chart',     'desc' => 'Acesso à tela completa de relatórios'],

@@ -91,20 +91,8 @@ assert_test(
     'MG07a: UNIQUE INDEX criado sobre mp_preapproval_id (mesma coluna do nao-unique existente)'
 );
 
-echo "\n--- MG08: validacao checkout_url no storeInitPoint ---\n";
-$subSrc = file_get_contents($ROOT . '/src/models/Subscription.php');
-assert_test(
-    strpos($subSrc, 'checkout_url') !== false,
-    "MG08a: storeInitPoint usa checkout_url"
-);
-assert_test(
-    strpos($subSrc, 'SET checkout_url = :init') !== false,
-    "MG08b: storeInitPoint usa SET checkout_url = :init"
-);
-assert_test(
-    strpos($subSrc, 'raw_status NOT LIKE \'%|init:%\'') === false,
-    "MG08c: storeInitPoint NAO usa mais NOT LIKE %|init:%"
-);
+echo "\n--- MG08: storeInitPoint removido com o model Subscription (MP) ---\n";
+assert_test(!file_exists($ROOT . '/src/models/Subscription.php'), 'MG08a: model Subscription removido (init_point era checkout MP)');
 
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;

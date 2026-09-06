@@ -86,74 +86,7 @@ $errText = $errMessages[$errKey] ?? null;
     </div>
 <?php endif; ?>
 
-<?php if (!empty($checkoutAttempt) && !empty($mpPublicKey)): ?>
-<section class="panel" style="margin-bottom:var(--space-5)" id="mp-checkout-panel"
-    data-mp-public-key="<?= htmlspecialchars($mpPublicKey, ENT_QUOTES) ?>"
-    data-attempt-token="<?= htmlspecialchars($checkoutAttempt['attempt_token'], ENT_QUOTES) ?>"
-    data-mp-amount="<?= htmlspecialchars($checkoutAttempt['amount'] ?? '', ENT_QUOTES) ?>">
-    <div class="panel-header">
-        <div class="panel-title">Pagamento — <?= htmlspecialchars($checkoutAttempt['plan_slug'] === 'premium' ? 'Premium' : 'Pro') ?></div>
-        <div class="panel-subtitle">Os dados do cartão são tokenizados pelo Mercado Pago e nunca passam pelo nosso servidor.</div>
-    </div>
-    <div id="mp-diag-line" style="font-size:12px;color:var(--color-text-3);padding:0 var(--space-5);display:none"></div>
-    <div class="panel-body-sm">
-        <form id="mp-card-form" novalidate>
-            <div style="display:flex;flex-direction:column;gap:var(--space-3);max-width:440px">
-                <label style="font-size:13px;color:var(--color-text-2)">Número do cartão
-                    <div id="mp-cardNumber" style="height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px"></div>
-                </label>
-                <div style="display:flex;gap:var(--space-3)">
-                    <label style="font-size:13px;color:var(--color-text-2);flex:1">Validade (MM/AA)
-                        <div id="mp-expirationDate" style="height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px"></div>
-                    </label>
-                    <label style="font-size:13px;color:var(--color-text-2);flex:1">CVV
-                        <div id="mp-securityCode" style="height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px"></div>
-                    </label>
-                </div>
-                <div style="display:flex;gap:var(--space-3)">
-                    <label style="font-size:13px;color:var(--color-text-2);flex:1">Banco emissor
-                        <select id="mp-issuer"
-                            style="width:100%;height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px;background:var(--color-surface-1);color:var(--color-text-1)"></select>
-                    </label>
-                    <label style="font-size:13px;color:var(--color-text-2);flex:1">Parcelas
-                        <select id="mp-installments"
-                            style="width:100%;height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px;background:var(--color-surface-1);color:var(--color-text-1)"></select>
-                    </label>
-                </div>
-                <div style="display:flex;gap:var(--space-3)">
-                    <label style="font-size:13px;color:var(--color-text-2);flex:1">Tipo de documento
-                        <select id="mp-identificationType"
-                            style="width:100%;height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px;background:var(--color-surface-1);color:var(--color-text-1)"></select>
-                    </label>
-                    <label style="font-size:13px;color:var(--color-text-2);flex:1">Número do documento
-                        <input type="text" id="mp-identificationNumber" autocomplete="off" inputmode="numeric"
-                            style="width:100%;height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px;background:var(--color-surface-1);color:var(--color-text-1)">
-                    </label>
-                </div>
-                <label style="font-size:13px;color:var(--color-text-2)">Nome impresso no cartão
-                    <input type="text" id="mp-cardholderName" autocomplete="cc-name"
-                        style="width:100%;height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px;background:var(--color-surface-1);color:var(--color-text-1)">
-                </label>
-                <label style="font-size:13px;color:var(--color-text-2)">E-mail do titular
-                    <input type="email" id="mp-cardholderEmail" autocomplete="email" value="<?= htmlspecialchars($userEmail, ENT_QUOTES) ?>"
-                        style="width:100%;height:38px;border:1px solid var(--color-border);border-radius:8px;padding:4px 8px;margin-top:4px;background:var(--color-surface-1);color:var(--color-text-1)">
-                </label>
-                <div id="mp-checkout-error" class="alert alert-error" role="alert" style="display:none;margin:0"></div>
-                <div id="mp-checkout-loading" style="display:none;font-size:13px;color:var(--color-text-2)">Processando pagamento… não feche esta página.</div>
-                <?= csrf_field() ?>
-                <button type="submit" id="mp-pay-button" class="btn"
-                    style="justify-content:center;display:flex;align-items:center;gap:6px;cursor:pointer">
-                    <?= render_icon('lock', 15) ?>
-                    <span id="mp-pay-label">Pagar e assinar</span>
-                </button>
-            </div>
-        </form>
-    </div>
-</section>
-<script src="https://sdk.mercadopago.com/js/v2"></script>
-<script id="mp-security-script" src="https://www.mercadopago.com/v2/security.js" view="checkout" onload="window.__mpSecurityLoaded=true" onerror="window.__mpSecurityFailed=true"></script>
-<script src="/js/mp_subscribe.js?v=3"></script>
-<?php endif; ?>
+
 
 <section class="panel" style="margin-bottom:var(--space-5)">
     <div class="panel-body" style="display:flex;gap:var(--space-5);align-items:center;flex-wrap:wrap">
@@ -246,22 +179,7 @@ $errText = $errMessages[$errKey] ?? null;
     </div>
 </section>
 
-    <?php if ($canCancelSubscription): ?>
-<section class="panel" style="margin-bottom:var(--space-5)">
-    <div style="text-align:center;padding:var(--space-5) var(--space-4)">
-        <div style="font-size:14px;color:var(--color-text-2);margin-bottom:var(--space-4)">
-            Deseja cancelar sua assinatura? Você pode reativar a qualquer momento.
-        </div>
-        <form method="POST" action="/index.php?action=cancel" onsubmit="if(this.submitted){return false;} this.submitted=true; this.querySelector('button[type=submit]').disabled=true; this.querySelector('button[type=submit]').style.opacity='0.6'; return confirm('Tem certeza que deseja cancelar sua assinatura? Você perderá o acesso aos recursos pagos ao final do ciclo atual.');">
-            <?= csrf_field() ?>
-            <button type="submit" class="btn" style="background:var(--color-surface-2);color:var(--color-text-2);border:1px solid var(--color-border);cursor:pointer">
-                <?= render_icon('x-circle', 15) ?>
-                Cancelar assinatura
-            </button>
-        </form>
-    </div>
-</section>
-<?php endif; ?>
+
 
 <?php if (!empty($upgrades)): ?>
 <section>
@@ -324,21 +242,17 @@ $errText = $errMessages[$errKey] ?? null;
                     </div>
 
                     <div style="width:100%">
-                        <form method="POST" action="/index.php?action=subscribe" style="width:100%">
-                            <input type="hidden" name="plan" value="<?= htmlspecialchars($slug) ?>">
-                            <?= csrf_field() ?>
-                            <button
-                                type="submit"
-                                class="btn"
-                                style="width:100%;justify-content:center;display:flex;align-items:center;gap:6px;cursor:pointer"
-                                title="Atualizar para <?= htmlspecialchars($planName) ?>">
-                                <?= render_icon('zap', 15) ?>
-                                Atualizar para <?= htmlspecialchars($planName) ?>
-                            </button>
-                        </form>
+                        <div
+                            class="btn"
+                            style="width:100%;justify-content:center;display:flex;align-items:center;gap:6px;opacity:.55;cursor:not-allowed"
+                            title="Assinaturas temporariamente indisponíveis"
+                            aria-disabled="true">
+                            <?= render_icon('zap', 15) ?>
+                            Atualizar para <?= htmlspecialchars($planName) ?>
+                        </div>
                     </div>
                     <div style="margin-top:var(--space-2);font-size:11px;color:var(--color-text-3);text-align:center">
-                        Clique para iniciar a assinatura
+                        Assinaturas temporariamente indisponíveis.
                     </div>
                 </div>
             </div>
