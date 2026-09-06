@@ -18,8 +18,14 @@
  *
  * Fases instrumentadas (para diagnostico seguro em logs):
  *   pre_validation, attempt_lookup, reconcile_linked, reconcile_search,
- *   derive_server_data, mp_create, resolve_timeout, txn_begin, txn_lock,
- *   txn_attach, txn_status, plan_apply, txn_commit, done
+ *   derive_server_data, mp_create, resolve_timeout, persist_link,
+ *   txn_preflight, txn_claim, txn_claim_lost, txn_guard_find, txn_status,
+ *   plan_apply, link_complete, done
+ *
+ * Nota: os marcadores com prefixo txn_ sao nomes historicos das ETAPAS
+ * logicas (claim/guard/status); o fluxo roda em AUTOCOMMIT, sem transacao
+ * explicita (decisao estrutural pos-25P02). Nenhum marcador txn_ implica
+ * BEGIN/COMMIT.
  *
  * Em erro inesperado retorna http=500 com 'debug' sanitizado
  * (Subscription::describeDbError) em vez de lancar excecao.
@@ -166,7 +172,7 @@ class SubscriptionCheckoutService
             if (is_array($found)) {
                 $body = $this->linkAttempt($attemptId, $userId, $slug, $attemptToken, $found['mp_id'], $found['mp_status']);
                 $body['reconciled'] = true;
-                return $this->out(200, $body, 'txn_commit');
+                return $this->out(200, $body, 'link_complete');
             }
 
             // Tudo derivado do servidor (leituras, sem transacao).
@@ -202,7 +208,7 @@ class SubscriptionCheckoutService
                     if (is_array($foundAfter)) {
                         $body = $this->linkAttempt($attemptId, $userId, $slug, $attemptToken, $foundAfter['mp_id'], $foundAfter['mp_status']);
                         $body['reconciled'] = true;
-                        return $this->out(200, $body, 'txn_commit');
+                        return $this->out(200, $body, 'link_complete');
                     }
                     if ($foundAfter === 'conflict') {
                         return $this->out(409, ['ok' => false, 'error' => 'conflict'], $this->currentPhase);
@@ -227,7 +233,7 @@ class SubscriptionCheckoutService
                 $mpPreapprovalId,
                 strtolower(trim((string)($result['mp_status'] ?? 'authorized')))
             );
-            return $this->out(200, $body, 'txn_commit');
+            return $this->out(200, $body, 'link_complete');
         } catch (Throwable $e) {
             // Rollback IMEDIATO: nenhuma query pode rodar depois de excecao
             // dentro de transacao PostgreSQL (vira 25P02 em cascata).
@@ -298,12 +304,15 @@ class SubscriptionCheckoutService
     }
 
     /**
-     * Vincula mp_id a tentativa em transacao CURTA e deterministica.
+     * Vincula mp_id a tentativa em AUTOCOMMIT, de forma deterministica.
      *
-     * NENHUMA rede acontece aqui dentro: re-le a linha com trava, revalida
-     * ownership + estado + idempotencia, anexa, atualiza, aplica plano e faz
-     * commit em milissegundos. Lanca RuntimeException('mp_conflict') em
-     * conflito (fail closed, sem persistir nada).
+     * NENHUMA rede acontece aqui dentro e NENHUMA transacao explicita e
+     * aberta: cada statement roda em autocommit com sua propria condicao
+     * (compare-and-set). A atomicidade que importa (uma tentativa, um mp id)
+     * vem do claim + UNIQUE parcial, nao de BEGIN/COMMIT. Lanca
+     * RuntimeException('mp_conflict') em conflito (fail closed; em
+     * autocommit, statements anteriores ja confirmados permanecem —
+     * convergencia via webhook, poll e retry idempotentes).
      *
      * @return array corpo de resposta de sucesso
      */
@@ -380,8 +389,7 @@ class SubscriptionCheckoutService
                     $this->subscriptionModel->applyStatusToUser($applied);
                 }
             }
-            $this->setPhase('txn_commit');
-            $this->db->commit();
+            $this->setPhase('link_complete');
             return [
                 'ok' => true,
                 'status' => $internalStatus,

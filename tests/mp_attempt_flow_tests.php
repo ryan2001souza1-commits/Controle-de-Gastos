@@ -264,6 +264,9 @@ class FakeAttemptPDO extends PDO
     public ?array $lastRow = null;
     public int $lastAffected = 0;
     public int $txDepth = 0;
+    public int $beginCalls = 0;
+    public int $commitCalls = 0;
+    public int $rollbackCalls = 0;
 
     public function __construct()
     {
@@ -288,9 +291,28 @@ class FakeAttemptPDO extends PDO
         return FakeAttemptStmt::make($this, $query);
     }
     public function exec(string $statement): int|false { return 0; }
-    public function beginTransaction(): bool { $this->txDepth++; TestEvents::rec('db:begin'); return true; }
-    public function commit(): bool { $this->txDepth = max(0, $this->txDepth - 1); TestEvents::rec('db:commit'); return true; }
-    public function rollBack(): bool { $this->txDepth = max(0, $this->txDepth - 1); TestEvents::rec('db:rollback'); return true; }
+    // Semântica PDO REAL: commit()/rollBack() sem transação ativa LANÇAM
+    // PDOException (é exatamente o que o commit órfão de 5b5cf44e provocava
+    // em produção). Contadores provam 0 begin/commit no caminho feliz.
+    public function beginTransaction(): bool { $this->txDepth++; $this->beginCalls++; TestEvents::rec('db:begin'); return true; }
+    public function commit(): bool {
+        $this->commitCalls++;
+        TestEvents::rec('db:commit');
+        if ($this->txDepth <= 0) {
+            throw new PDOException('There is no active transaction');
+        }
+        $this->txDepth--;
+        return true;
+    }
+    public function rollBack(): bool {
+        $this->rollbackCalls++;
+        TestEvents::rec('db:rollback');
+        if ($this->txDepth <= 0) {
+            throw new PDOException('There is no active transaction');
+        }
+        $this->txDepth--;
+        return true;
+    }
     public function inTransaction(): bool { return $this->txDepth > 0; }
     public function lastInsertId(?string $name = null): string|false { return (string)$this->lastId; }
 }
@@ -962,6 +984,110 @@ $userA = null;
 foreach ($db->tables['usuarios'] as $u) { if ((int)$u['id'] === 5) $userA = $u; }
 assert_test(($userA['plano'] ?? '') === 'pro', 'AT51b: plano aplicado (estava FREE)');
 assert_test($mp->postCount === 0, 'AT51c: zero POST (só reconciliação)');
+
+echo "\n--- AT52: REGRESSÃO commit órfão — caminho feliz em AUTOCOMMIT ---\n";
+// O bug de 5b5cf44e: linkAttempt() chamava $db->commit() sem begin.
+// Com PDO real isso lança PDOException APÓS os UPDATEs (autocommit) e o
+// serviço respondia 500. Estes casos falham se qualquer commit órfão voltar.
+function assert_autocommit_clean(FakeAttemptPDO $db, string $name): void
+{
+    assert_test($db->beginCalls === 0, "$name: BEGIN_CALLS=0", 'beginCalls=' . $db->beginCalls);
+    assert_test($db->commitCalls === 0, "$name: COMMIT_CALLS=0", 'commitCalls=' . $db->commitCalls);
+    assert_test($db->inTransaction() === false, "$name: sem txn residual");
+}
+
+// AT52a: o próprio double respeita a semântica real do PDO.
+$strictDb = new FakeAttemptPDO();
+$threw = false;
+try {
+    $strictDb->commit();
+} catch (PDOException $e) {
+    $threw = true;
+}
+assert_test($threw, 'AT52a: fake commit() sem txn lança PDOException (semântica real)');
+assert_test($strictDb->commitCalls === 1, 'AT52b: contador registra a tentativa de commit');
+
+// AT52c: fresh + pending → 200 processing, sem begin/commit, sem promoção.
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$mp->createQueue = [[
+    'ok' => true, 'status' => 201, 'preapproval_id' => 'mp52_pend',
+    'external_reference' => $a['attempt_token'], 'plan_id' => 'plan_pro_xyz',
+    'mp_status' => 'pending',
+]];
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 200, 'AT52c: fresh+pending http 200');
+assert_test(($r['body']['outcome'] ?? '') === 'processing', 'AT52d: fresh+pending outcome processing (não sucesso)');
+assert_autocommit_clean($db, 'AT52e: fresh+pending');
+$userA = null;
+foreach ($db->tables['usuarios'] as $u) { if ((int)$u['id'] === 5) $userA = $u; }
+assert_test(($userA['plano'] ?? '') === 'gratuito', 'AT52f: fresh+pending NÃO promove usuário');
+
+// AT52g: fresh + authorized → 200 active, plano aplicado, sem begin/commit.
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 200 && ($r['body']['outcome'] ?? '') === 'active', 'AT52g: fresh+authorized 200 active');
+assert_autocommit_clean($db, 'AT52h: fresh+authorized');
+$userA = null;
+foreach ($db->tables['usuarios'] as $u) { if ((int)$u['id'] === 5) $userA = $u; }
+assert_test(($userA['plano'] ?? '') === 'pro', 'AT52i: fresh+authorized promove usuário');
+
+// AT52j: reconciled + pending → 200 reconciled, zero POST, sem begin/commit.
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(12, 'premium', 3);
+$mp->searchMap[$a['attempt_token']] = [[
+    'id' => 'mp52_orfa', 'status' => 'pending',
+    'preapproval_plan_id' => 'plan_premium_xyz', 'external_reference' => $a['attempt_token'],
+]];
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(12, $a['attempt_token'], 'tok_novo_456');
+assert_test(($r['http'] ?? 0) === 200 && ($r['body']['reconciled'] ?? false) === true, 'AT52j: reconciled+pending 200 reconciled');
+assert_test(($r['body']['outcome'] ?? '') === 'processing', 'AT52k: reconciled+pending outcome processing');
+assert_test($mp->postCount === 0, 'AT52l: reconciled zero POST');
+assert_autocommit_clean($db, 'AT52m: reconciled+pending');
+
+// AT52n: already + pending → retry retorna already, sem POST extra, sem txn.
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$mp->createQueue = [[
+    'ok' => true, 'status' => 201, 'preapproval_id' => 'mp52_already_p',
+    'external_reference' => $a['attempt_token'], 'plan_id' => 'plan_pro_xyz',
+    'mp_status' => 'pending',
+]];
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r1 = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+$r2 = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_outro_999');
+assert_test(($r1['http'] ?? 0) === 200, 'AT52n: already+pending primeiro vincula 200');
+assert_test(($r2['body']['already'] ?? false) === true, 'AT52o: already+pending retry already:true');
+assert_test($mp->postCount === 1, 'AT52p: already+pending 1 POST total');
+assert_autocommit_clean($db, 'AT52q: already+pending');
+
+// AT52r: already + authorized → retry retorna already, sem POST extra, sem txn.
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_outro_999');
+assert_test(($r['body']['already'] ?? false) === true, 'AT52r: already+authorized retry already:true');
+assert_test($mp->postCount === 1, 'AT52s: already+authorized 1 POST total');
+assert_autocommit_clean($db, 'AT52t: already+authorized');
+
+// AT52u: linked + authorized + FREE aplica plano de forma idempotente, sem txn.
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$sm->updateMpData((int)$a['id'], 'mp52_preauth', 'pending', null);
+$mp->addPreapproval('mp52_preauth', 'authorized', $a['attempt_token'], 'plan_pro_xyz');
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['body']['outcome'] ?? '') === 'active', 'AT52u: linked+authorized outcome active');
+assert_autocommit_clean($db, 'AT52v: linked+authorized');
+$userA = null;
+foreach ($db->tables['usuarios'] as $u) { if ((int)$u['id'] === 5) $userA = $u; }
+assert_test(($userA['plano'] ?? '') === 'pro', 'AT52w: linked+authorized aplica plano (estava FREE)');
+assert_test($mp->postCount === 0, 'AT52x: linked zero POST (só reconciliação)');
 
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;
