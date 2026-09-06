@@ -138,7 +138,7 @@ class SubscriptionCheckoutService
             $this->setPhase('reconcile_search');
             $found = $this->findOwnPreapproval($attempt);
             if ($found === 'conflict') {
-                error_log('[subscribe_token] phase=reconcile_search multiplos registros MP para o attempt');
+                error_log('[subscribe_token] phase=reconcile_search search_inconclusivo_para_attempt');
                 return $this->out(409, ['ok' => false, 'error' => 'conflict'], $this->currentPhase);
             }
             if (is_array($found)) {
@@ -300,40 +300,13 @@ class SubscriptionCheckoutService
         $this->setPhase('txn_begin');
         $this->db->beginTransaction();
         try {
-            // Re-leitura SEM trava: a exclusividade vem do claim atomico
-            // abaixo, nao de trava de linha (removida: fragil sob
-            // pooler + prepares nativos, e mantinha lock durante a janela
-            // de falha observada em producao).
-            $this->setPhase('txn_reread');
-            $fresh = $this->subscriptionModel->findByAttemptToken($attemptToken);
-            if ($fresh === null || (int)$fresh['id'] !== $attemptId || (int)($fresh['user_id'] ?? 0) !== $userId) {
-                throw new RuntimeException('attempt_changed');
-            }
-            if ((string)($fresh['plan_slug'] ?? '') !== $planSlug) {
-                throw new RuntimeException('attempt_changed');
-            }
-            $rowMpId = (string)($fresh['mp_preapproval_id'] ?? '');
-            if ($rowMpId !== '') {
-                if ($rowMpId !== $mpPreapprovalId) {
-                    throw new RuntimeException('mp_conflict');
-                }
-                $this->setPhase('txn_commit');
-                $this->db->commit();
-                return [
-                    'ok' => true,
-                    'already' => true,
-                    'status' => (string)($fresh['status'] ?? 'pending'),
-                    'redirect' => '/index.php?action=meu_plano&subscribed=1',
-                ];
-            }
-            $this->setPhase('txn_guard_find');
-            $other = $this->subscriptionModel->findByMpId($mpPreapprovalId);
-            if ($other !== null && (int)$other['id'] !== $attemptId) {
-                throw new RuntimeException('mp_conflict');
-            }
-            // Tomada atomica: UM statement decide o vencedor. Derrota (0 linhas)
-            // significa que outro request/webhook vinculou primeiro: re-le e
-            // adota o vencedor em vez de explodir.
+            // Roundtrip de verificacao: prova que o begin abriu transacao
+            // valida no SERVIDOR (detecta pooler/conexao que mente no begin).
+            $this->setPhase('txn_begin_verify');
+            $this->db->query('SELECT 1');
+            // Tomada atomica PRIMEIRO (ownership+plano+mp-vazio no WHERE):
+            // um unico statement decide o vencedor. Nenhum SELECT previo,
+            // nenhuma trava mantida, nenhuma janela para 25P02 em cascata.
             $this->setPhase('txn_claim');
             $claimed = $this->subscriptionModel->claimMpPreapprovalId(
                 $attemptId,
@@ -342,8 +315,15 @@ class SubscriptionCheckoutService
                 $mpPreapprovalId
             );
             if ($claimed === null) {
+                // Derrota ou linha ja vinculada: UMA releitura decide.
                 $this->setPhase('txn_claim_lost');
                 $reread = $this->subscriptionModel->findByAttemptToken($attemptToken);
+                if ($reread === null || (int)$reread['id'] !== $attemptId || (int)($reread['user_id'] ?? 0) !== $userId) {
+                    throw new RuntimeException('attempt_changed');
+                }
+                if ((string)($reread['plan_slug'] ?? '') !== $planSlug) {
+                    throw new RuntimeException('attempt_changed');
+                }
                 $winnerMpId = (string)($reread['mp_preapproval_id'] ?? '');
                 if ($winnerMpId !== '' && $winnerMpId !== $mpPreapprovalId) {
                     throw new RuntimeException('mp_conflict');
@@ -359,6 +339,13 @@ class SubscriptionCheckoutService
                     ];
                 }
                 throw new RuntimeException('claim_failed');
+            }
+            // Vitoria: mp gravado pelo claim. Guarda cross-account residual
+            // (outra linha com mesmo mp id) antes de ativar.
+            $this->setPhase('txn_guard_find');
+            $other = $this->subscriptionModel->findByMpId($mpPreapprovalId);
+            if ($other !== null && (int)$other['id'] !== $attemptId) {
+                throw new RuntimeException('mp_conflict');
             }
             $internalStatus = MercadoPagoWebhookService::mapMpStatusToInternal($mpStatusRaw);
             if ($internalStatus === null) {

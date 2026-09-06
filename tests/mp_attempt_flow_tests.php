@@ -854,6 +854,48 @@ assert_test($w2 !== null, 'AT43b: linhas distintas aceitam (dono verificado depo
 $dup = $sm->claimMpPreapprovalId((int)$aA['id'], 5, 'pro', 'mp_race_2');
 assert_test($dup === null, 'AT43c: mesma linha nao e retomada');
 
+echo "\n--- AT44: txn_begin_verify falha -> 500 com fase exata ---\n";
+class VerifyFailPDO extends FakeAttemptPDO
+{
+    public function query(string $query, ?int $fetchMode = null, mixed ...$args): PDOStatement|false
+    {
+        throw new PDOException('SQLSTATE[08006]: connection failure');
+    }
+}
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$vdb = new VerifyFailPDO();
+$vdb->tables = $db->tables;
+$vdb->lastId = $db->lastId;
+$svc = new SubscriptionCheckoutService($vdb, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 500, 'AT44a: http 500');
+assert_test(($r['phase'] ?? '') === 'txn_begin_verify', 'AT44b: fase exata (nunca 25P02 generico)', $r['phase'] ?? '');
+assert_test($vdb->inTransaction() === false, 'AT44c: rollback executado');
+
+echo "\n--- AT45: search acha mp de OUTRO plano -> conflict, sem POST ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$mp->searchMap[$a['attempt_token']] = [[
+    'id' => 'mp_WRONGPLAN', 'status' => 'authorized',
+    'preapproval_plan_id' => 'plan_premium_xyz', 'external_reference' => $a['attempt_token'],
+]];
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 409, 'AT45a: 409 fail-closed');
+assert_test($mp->postCount === 0, 'AT45b: zero POST (registro incompativel nao e usado)');
+$row = $sm->findByAttemptToken($a['attempt_token']);
+assert_test(($row['mp_preapproval_id'] ?? '') === '', 'AT45c: nada vinculado');
+
+echo "\n--- AT46: claim vence mesmo com verify + ordem deterministica ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(12, 'premium', 3);
+TestEvents::reset();
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(12, $a['attempt_token'], 'tok_valid_abc');
+assert_test(($r['http'] ?? 0) === 200, 'AT46a: sucesso');
+assert_test(TestEvents::assertNoMpInsideTxn('x'), 'AT46b: rede fora de txn mantido');
+
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;
 echo "Total: $total | \033[32mPassed: $passed\033[0m | \033[31mFailed: $failed\033[0m\n";
