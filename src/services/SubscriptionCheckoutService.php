@@ -251,6 +251,21 @@ class SubscriptionCheckoutService
                 $sanitizedDeviceId !== null ? 'yes' : 'no',
                 $sanitizedDeviceId !== null ? 'yes' : 'no'
             ));
+            // Formato do recebido (WCS-49458): buckets/booleanos para
+            // diagnosticar rejeições SEM expor valor/hash/prefixo/sufixo.
+            $devMeta = MercadoPagoService::deviceTelemetry($deviceId);
+            error_log(sprintf(
+                '[mp_device_validation] attempt_suffix=%s type=%s length_bucket=%s ascii_printable=%s has_space=%s has_control=%s has_unicode=%s trim_changes_length=%s validation_reason=%s',
+                substr($attemptToken, -8),
+                $devMeta['type'],
+                $devMeta['length_bucket'],
+                $devMeta['ascii_printable'],
+                $devMeta['has_space'],
+                $devMeta['has_control'],
+                $devMeta['has_unicode'],
+                $devMeta['trim_changes_length'],
+                $devMeta['validation_reason']
+            ));
             if ($result['ok'] === false) {
                 // Timeout/rede apos possivel criacao no MP: tenta resolver
                 // pelo registro exato antes de desistir (sem novo POST).

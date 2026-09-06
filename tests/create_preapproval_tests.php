@@ -496,12 +496,15 @@ assert_test(MercadoPagoService::sanitizeDeviceId('') === null, 'DID8b: vazio -> 
 assert_test(MercadoPagoService::sanitizeDeviceId('   ') === null, 'DID8c: só-espaço -> omitido');
 assert_test(MercadoPagoService::sanitizeDeviceId(['x']) === null, 'DID8d: não-string -> rejeitado');
 assert_test(MercadoPagoService::sanitizeDeviceId(12345678) === null, 'DID8e: int -> rejeitado (sem coerção)');
-assert_test(MercadoPagoService::sanitizeDeviceId('abc1234') === null, 'DID8f: curto (<8) -> rejeitado');
+assert_test(MercadoPagoService::sanitizeDeviceId('abc1234') === 'abc1234', 'DID8f: curto sem mínimo oficial -> aceito (só teto anti-abuso)');
+assert_test(MercadoPagoService::deviceValidationReason('abc1234') === 'valid', 'DID8f2: motivo valid');
 assert_test(MercadoPagoService::sanitizeDeviceId("ab\r\nX-Injected: 1 cdefghij") === null, 'DID9a: CR/LF -> rejeitado (anti header-injection)');
 assert_test(MercadoPagoService::sanitizeDeviceId("abcdefgh%0d%0a12345678") !== null, 'DID9b: "%0d" literal não é quebra de linha (inofensivo, passa)');
-assert_test(MercadoPagoService::sanitizeDeviceId(str_repeat('a', 129)) === null, 'DID10a: >128 -> rejeitado');
+assert_test(MercadoPagoService::sanitizeDeviceId(str_repeat('a', 129)) === str_repeat('a', 129), 'DID10a: 129 aceito (teto agora 512)');
+assert_test(MercadoPagoService::sanitizeDeviceId(str_repeat('c', 513)) === null, 'DID10a2: >512 rejeitado (anti-abuso)');
+assert_test(MercadoPagoService::deviceValidationReason(str_repeat('c', 513)) === 'too_long', 'DID10a3: motivo too_long');
 assert_test(MercadoPagoService::sanitizeDeviceId(str_repeat('b', 128)) === str_repeat('b', 128), 'DID10b: 128 preservado');
-assert_test(MercadoPagoService::sanitizeDeviceId('  Dev-ID_01.abcXYZ  ') === 'Dev-ID_01.abcXYZ', 'DID8f2: válido passa com trim');
+assert_test(MercadoPagoService::sanitizeDeviceId('  Dev-ID_01.abcXYZ  ') === '  Dev-ID_01.abcXYZ  ', 'DID8f2: válido passa VERBATIM (sem trim — MP recebe exato)');
 
 // DID5/DID6/DID7: header condicional.
 $s->reset();
@@ -697,6 +700,41 @@ $many = MercadoPagoService::fragmentLogJson(str_repeat('x', 2500), 1000, 2);
 assert_test(count($many) === 3 && end($many) === '{"truncated":true}', 'BIG10: overflow usa marcador explícito, nunca perda silenciosa');
 assert_test(MercadoPagoService::fragmentLogJson('')[0] === '{}', 'BIG11: vazio -> parte única');
 assert_test(strpos($jsonBig, 'abcdef0123456789') === false, 'BIG12: placeholder de formato (nenhum segredo real no teste)');
+
+echo "\n--- DEVFMT: formato real sem palpite + header safety (sem MP real) ---\n";
+// DEVFMT1: simuladas legítimas variadas aceitas (inclui o que a regra antiga vetava).
+assert_test(MercadoPagoService::sanitizeDeviceId('a1b2c3d4e5f60718293a4b5c6d7e8f90') === 'a1b2c3d4e5f60718293a4b5c6d7e8f90', 'DEVFMT1a: hex-32 aceito');
+assert_test(MercadoPagoService::sanitizeDeviceId('AbC-123_x.y:z 9') === 'AbC-123_x.y:z 9', 'DEVFMT1b: hífen/underscore/ponto/dois-pontos/espaço aceitos');
+assert_test(MercadoPagoService::sanitizeDeviceId('dispositivo-teste-αβγ-12345678') === 'dispositivo-teste-αβγ-12345678', 'DEVFMT1c: unicode aceito');
+// DEVFMT2/3/4/5: quebras e NUL sempre rejeitados.
+assert_test(MercadoPagoService::sanitizeDeviceId("ab\rdefgh1234") === null, 'DEVFMT2: CR rejeitado');
+assert_test(MercadoPagoService::sanitizeDeviceId("ab\ndefgh1234") === null, 'DEVFMT3: LF rejeitado');
+assert_test(MercadoPagoService::sanitizeDeviceId("ab\r\ndefgh1234") === null, 'DEVFMT4: CRLF rejeitado');
+assert_test(MercadoPagoService::sanitizeDeviceId("ab\x00defgh1234") === null, 'DEVFMT5: NUL rejeitado');
+assert_test(MercadoPagoService::deviceValidationReason("a\x07b12345678") === 'bad_charset', 'DEVFMT5b: controle => bad_charset');
+// DEVFMT6/7: vazia e gigante.
+assert_test(MercadoPagoService::sanitizeDeviceId('') === null, 'DEVFMT6: vazia rejeitada');
+assert_test(MercadoPagoService::sanitizeDeviceId(str_repeat('z', 512)) === str_repeat('z', 512), 'DEVFMT7a: 512 (teto) aceito');
+assert_test(MercadoPagoService::deviceValidationReason(null) === 'non_string', 'DEVFMT-reason: non_string');
+// DEVFMT8/9: unicode e espaço passam (regra final).
+assert_test(MercadoPagoService::deviceValidationReason('αβγ-12345678') === 'valid', 'DEVFMT8: unicode válido');
+assert_test(MercadoPagoService::deviceValidationReason('abc def 12345678') === 'valid', 'DEVFMT9: espaço interno válido');
+// Header safety: valor aceito vai VERBATIM (sem mangling) e nunca quebra linha.
+$hdrVal = 'AbC-123_x.y:z 9 αβγ';
+$hdr = 'X-meli-session-id: ' . MercadoPagoService::sanitizeDeviceId($hdrVal);
+assert_test($hdr === 'X-meli-session-id: ' . $hdrVal, 'DEVFMT-hdr: valor intacto no header');
+assert_test(preg_match('/[\r\n]/', $hdr) === 0, 'DEVFMT-hdr2: header final sem quebra (anti-injection)');
+// DEVFMT10 + telemetria: buckets sem valor/hash/prefixo/sufixo.
+$meta = MercadoPagoService::deviceTelemetry('AbC-123_x.y:z 9 αβγ-dispositivo-teste');
+assert_test(($meta['length_bucket'] ?? '') === '32-63', 'DEVFMT10a: bucket correto');
+assert_test(($meta['has_unicode'] ?? '') === 'yes' && ($meta['has_space'] ?? '') === 'yes', 'DEVFMT10b: flags corretas');
+assert_test(($meta['validation_reason'] ?? '') === 'valid', 'DEVFMT10c: motivo valid');
+$metaBlob = json_encode($meta);
+assert_test(strpos($metaBlob, 'AbC-123') === false, 'DEVFMT10d: valor NUNCA na telemetria');
+assert_test(MercadoPagoService::deviceTelemetry(['x'])['type'] === 'non_string', 'DEVFMT10e: type não-string');
+assert_test(MercadoPagoService::deviceTelemetry('abc')['length_bucket'] === '<8', 'DEVFMT10f: bucket <8');
+assert_test(MercadoPagoService::deviceTelemetry('   ')['validation_reason'] === 'empty', 'DEVFMT10g: só-espaço => empty');
+assert_test(MercadoPagoService::deviceTelemetry('  ab  ')['trim_changes_length'] === 'yes', 'DEVFMT10h: trim detectado');
 
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed + $skipped;

@@ -568,33 +568,80 @@ class MercadoPagoService
      * Sanitiza o Device ID do navegador (MP_DEVICE_SESSION_ID do security.js
      * oficial) para uso como header X-meli-session-id.
      *
-     * Contrato fail-safe: qualquer valor ausente/invalido retorna null e o
-     * chamador OMITE o header (checkout nunca bloqueia por falta do Device ID).
-     *
-     * Regras (anti header-injection + anti-abuso):
-     * - null/''/não-string → null;
-     * - após trim: 8–128 chars, SOMENTE ASCII visível sem espaço
-     *   ([\x21-\x7E]) — CR/LF/%0d/%0a e controles são impossíveis aqui,
-     *   logo nenhum valor sanitizado pode quebrar linhas do header.
+     * Documentação oficial NÃO especifica formato/tamanho/charset — portanto
+     * SEM regex restritiva de palpite (a anterior, ASCII-visível 8–128,
+     * rejeitou um id genuíno em produção). Validação mínima de segurança:
+     * string não-vazia, teto anti-abuso (512) e NENHUM byte capaz de
+     * quebrar linha de header (CR/LF/NUL/controles/DEL). Espaço, unicode,
+     * hífen, underscore, ponto e dois-pontos são ACEITOS.
+     * Ausente/inválido → null e o chamador OMITE o header (fail-safe).
      *
      * @param mixed $deviceId valor não confiável vindo do frontend
      */
     public static function sanitizeDeviceId($deviceId): ?string
     {
+        return self::deviceValidationReason($deviceId) === 'valid' ? (string)$deviceId : null;
+    }
+
+    /**
+     * Motivo da decisão do sanitizador — telemetria sem valor.
+     * Retorna exatamente: valid|non_string|empty|too_long|bad_charset.
+     *
+     * @param mixed $deviceId valor não confiável vindo do frontend
+     */
+    public static function deviceValidationReason($deviceId): string
+    {
         if (!is_string($deviceId)) {
-            return null;
+            return 'non_string';
         }
-        $deviceId = trim($deviceId);
-        if ($deviceId === '') {
-            return null;
+        if ($deviceId === '' || trim($deviceId) === '') {
+            return 'empty';
         }
-        if (preg_match('/[\r\n]/', $deviceId) === 1) {
-            return null;
+        if (strlen($deviceId) > 512) {
+            return 'too_long';
         }
-        if (!preg_match('/\A[\x21-\x7E]{8,128}\z/', $deviceId)) {
-            return null;
+        if (preg_match('/[\r\n\x00-\x1F\x7F]/', $deviceId) === 1) {
+            return 'bad_charset';
         }
-        return $deviceId;
+        return 'valid';
+    }
+
+    /**
+     * Telemetria SEGURA do Device ID recebido (WCS-49458): buckets e
+     * booleanos — NUNCA valor, hash, prefixo ou sufixo.
+     *
+     * @param mixed $deviceId valor não confiável vindo do frontend
+     * @return array{type:string,length_bucket:string,ascii_printable:string,
+     *               has_space:string,has_control:string,has_unicode:string,
+     *               trim_changes_length:string,validation_reason:string}
+     */
+    public static function deviceTelemetry($deviceId): array
+    {
+        $isString = is_string($deviceId);
+        $len = $isString ? strlen($deviceId) : 0;
+        $bucket = '128+';
+        if ($len < 8) {
+            $bucket = '<8';
+        } elseif ($len < 32) {
+            $bucket = '8-31';
+        } elseif ($len < 64) {
+            $bucket = '32-63';
+        } elseif ($len < 128) {
+            $bucket = '64-127';
+        }
+        $hasControl = $isString && preg_match('/[\r\n\x00-\x1F\x7F]/', $deviceId) === 1;
+        $hasSpace = $isString && strpos($deviceId, ' ') !== false;
+        $hasUnicode = $isString && preg_match('/[^\x00-\x7F]/', $deviceId) === 1;
+        return [
+            'type' => $isString ? 'string' : 'non_string',
+            'length_bucket' => $bucket,
+            'ascii_printable' => ($isString && preg_match('/\A[\x20-\x7E]*\z/', $deviceId) === 1) ? 'yes' : 'no',
+            'has_space' => $hasSpace ? 'yes' : 'no',
+            'has_control' => $hasControl ? 'yes' : 'no',
+            'has_unicode' => $hasUnicode ? 'yes' : 'no',
+            'trim_changes_length' => ($isString && trim($deviceId) !== $deviceId) ? 'yes' : 'no',
+            'validation_reason' => self::deviceValidationReason($deviceId),
+        ];
     }
 
     /**
