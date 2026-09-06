@@ -372,6 +372,10 @@ if ($action === 'register') {
     // NUNCA logar card_token_id: extrai para variavel local e nao o inclui
     // em nenhuma mensagem de erro, log ou resposta.
     $cardTokenId = (string)($input['card_token_id'] ?? '');
+    // Device ID (MP_DEVICE_SESSION_ID do security.js): string não confiável,
+    // validado em MercadoPagoService::sanitizeDeviceId. NUNCA logado,
+    // persistido ou ecoado — só segue como header X-meli-session-id se válido.
+    $deviceId = $input['device_id'] ?? null;
 
     if (!Subscription::isAttemptToken($attemptToken)) {
         http_response_code(400);
@@ -405,7 +409,7 @@ if ($action === 'register') {
         exit;
     }
 
-    $res = $checkoutService->processTokenPayment($userId, $attemptToken, $cardTokenId);
+    $res = $checkoutService->processTokenPayment($userId, $attemptToken, $cardTokenId, $deviceId);
     if (($res['http'] ?? 500) >= 500 && isset($res['debug']) && is_array($res['debug'])) {
         $debug = $res['debug'];
         $requestId = preg_replace(

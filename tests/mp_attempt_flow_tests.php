@@ -324,6 +324,7 @@ class FakeAttemptMP extends MercadoPagoService
     public array $createQueue = [];
     public array $searchMap = [];
     public bool $searchFail = false;
+    public $lastDeviceId = 'NOT_CALLED';
 
     public function __construct() { $this->accessToken = 'TEST'; }
 
@@ -333,7 +334,8 @@ class FakeAttemptMP extends MercadoPagoService
         string $externalReference,
         string $backUrl,
         string $cardTokenId = '',
-        string $idempotencyKey = ''
+        string $idempotencyKey = '',
+        $deviceId = null
     ): array {
         // Espelha a validacao real (cobertura exaustiva em
         // create_preapproval_tests.php); aqui o foco e o fluxo.
@@ -342,6 +344,7 @@ class FakeAttemptMP extends MercadoPagoService
         }
         TestEvents::rec('mp:post');
         $this->postCount++;
+        $this->lastDeviceId = $deviceId;
         $mock = array_shift($this->createQueue);
         if ($mock !== null) {
             return $mock;
@@ -599,6 +602,9 @@ assert_test(str_contains($csp, 'https://sdk.mercadopago.com'), 'AT15d: CSP cobre
 assert_test(preg_match('/connect-src[^;]*sdk\.mercadopago\.com/', $csp) === 1, 'AT15e: connect-src inclui SDK (tokenizacao)');
 assert_test(preg_match('/frame-src[^;]*mercadopago\.com/', $csp) === 1, 'AT15f: frame-src inclui MP (iframes CardForm)');
 assert_test(!str_contains($csp, '*.'), 'AT15g: sem wildcards na CSP');
+assert_test(str_contains($csp, 'https://www.mercadopago.com'), 'AT15h: CSP cobre www.mercadopago.com (security.js device)');
+assert_test(preg_match('/script-src[^;]*www\.mercadopago\.com/', $csp) === 1, 'AT15i: script-src inclui security.js');
+assert_test(preg_match('/connect-src[^;]*www\.mercadopago\.com/', $csp) === 1, 'AT15j: connect-src inclui beacons do security.js');
 
 echo "\n--- AT20: service happy path (token -> POST -> link -> active) ---\n";
 [$db, $mp, $sm] = makeAttemptEnv();
@@ -1152,6 +1158,29 @@ assert_test(($userA['plano'] ?? '') === 'gratuito', 'AT55f: usuário segue FREE'
 $r2 = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_novo_def');
 assert_test($mp->postCount === 2, 'AT55g: cada submit = 1 POST (sem retry automático com mesmo token)');
 assert_test(($r2['body']['error'] ?? '') === 'invalid_card', 'AT55h: segundo submit também 400 invalid_card');
+
+echo "\n--- AT56: Device ID atravessa checkout -> MP sem vazar ---\n";
+[$db, $mp, $sm] = makeAttemptEnv();
+$a = $sm->createAttempt(5, 'pro', 2);
+$svc = new SubscriptionCheckoutService($db, $mp, new FakeUserModel());
+$r = $svc->processTokenPayment(5, $a['attempt_token'], 'tok_valid_abc', 'device-fp-abc12345');
+assert_test(($r['http'] ?? 0) === 200, 'AT56a: fluxo com device completa 200');
+assert_test($mp->lastDeviceId === 'device-fp-abc12345', 'AT56b: device repassado ao MP (verbatim oficial, sem gerar)');
+[$db2, $mp2, $sm2] = makeAttemptEnv();
+$a2 = $sm2->createAttempt(5, 'pro', 2);
+$svc2 = new SubscriptionCheckoutService($db2, $mp2, new FakeUserModel());
+$r2 = $svc2->processTokenPayment(5, $a2['attempt_token'], 'tok_valid_abc');
+assert_test($mp2->lastDeviceId === null, 'AT56c: sem device -> null (header omitido, fail-safe)');
+$blob56 = json_encode([$r, $r2]);
+assert_test(strpos($blob56, 'device-fp-abc12345') === false, 'AT56d: device nunca em responses');
+$svcSrc56 = (string)file_get_contents($ROOT . '/src/services/SubscriptionCheckoutService.php');
+$leak56 = false;
+foreach (explode("\n", $svcSrc56) as $line) {
+    if (!str_contains($line, 'error_log')) continue;
+    if (preg_match('/\$deviceId\s*[,\)\.]/', $line)) $leak56 = true;
+    if (preg_match('/\$sanitizedDeviceId\s*[,\)\.]/', $line) && !str_contains($line, '!== null')) $leak56 = true;
+}
+assert_test(!$leak56, 'AT56e: nenhum error_log interpola valor do device');
 
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;

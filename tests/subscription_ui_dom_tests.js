@@ -111,12 +111,13 @@ function ok(cond, name) {
 }
 
 // Carrega o arquivo UMA vez por cenário (IIFE faz bootstrap no require).
-function loadApp({ subscribeResponses, pollScript }) {
+function loadApp({ subscribeResponses, pollScript, deviceId }) {
     delete require.cache[require.resolve('../public/js/mp_subscribe.js')];
     const { doc, nodes, parent } = makeEnv();
     const T = makeTimers();
     const uiLogs = [];
     const fetches = [];
+    const postBodies = [];
     let pollIdx = 0;
     let capturedSubmit = null;
 
@@ -125,6 +126,11 @@ function loadApp({ subscribeResponses, pollScript }) {
     global.setTimeout = T.set;
     global.clearTimeout = T.clear;
     global.console.info = (...a) => uiLogs.push(a.join(' '));
+    if (deviceId !== undefined) {
+        global.MP_DEVICE_SESSION_ID = deviceId;
+    } else {
+        delete global.MP_DEVICE_SESSION_ID;
+    }
     global.MercadoPago = function () {
         return {
             cardForm: (cfg) => {
@@ -136,6 +142,7 @@ function loadApp({ subscribeResponses, pollScript }) {
     global.fetch = (url, opts) => {
         fetches.push(String(url));
         if (String(url).includes('subscribe_token')) {
+            try { postBodies.push(JSON.parse((opts && opts.body) || '{}')); } catch (e) { postBodies.push({}); }
             const r = subscribeResponses.shift() || subscribeResponses[subscribeResponses.length - 1];
             if (r && r.throw) return Promise.reject(new Error('net down'));
             return Promise.resolve({ status: r.http, json: () => Promise.resolve(r.body) });
@@ -149,13 +156,14 @@ function loadApp({ subscribeResponses, pollScript }) {
     require('../public/js/mp_subscribe.js');
     const api = require('../public/js/mp_subscribe.js');
     return {
-        nodes, parent, uiLogs, fetches, T, api,
+        nodes, parent, uiLogs, fetches, postBodies, T, api,
         submit: () => capturedSubmit({ preventDefault: () => {} }),
         polls: () => fetches.filter((u) => u.includes('subscription_status')).length,
         retryBtn: () => parent.children.find((c) => c.type === 'button'),
         cleanup: () => {
             delete global.document; delete global.window;
             delete global.MercadoPago; delete global.fetch;
+            delete global.MP_DEVICE_SESSION_ID;
         },
     };
 }
@@ -404,6 +412,27 @@ const PENDING = { ok: true, status: 'pending', outcome: 'processing', linked: tr
         const line = app.uiLogs.find((l) => l.includes('source=initial'));
         ok(!!line && line.includes('action=show_error') && line.includes('error=invalid_card'), 'action e error em campos separados (linha: ' + (line || '?').slice(0, 120) + ')');
         ok(!/show_errorinvalid|remova/i.test(line || ''), 'sem fusão ambígua (regressão do "removalid_card")');
+        app.cleanup();
+    }
+
+    // ---- DID1–DID4: Device ID oficial (sem MP real) ----
+    console.log('--- DID frontend: device id ---');
+    {
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING], deviceId: 'dev-fingerprint-abc12345' });
+        await app.submit();
+        await app.T.drain(10);
+        ok(app.postBodies.length >= 1 && app.postBodies[0].device_id === 'dev-fingerprint-abc12345', 'DID1: MP_DEVICE_SESSION_ID presente -> enviado ao backend (verbatim)');
+        const blob = app.uiLogs.join('\n');
+        ok(!blob.includes('dev-fingerprint-abc12345'), 'DID4: device nunca em log de console');
+        ok(!app.fetches.some((u) => u.includes('dev-fingerprint')), 'DID4b: device nunca em URL');
+        app.cleanup();
+    }
+    {
+        const app = loadApp({ subscribeResponses: [{ http: 200, body: PENDING }], pollScript: [PENDING] });
+        await app.submit();
+        await app.T.drain(10);
+        ok(app.postBodies.length >= 1 && !('device_id' in app.postBodies[0]), 'DID2: ausente -> chave omitida do POST');
+        ok(app.nodes['mp-checkout-loading'].style.display === 'block' || app.polls() >= 1, 'DID3: script atrasado/ausente não quebra o fluxo');
         app.cleanup();
     }
 

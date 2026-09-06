@@ -67,7 +67,8 @@ class FakeCurlMpService extends MercadoPagoService
         string $externalReference,
         string $backUrl,
         string $cardTokenId = '',
-        string $idempotencyKey = ''
+        string $idempotencyKey = '',
+        $deviceId = null
     ): array {
         $planId = trim($planId);
         if ($planId === '') {
@@ -112,9 +113,14 @@ class FakeCurlMpService extends MercadoPagoService
                 'back_url' => $backUrl,
                 'status' => 'authorized',
             ],
-            'headers' => $idempotencyKey !== ''
-                ? ['X-Idempotency-Key: ' . $idempotencyKey]
-                : [],
+            'headers' => array_values(array_filter([
+                $idempotencyKey !== ''
+                    ? 'X-Idempotency-Key: ' . $idempotencyKey
+                    : null,
+                MercadoPagoService::sanitizeDeviceId($deviceId) !== null
+                    ? 'X-meli-session-id: ' . MercadoPagoService::sanitizeDeviceId($deviceId)
+                    : null,
+            ])),
         ];
 
         $mock = $this->curlQueue[0] ?? null;
@@ -475,6 +481,109 @@ $s->curlQueue = [[
 $r = $s->createPreapproval('plan_pro_xyz', 'user@test.com', 'user_1_pro', 'https://example.com/return', 'tok_test_abc123');
 assert_test($r['ok'] === false, 'preapproval_id invalido -> ok=false');
 assert_test($r['error'] === 'invalid_id', 'preapproval_id invalido -> error=invalid_id');
+
+echo "\n--- Device ID DID5-DID16 (X-meli-session-id, sem MP real) ---\n";
+
+// DID8/DID9/DID10: contrato do sanitizador.
+assert_test(MercadoPagoService::sanitizeDeviceId(null) === null, 'DID8a: null -> omitido');
+assert_test(MercadoPagoService::sanitizeDeviceId('') === null, 'DID8b: vazio -> omitido');
+assert_test(MercadoPagoService::sanitizeDeviceId('   ') === null, 'DID8c: só-espaço -> omitido');
+assert_test(MercadoPagoService::sanitizeDeviceId(['x']) === null, 'DID8d: não-string -> rejeitado');
+assert_test(MercadoPagoService::sanitizeDeviceId(12345678) === null, 'DID8e: int -> rejeitado (sem coerção)');
+assert_test(MercadoPagoService::sanitizeDeviceId('abc1234') === null, 'DID8f: curto (<8) -> rejeitado');
+assert_test(MercadoPagoService::sanitizeDeviceId("ab\r\nX-Injected: 1 cdefghij") === null, 'DID9a: CR/LF -> rejeitado (anti header-injection)');
+assert_test(MercadoPagoService::sanitizeDeviceId("abcdefgh%0d%0a12345678") !== null, 'DID9b: "%0d" literal não é quebra de linha (inofensivo, passa)');
+assert_test(MercadoPagoService::sanitizeDeviceId(str_repeat('a', 129)) === null, 'DID10a: >128 -> rejeitado');
+assert_test(MercadoPagoService::sanitizeDeviceId(str_repeat('b', 128)) === str_repeat('b', 128), 'DID10b: 128 preservado');
+assert_test(MercadoPagoService::sanitizeDeviceId('  Dev-ID_01.abcXYZ  ') === 'Dev-ID_01.abcXYZ', 'DID8f2: válido passa com trim');
+
+// DID5/DID6/DID7: header condicional.
+$s->reset();
+$s->curlQueue = [[
+    'status' => 201,
+    'body' => json_encode(['id' => 'mp_dev_1', 'status' => 'authorized', 'external_reference' => 'user_1_pro', 'preapproval_plan_id' => 'plan_pro_xyz']),
+]];
+$r = $s->createPreapproval('plan_pro_xyz', 'user@test.com', 'user_1_pro', 'https://example.com/return', 'tok_test_abc123', '', 'device-fingerprint-01');
+assert_test(in_array('X-meli-session-id: device-fingerprint-01', $s->lastCall['headers'], true), 'DID5: device válido -> header presente');
+
+$s->reset();
+$s->curlQueue = [[
+    'status' => 201,
+    'body' => json_encode(['id' => 'mp_dev_2', 'status' => 'authorized', 'external_reference' => 'user_1_pro', 'preapproval_plan_id' => 'plan_pro_xyz']),
+]];
+$r = $s->createPreapproval('plan_pro_xyz', 'user@test.com', 'user_1_pro', 'https://example.com/return', 'tok_test_abc123');
+assert_test(!preg_grep('/^X-meli-session-id/', $s->lastCall['headers']), 'DID6: ausente -> header omitido');
+
+$s->reset();
+$s->curlQueue = [[
+    'status' => 201,
+    'body' => json_encode(['id' => 'mp_dev_3', 'status' => 'authorized', 'external_reference' => 'user_1_pro', 'preapproval_plan_id' => 'plan_pro_xyz']),
+]];
+$r = $s->createPreapproval('plan_pro_xyz', 'user@test.com', 'user_1_pro', 'https://example.com/return', 'tok_test_abc123', '', '');
+assert_test(!preg_grep('/^X-meli-session-id/', $s->lastCall['headers']), 'DID7: vazio -> header omitido');
+assert_test(!preg_grep('/^X-meli-session-id:\s*$/', $s->lastCall['headers']), 'DID7b: nunca header vazio');
+
+// DID9c/DID10c via chamada: malicioso e gigante não vazam para headers.
+$s->reset();
+$s->curlQueue = [[
+    'status' => 201,
+    'body' => json_encode(['id' => 'mp_dev_4', 'status' => 'authorized', 'external_reference' => 'user_1_pro', 'preapproval_plan_id' => 'plan_pro_xyz']),
+]];
+$r = $s->createPreapproval('plan_pro_xyz', 'user@test.com', 'user_1_pro', 'https://example.com/return', 'tok_test_abc123', '', "evil\r\nX-X: 1-padding-12345678");
+assert_test(!preg_grep('/^X-meli-session-id/', $s->lastCall['headers']), 'DID9c: CR/LF na chamada -> header omitido');
+assert_test(($r['ok'] ?? false) === true, 'DID9d: fluxo segue sem device (fail-safe)');
+
+// DID11: device nunca aparece no response.
+$blob = json_encode($r);
+assert_test(strpos($blob, 'evil') === false, 'DID11: device ausente do response');
+
+// DID13: payload financeiro idêntico com/sem device.
+$s->reset();
+$s->curlQueue = [[
+    'status' => 201,
+    'body' => json_encode(['id' => 'mp_dev_5', 'status' => 'authorized', 'external_reference' => 'user_1_pro', 'preapproval_plan_id' => 'plan_pro_xyz']),
+]];
+$s->createPreapproval('plan_pro_xyz', 'user@test.com', 'user_1_pro', 'https://example.com/return', 'tok_test_abc123');
+$payloadSem = $s->lastCall['postfields'];
+$s->reset();
+$s->curlQueue = [[
+    'status' => 201,
+    'body' => json_encode(['id' => 'mp_dev_6', 'status' => 'authorized', 'external_reference' => 'user_1_pro', 'preapproval_plan_id' => 'plan_pro_xyz']),
+]];
+$s->createPreapproval('plan_pro_xyz', 'user@test.com', 'user_1_pro', 'https://example.com/return', 'tok_test_abc123', '', 'device-abc-12345678');
+assert_test($s->lastCall['postfields'] === $payloadSem, 'DID13: payload financeiro idêntico com/sem device');
+
+// DID14/DID15: Authorization intacto (fonte) + idempotência convivendo.
+$svcSrc = (string)file_get_contents($ROOT . '/src/services/MercadoPagoService.php');
+assert_test(str_contains($svcSrc, "'Authorization: Bearer ' . \$this->accessToken"), 'DID14a: Authorization inalterado na fonte');
+assert_test(str_contains($svcSrc, "'Content-Type: application/json'"), 'DID14b: Content-Type inalterado na fonte');
+assert_test(str_contains($svcSrc, "'X-meli-session-id: ' . \$deviceId"), 'DID14c: header device montado só do valor sanitizado');
+$s->reset();
+$s->curlQueue = [[
+    'status' => 201,
+    'body' => json_encode(['id' => 'mp_dev_7', 'status' => 'authorized', 'external_reference' => 'a1b2c3d4e5f60718293a4b5c6d7e8f90', 'preapproval_plan_id' => 'plan_pro_xyz']),
+]];
+$s->createPreapproval('plan_pro_xyz', 'user@test.com', 'a1b2c3d4e5f60718293a4b5c6d7e8f90', 'https://example.com/return', 'tok_test_abc123', 'a1b2c3d4e5f60718293a4b5c6d7e8f90', 'device-abc-12345678');
+assert_test(in_array('X-Idempotency-Key: a1b2c3d4e5f60718293a4b5c6d7e8f90', $s->lastCall['headers'], true), 'DID15a: idempotência preservada com device');
+assert_test(in_array('X-meli-session-id: device-abc-12345678', $s->lastCall['headers'], true), 'DID15b: device convive com idempotency');
+
+// DID12/DID16: device nunca em logs; nenhum POST real nos testes.
+$errLines = [];
+foreach (explode("\n", $svcSrc) as $line) {
+    if (str_contains($line, 'error_log')) $errLines[] = $line;
+}
+$leak = false;
+foreach ($errLines as $line) {
+    if (stripos($line, 'device') !== false) $leak = true;
+}
+assert_test(!$leak, 'DID12: nenhum error_log referencia device (' . count($errLines) . ' logs auditados)');
+assert_test(strpos((string)file_get_contents($ROOT . '/src/services/SubscriptionCheckoutService.php'), '[mp_device] attempt_suffix=') !== false, 'DID12b: observabilidade é presence-only');
+$hasRealCurl = false;
+foreach (glob($ROOT . '/tests/*.php') as $tf) {
+    $src = (string)file_get_contents($tf);
+    if (preg_match('/curl_(init|exec)\s*\(/', $src)) $hasRealCurl = true;
+}
+assert_test(!$hasRealCurl, 'DID16: nenhum teste executa curl real');
 
 // --- Resumo ---
 

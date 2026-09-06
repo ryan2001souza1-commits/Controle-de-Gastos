@@ -530,15 +530,35 @@
                     return;
                 }
 
+                // Device ID oficial (security.js): lido UMA vez por submit a
+                // partir do global MP_DEVICE_SESSION_ID. Ausente/lento ==
+                // string vazia (fail-safe: backend omite o header, checkout
+                // nunca bloqueia). Nunca logado, nunca em URL.
+                var deviceId = '';
+                try {
+                    if (typeof MP_DEVICE_SESSION_ID !== 'undefined' && MP_DEVICE_SESSION_ID) {
+                        deviceId = String(MP_DEVICE_SESSION_ID).slice(0, 160);
+                    }
+                } catch (e) {
+                    deviceId = '';
+                }
+
+                var subscribeBody = {
+                    card_token_id: token,
+                    attempt_token: ATTEMPT_TOKEN,
+                    csrf_token: csrfInput ? csrfInput.value : '',
+                };
+                if (deviceId !== '') {
+                    subscribeBody.device_id = deviceId;
+                }
+                // Limpa a cópia local assim que serializada (o backend valida).
+                deviceId = '';
+
                 fetch('/index.php?action=subscribe_token', {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        card_token_id: token,
-                        attempt_token: ATTEMPT_TOKEN,
-                        csrf_token: csrfInput ? csrfInput.value : '',
-                    }),
+                    body: JSON.stringify(subscribeBody),
                 }).then(function (resp) {
                     return resp.json().then(function (data) {
                         return { http: resp.status, data: data };

@@ -85,9 +85,12 @@ class SubscriptionCheckoutService
     }
 
     /**
+     * @param mixed $deviceId Device ID do navegador (não confiável; validado
+     *                        em MercadoPagoService::sanitizeDeviceId e jamais
+     *                        logado/persistido/ecoado).
      * @return array{http:int, body:array, phase:string, debug?:array}
      */
-    public function processTokenPayment(int $userId, string $attemptToken, string $cardTokenId): array
+    public function processTokenPayment(int $userId, string $attemptToken, string $cardTokenId, $deviceId = null): array
     {
         $this->setPhase('pre_validation');
         try {
@@ -197,15 +200,26 @@ class SubscriptionCheckoutService
 
             // POST ao MP com idempotency key = attempt (SEM transacao aberta).
             // Retry do mesmo attempt reenvia a MESMA chave: o MP deduplica.
+            // Device ID validado (nunca o valor bruto): presente → header
+            // X-meli-session-id; ausente/inválido → omitido (fail-safe).
             $this->setPhase('mp_create');
+            $sanitizedDeviceId = MercadoPagoService::sanitizeDeviceId($deviceId);
             $result = $this->mpService->createPreapproval(
                 $mpPlanId,
                 $email,
                 $attemptToken,
                 $backUrl,
                 $cardTokenId,
-                $attemptToken
+                $attemptToken,
+                $sanitizedDeviceId
             );
+            // Observabilidade presence-only: jamais o valor do Device ID.
+            error_log(sprintf(
+                '[mp_device] attempt_suffix=%s device_id_present=%s header_sent=%s',
+                substr($attemptToken, -8),
+                $sanitizedDeviceId !== null ? 'yes' : 'no',
+                $sanitizedDeviceId !== null ? 'yes' : 'no'
+            ));
             if ($result['ok'] === false) {
                 // Timeout/rede apos possivel criacao no MP: tenta resolver
                 // pelo registro exato antes de desistir (sem novo POST).

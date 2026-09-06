@@ -75,6 +75,13 @@ class MercadoPagoService
      *                                   pelos proprios SDKs do MP; a SEGURANCA
      *                                   NAO depende dele — a protecao primaria
      *                                   e a idempotencia local transacional.
+     * @param mixed $deviceId           Device ID do navegador (MP_DEVICE_SESSION_ID
+     *                                   do security.js oficial). Opcional: quando
+     *                                   valido, vai como header X-meli-session-id
+     *                                   (recomendacao oficial Subscriptions →
+     *                                   Improve payment approval). Ausente/
+     *                                   invalido = header omitido (fail-safe,
+     *                                   checkout nunca bloqueia por isso).
      * @return array{ok:bool, preapproval_id?:string, init_point?:string,
      *               external_reference?:string, plan_id?:string, status?:int,
      *               mp_status?:string, error?:string}
@@ -85,7 +92,8 @@ class MercadoPagoService
         string $externalReference,
         string $backUrl,
         string $cardTokenId,
-        string $idempotencyKey = ''
+        string $idempotencyKey = '',
+        $deviceId = null
     ): array {
         $planId = trim($planId);
         if ($planId === '') {
@@ -135,6 +143,12 @@ class MercadoPagoService
         ];
         if ($idempotencyKey !== '') {
             $headers[] = 'X-Idempotency-Key: ' . $idempotencyKey;
+        }
+        // Device ID (header oficial anti-fraude). SOMENTE com valor validado;
+        // jamais header vazio. Payload financeiro intacto.
+        $deviceId = self::sanitizeDeviceId($deviceId);
+        if ($deviceId !== null) {
+            $headers[] = 'X-meli-session-id: ' . $deviceId;
         }
         $ch = curl_init($url);
         curl_setopt_array($ch, [
@@ -514,6 +528,39 @@ class MercadoPagoService
         $httpStatus = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlErr = curl_error($ch);
         $body = is_string($resp) ? $resp : '';
+    }
+
+    /**
+     * Sanitiza o Device ID do navegador (MP_DEVICE_SESSION_ID do security.js
+     * oficial) para uso como header X-meli-session-id.
+     *
+     * Contrato fail-safe: qualquer valor ausente/invalido retorna null e o
+     * chamador OMITE o header (checkout nunca bloqueia por falta do Device ID).
+     *
+     * Regras (anti header-injection + anti-abuso):
+     * - null/''/não-string → null;
+     * - após trim: 8–128 chars, SOMENTE ASCII visível sem espaço
+     *   ([\x21-\x7E]) — CR/LF/%0d/%0a e controles são impossíveis aqui,
+     *   logo nenhum valor sanitizado pode quebrar linhas do header.
+     *
+     * @param mixed $deviceId valor não confiável vindo do frontend
+     */
+    public static function sanitizeDeviceId($deviceId): ?string
+    {
+        if (!is_string($deviceId)) {
+            return null;
+        }
+        $deviceId = trim($deviceId);
+        if ($deviceId === '') {
+            return null;
+        }
+        if (preg_match('/[\r\n]/', $deviceId) === 1) {
+            return null;
+        }
+        if (!preg_match('/\A[\x21-\x7E]{8,128}\z/', $deviceId)) {
+            return null;
+        }
+        return $deviceId;
     }
 
     /**
