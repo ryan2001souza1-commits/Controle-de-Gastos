@@ -657,7 +657,46 @@ assert_test(strpos($blob2, 'APP_USR-zzz') === false, 'SAN7: chave redigida');
 assert_test(strpos($blob2, 'Bearer tok123') === false, 'SAN8: bearer redigido');
 assert_test(($b2['nested_obj'] ?? '') === '[omitted]', 'SAN9: aninhado não-causa omitido');
 assert_test(MercadoPagoService::sanitizeMpErrorBody('str') === [], 'SAN10: não-array -> vazio');
-assert_test(MercadoPagoService::sanitizeMpErrorBody(['k' => str_repeat('z', 500)])['k'] !== str_repeat('z', 500), 'SAN11: teto de tamanho');
+assert_test(MercadoPagoService::sanitizeMpErrorBody(['k' => str_repeat('z', 600)])['k'] !== str_repeat('z', 600), 'SAN11: teto por string (anti-MB)');
+
+echo "\n--- BIG400: body 400 grande (>600) com múltiplas causes, sem perda ---\n";
+$bigBody = [
+    'message' => 'CC_VAL_433 Credit card validation has failed',
+    'error' => 'bad_request',
+    'status' => 400,
+    'status_detail' => 'cc_rejected_high_risk',
+    'code' => 'PA_UNAUTHORIZED',
+    'type' => 'validation_error',
+    'description' => 'Card validation failed for payer hidden@mail.com',
+    'data' => ['request_id' => 'abc123', 'attempt' => 1],
+    'causes' => [
+        ['code' => 'CC_VAL_433', 'description' => 'primary cause alpha'],
+        ['code' => 'RISK_001', 'description' => 'secondary cause beta with card 4111111111111111'],
+        ['code' => 'RISK_002', 'description' => 'tertiary cause gamma contact hidden@mail.com'],
+        ['code' => 'RISK_003', 'description' => 'quaternary cause delta'],
+        ['code' => 'RISK_004', 'description' => 'quinary cause epsilon'],
+    ],
+];
+$sanBig = MercadoPagoService::sanitizeMpErrorBody($bigBody);
+$jsonBig = json_encode($sanBig, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+assert_test(strlen($jsonBig) > 600, 'BIG1: fixture realmente >600 chars (' . strlen($jsonBig) . ')');
+assert_test(count($sanBig['causes'] ?? []) === 5, 'BIG2: NENHUMA causa perdida (5/5)');
+assert_test(($sanBig['causes'][1]['code'] ?? '') === 'RISK_001', 'BIG3: códigos das causes intactos');
+assert_test(strpos($jsonBig, 'hidden@mail.com') === false, 'BIG4: e-mail em causes redigido');
+assert_test(strpos($jsonBig, '4111111111111111') === false, 'BIG5: PAN em causes redigido');
+assert_test(strpos($jsonBig, 'CC_VAL_433') !== false && strpos($jsonBig, 'cc_rejected_high_risk') !== false, 'BIG6: códigos técnicos intactos');
+// Fragmentação: remontagem byte-igual, partes correlacionáveis.
+$parts = MercadoPagoService::fragmentLogJson($jsonBig, 1000, 10);
+assert_test(count($parts) >= 1, 'BIG7: fragmentação gera partes');
+$rebuilt = implode('', $parts);
+assert_test($rebuilt === $jsonBig || str_ends_with(end($parts), '{"truncated":true}'), 'BIG8: remontagem íntegra ou marcador explícito');
+foreach ($parts as $i => $p) {
+    assert_test(strlen($p) <= 1000, 'BIG9: parte ' . ($i + 1) . ' cabe no limite de linha');
+}
+$many = MercadoPagoService::fragmentLogJson(str_repeat('x', 2500), 1000, 2);
+assert_test(count($many) === 3 && end($many) === '{"truncated":true}', 'BIG10: overflow usa marcador explícito, nunca perda silenciosa');
+assert_test(MercadoPagoService::fragmentLogJson('')[0] === '{}', 'BIG11: vazio -> parte única');
+assert_test(strpos($jsonBig, 'abcdef0123456789') === false, 'BIG12: placeholder de formato (nenhum segredo real no teste)');
 
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed + $skipped;

@@ -203,18 +203,29 @@ class MercadoPagoService
                     $detail = '';
                 }
             }
-            // Body sanitizado para forense de suporte (WCS-49458): preserva
-            // estrutura/codigos/mensagens, redige PII/segredos. Capado.
+            // Body sanitizado fragmentado para forense de suporte (WCS-49458):
+            // preserva TODOS os campos tecnicos (sem teto arbitrario),
+            // redige PII/segredos. Sufixo da attempt para correlacao (a linha
+            // de resumo acima ja traz message/detail; as partes trazem tudo).
             $safeBody = json_encode(
                 self::sanitizeMpErrorBody($data),
                 JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
             );
-            if (!is_string($safeBody) || strlen($safeBody) > 600) {
-                $safeBody = substr(is_string($safeBody) ? $safeBody : '{}', 0, 600);
+            if (!is_string($safeBody)) {
+                $safeBody = '{}';
             }
             error_log('[MercadoPagoService] createPreapproval erro HTTP ' . $httpStatus . ': ' . $msg
-                . ($detail !== '' ? ' detail=' . $detail : '')
-                . ' body=' . $safeBody);
+                . ($detail !== '' ? ' detail=' . $detail : ''));
+            $attemptSuffix = (preg_match('/^[0-9a-f]{32}$/', $externalReference) === 1)
+                ? substr($externalReference, -8)
+                : 'na';
+            $parts = self::fragmentLogJson($safeBody);
+            $totalParts = count($parts);
+            foreach ($parts as $i => $chunk) {
+                error_log('[mp_error_body] attempt_suffix=' . $attemptSuffix
+                    . ' part=' . ($i + 1) . '/' . $totalParts
+                    . ' body=' . $chunk);
+            }
             return ['ok' => false, 'status' => $httpStatus, 'error' => $msg, 'mp_detail' => $detail];
         }
 
@@ -607,50 +618,82 @@ class MercadoPagoService
 
     /**
      * Sanitiza o body de erro do MP para logging forense (suporte WCS-49458).
-     * Preserva estrutura/codigos/mensagens/tipos; redige PII e segredos:
-     * emails, chaves (TEST-/APP_USR-), Bearer, PAN (13-19 digitos), hex
-     * longo (tokens/ids opacos), com teto de tamanho. Causas aninhadas
-     * (cause/causes) sanitizadas um nivel. Nunca inclui Device ID, card
-     * token, Access Token ou Public Key (esses nunca entram no body lido).
+     * Preserva INTEGRALMENTE os campos tecnicos (error, code, message,
+     * status, status_detail, cause, causes, type, description, data) em
+     * qualquer profundidade — contagens de causes NUNCA sao truncadas.
+     * Redige PII e segredos em TODAS as strings (emails, chaves TEST-/
+     * APP_USR-, Bearer, PAN, hex longo). Outras estruturas complexas sao
+     * omitidas. Strings sao capadas em 500 chars (anti-MB em log).
+     * Nunca inclui Device ID, card token, Access Token ou Public Key
+     * (esses nunca entram no body lido).
      *
      * @param mixed $data body decodificado (ou qualquer valor)
      */
     public static function sanitizeMpErrorBody($data): array
     {
-        if (!is_array($data)) {
-            return [];
+        $san = self::sanitizeMpErrorValue($data, 0);
+        return is_array($san) ? $san : [];
+    }
+
+    /**
+     * Chaves tecnicas preservadas recursivamente (ordem WCS-49458).
+     */
+    private const PRESERVED_ERROR_KEYS = [
+        'error', 'code', 'message', 'status', 'status_detail',
+        'cause', 'causes', 'type', 'description', 'data',
+    ];
+
+    private static function sanitizeMpErrorValue($value, int $depth)
+    {
+        if (is_string($value)) {
+            return self::redactSecretText(substr($value, 0, 500));
+        }
+        if (is_int($value) || is_float($value) || is_bool($value) || $value === null) {
+            return $value;
+        }
+        if (!is_array($value) || $depth >= 6) {
+            return '[omitted]';
         }
         $out = [];
-        $count = 0;
-        foreach ($data as $key => $value) {
-            if ($count >= 20) {
-                break;
-            }
-            $count++;
-            $safeKey = is_string($key) ? substr(preg_replace('/[^\w\-]/', '_', $key) ?? 'k', 0, 40) : 'k';
-            if (is_string($value)) {
-                $out[$safeKey] = self::redactSecretText(substr($value, 0, 200));
-            } elseif (is_int($value) || is_float($value) || is_bool($value) || $value === null) {
-                $out[$safeKey] = $value;
-            } elseif (is_array($value) && ($safeKey === 'cause' || $safeKey === 'causes')) {
-                $nested = [];
-                $n = 0;
-                foreach ($value as $ck => $cv) {
-                    if ($n >= 10) {
-                        break;
-                    }
-                    $n++;
-                    $nkey = is_string($ck) ? substr($ck, 0, 40) : (int)$ck;
-                    $nested[$nkey] = is_string($cv)
-                        ? self::redactSecretText(substr($cv, 0, 200))
-                        : (is_scalar($cv) || $cv === null ? $cv : '[nested]');
-                }
-                $out[$safeKey] = $nested;
-            } else {
+        foreach ($value as $key => $item) {
+            $safeKey = is_string($key) ? substr(preg_replace('/[^\w\-]/', '_', $key) ?? 'k', 0, 40) : (int)$key;
+            if (is_array($item) && !in_array($safeKey, self::PRESERVED_ERROR_KEYS, true) && !is_int($key)) {
                 $out[$safeKey] = '[omitted]';
+                continue;
             }
+            $out[$safeKey] = self::sanitizeMpErrorValue($item, $depth + 1);
         }
         return $out;
+    }
+
+    /**
+     * Fragmenta um JSON sanitizado em partes correlacionáveis para log
+     * ([mp_error_body] part=i/n). Sem limite arbitrário de conteúdo: até
+     * $maxParts partes de $chunk chars; além disso, a última parte carrega
+     * marcador '"truncated":true' explícito (nunca perda silenciosa).
+     *
+     * @return list<string> partes prontas (sem prefixo)
+     */
+    public static function fragmentLogJson(string $json, int $chunk = 1000, int $maxParts = 10): array
+    {
+        if ($chunk < 100) {
+            $chunk = 100;
+        }
+        if ($maxParts < 1) {
+            $maxParts = 1;
+        }
+        $len = strlen($json);
+        if ($len === 0) {
+            return ['{}'];
+        }
+        $parts = [];
+        for ($offset = 0; $offset < $len && count($parts) < $maxParts; $offset += $chunk) {
+            $parts[] = substr($json, $offset, $chunk);
+        }
+        if ($offset < $len) {
+            $parts[] = '{"truncated":true}';
+        }
+        return $parts;
     }
 
     /**
