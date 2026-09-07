@@ -1,8 +1,9 @@
 -- ============================================================
 -- Controle de Gastos — Schema do Banco de Dados (PostgreSQL)
--- Mantido atualizado: as colunas de plano e admin estao
--- alem das Migracoes (src/migrations.php) que garantem
--- que o banco de producao tenha a estrutura correta.
+-- Sincronizado com src/migrations.php (fonte de verdade do schema).
+-- As migrations aplicam o mesmo schema de forma idempotente
+-- (ADD COLUMN IF NOT EXISTS); este arquivo representa o estado
+-- final para novas instalacoes e revisao.
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS usuarios (
@@ -17,6 +18,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
     provider VARCHAR(20) DEFAULT NULL,
     provider_sub VARCHAR(255) DEFAULT NULL,
     -- Perfil
+    cpf VARCHAR(14) DEFAULT NULL,
     telefone VARCHAR(20),
     data_nascimento DATE,
     renda_mensal NUMERIC(12,2),
@@ -46,7 +48,10 @@ CREATE TABLE IF NOT EXISTS planos (
     slug VARCHAR(30) UNIQUE NOT NULL,
     preco NUMERIC(10,2) NOT NULL DEFAULT 0,
     descricao TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    status VARCHAR(20) NOT NULL DEFAULT 'ativo'
+        CHECK (status IN ('ativo','inativo')),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 --============================================================
@@ -72,6 +77,18 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     cancelled_at TIMESTAMP,
     expired_at TIMESTAMP,
     grace_period_end TIMESTAMP,
+    -- Correlacao com o gateway (reutilizavel pela futura integracao oficial):
+    -- mp_preapproval_id = ID do preapproval no Mercado Pago (UNIQUE parcial);
+    -- attempt_token = identificador opaco da tentativa local (UNIQUE parcial,
+    --   enviado como external_reference; resolve attempt -> user_id -> plano);
+    -- external_reference = rastreio legivel user_{ID}_{plano}_{attempt};
+    -- raw_status = status original retornado pelo gateway (auditoria);
+    -- checkout_url = URL de checkout/init_point do gateway.
+    mp_preapproval_id VARCHAR(80) DEFAULT NULL,
+    attempt_token VARCHAR(64) DEFAULT NULL,
+    external_reference VARCHAR(120) DEFAULT NULL,
+    raw_status VARCHAR(40) DEFAULT NULL,
+    checkout_url TEXT DEFAULT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE,
@@ -227,7 +244,8 @@ CREATE TABLE IF NOT EXISTS password_resets (
 CREATE TABLE IF NOT EXISTS sessions (
     id VARCHAR(128) PRIMARY KEY,
     data TEXT NOT NULL,
-    expires_at TIMESTAMP NOT NULL
+    expires_at TIMESTAMP NOT NULL,
+    user_id INTEGER DEFAULT NULL
 );
 
 -- ============================================================
@@ -260,3 +278,9 @@ CREATE INDEX IF NOT EXISTS idx_subscriptions_user_status
     ON subscriptions(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_status_renewal
     ON subscriptions(status, next_billing_date) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_subscriptions_mp_id
+    ON subscriptions(mp_preapproval_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_external_ref
+    ON subscriptions(external_reference);
+CREATE INDEX IF NOT EXISTS idx_sessions_user
+    ON sessions(user_id) WHERE user_id IS NOT NULL;

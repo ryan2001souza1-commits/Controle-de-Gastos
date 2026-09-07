@@ -107,15 +107,18 @@ cpf_assert('T40 usa CpfValidator::format no value',
 cpf_assert('T41 mensagem invalid_cpf',
     strpos($config, 'invalid_cpf') !== false);
 
-// --- meu_plano.php: mensagem invalid_cpf com link ---
+// --- configuracoes.php: mensagem invalid_cpf com contexto ---
+// O fluxo de CPF vive em public/configuracoes.php (form + mensagens de erro),
+// nao em public/meu_plano.php (pagina de planos, sem campo CPF).
 $meuPlano = file_get_contents($ROOT . '/public/meu_plano.php');
+$configPage = file_get_contents($ROOT . '/public/configuracoes.php');
 cpf_assert('T42 missing_cpf REMOVIDO',
     strpos($meuPlano, 'missing_cpf') === false);
 cpf_assert('T43 tem invalid_cpf com texto utile',
-    strpos($meuPlano, 'invalid_cpf') !== false
-    && (stripos($meuPlano, 'configura') !== false));
+    strpos($configPage, 'invalid_cpf') !== false
+    && (stripos($configPage, 'configura') !== false));
 cpf_assert('T44 link para configuracoes',
-    strpos($meuPlano, '/index.php?action=configuracoes') !== false);
+    strpos($configPage, '/index.php?action=configuracoes') !== false);
 
 // --- validador centralizado em arquivo proprio ---
 $validatorFile = $ROOT . '/src/services/CpfValidator.php';

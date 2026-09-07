@@ -91,13 +91,13 @@ psql "postgres://user:pass@host:5432/dbname?sslmode=require" -f database/schema.
 ## Como funciona em ambiente serverless
 
 - **Conexão PDO**: nova a cada cold start (cold = 200-500ms), reutilizada por request (singleton)
-- **Sessões PHP**: cookies stateless. Cada requisição traz o PHPSESSID. **NÃO persiste entre cold starts** — login expira quando a função "dorme"
+- **Sessões PHP**: persistidas em PostgreSQL via `DbSessionHandler` (`src/config/session_handler.php`, tabela `sessions`), com duração de 7 dias. Sobrevivem entre cold starts/instâncias serverless (não usam filesystem efêmero).
 - **Arquivos estáticos**: servidos pelo `api/index.php` lendo de `public/` (com cache `immutable`)
 - **POSTs**: funcionam normalmente, body chega em `php://input` e `$_POST`
 
 ## Limitações conhecidas
 
-1. **Sessões em serverless stateless** — sem storage compartilhado, cada função tem seu próprio filesystem. Para produção, use JWT ou Postgres para sessions.
+1. **Sessões em serverless** — resolvido via `DbSessionHandler` (Postgres compartilhado). Cada função lê/escreve a sessão no banco; filesystem efêmero não é usado.
 2. **Cold starts** — primeira requisição após inatividade demora ~500ms
 3. **Timeout 10s** — configurado em `vercel.json`. Aumentar se necessário.
 

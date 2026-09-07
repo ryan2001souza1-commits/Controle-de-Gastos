@@ -10,8 +10,10 @@
  * Pago foi removida por completo do código; este arquivo NÃO toca em dados
  * de assinaturas existentes e NÃO deve ganhar novas operações destrutivas
  * sem revisão explícita.
- * A coluna e adicionada pela migration principal (migrations.php) e
- * mantida por este arquivo.
+ * A coluna subscriptions.mp_preapproval_id é adicionada pela migration
+ * principal (src/migrations.php) e NAO deve ser removido por este arquivo:
+ * ela é reutilizável pela futura integração oficial (correlação com o
+ * preapproval do Mercado Pago) e preserva o histórico de tentativas.
  *
  * Executado automaticamente no boot do app (via runMigrations em migrations.php).
  * Idempotente: IF EXISTS em todos os DROP.
