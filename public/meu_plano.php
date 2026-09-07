@@ -61,8 +61,20 @@ $errMessages = [
     'service_error'         => 'Não foi possível iniciar o pagamento. Tente novamente.',
     'upgrade_service_error' => 'Não foi possível trocar de plano. Tente novamente.',
     'cancel_service_error'  => 'Não foi possível cancelar a assinatura. Tente novamente.',
+    'config_error'          => 'Assinaturas indisponíveis no momento. Tente novamente mais tarde.',
 ];
 $errText = $errMessages[$errKey] ?? null;
+
+$mpKey = (string)($_GET['mp'] ?? '');
+$mpMessages = [
+    'processing' => 'Assinatura sendo processada. Assim que o pagamento for confirmado, seu plano será ativado.',
+    'active'     => 'Assinatura ativa. Seu plano será liberado automaticamente após a confirmação.',
+    'pending'    => 'Assinatura pendente. Conclua o pagamento no Mercado Pago para ativar seu plano.',
+    'paused'     => 'Assinatura pausada. Regularize no Mercado Pago para reativar os recursos.',
+    'cancelled'  => 'Assinatura cancelada.',
+    'error'      => 'Não foi possível verificar a assinatura. Tente novamente.',
+];
+$mpText = $mpMessages[$mpKey] ?? null;
 ?>
 
 <?php if ($flashSuccess): ?>
@@ -84,6 +96,36 @@ $errText = $errMessages[$errKey] ?? null;
         <?= render_icon('info', 13) ?>
         <span><?= htmlspecialchars($errText) ?></span>
     </div>
+<?php endif; ?>
+
+<?php if ($mpText): ?>
+    <div class="alert <?= $mpKey === 'error' ? 'alert-error' : 'alert-success' ?>" role="status" style="margin-bottom:var(--space-4)">
+        <?= render_icon($mpKey === 'error' ? 'info' : 'check', 13) ?>
+        <span><?= htmlspecialchars($mpText) ?></span>
+    </div>
+<?php endif; ?>
+
+<?php if (!empty($checkoutAttempt) && !empty($checkoutAttempt['checkout_url'])): ?>
+    <div class="alert alert-success" role="status" style="margin-bottom:var(--space-4)">
+        <?= render_icon('check', 13) ?>
+        <span>Você tem uma assinatura pendente. <a href="<?= htmlspecialchars($checkoutAttempt['checkout_url']) ?>">Clique aqui para concluir o pagamento</a>.</span>
+    </div>
+<?php endif; ?>
+
+<?php if (!empty($canCancelSubscription)): ?>
+<section class="panel" style="margin-bottom:var(--space-5)">
+    <div class="panel-body" style="display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap">
+        <div style="flex:1;min-width:180px;font-size:13px;color:var(--color-text-2)">
+            Sua assinatura está ativa. O cancelamento interrompe a cobrança recorrente.
+        </div>
+        <form action="/index.php?action=subscription_cancel" method="POST" style="flex:0 0 auto">
+            <?= csrf_field() ?>
+            <button type="submit" class="btn btn-ghost" onclick="return confirm('Cancelar a assinatura? Você voltará ao plano gratuito.')">
+                Cancelar assinatura
+            </button>
+        </form>
+    </div>
+</section>
 <?php endif; ?>
 
 
@@ -242,6 +284,16 @@ $errText = $errMessages[$errKey] ?? null;
                     </div>
 
                     <div style="width:100%">
+                        <?php if (!empty($mpConfigured)): ?>
+                        <form action="/index.php?action=subscription_start" method="POST" style="width:100%">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="plan" value="<?= htmlspecialchars($slug) ?>">
+                            <button type="submit" class="btn" style="width:100%;justify-content:center;display:flex;align-items:center;gap:6px">
+                                <?= render_icon('zap', 15) ?>
+                                Atualizar para <?= htmlspecialchars($planName) ?>
+                            </button>
+                        </form>
+                        <?php else: ?>
                         <div
                             class="btn"
                             style="width:100%;justify-content:center;display:flex;align-items:center;gap:6px;opacity:.55;cursor:not-allowed"
@@ -250,9 +302,10 @@ $errText = $errMessages[$errKey] ?? null;
                             <?= render_icon('zap', 15) ?>
                             Atualizar para <?= htmlspecialchars($planName) ?>
                         </div>
+                        <?php endif; ?>
                     </div>
                     <div style="margin-top:var(--space-2);font-size:11px;color:var(--color-text-3);text-align:center">
-                        Assinaturas temporariamente indisponíveis.
+                        <?= !empty($mpConfigured) ? 'Pagamento seguro via Mercado Pago.' : 'Assinaturas temporariamente indisponíveis.' ?>
                     </div>
                 </div>
             </div>

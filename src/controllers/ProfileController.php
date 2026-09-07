@@ -154,6 +154,24 @@ class ProfileController
         $checkoutAttempt = null;
         $mpPublicKey = '';
 
+        // ---- Assinaturas Mercado Pago (produção) ----
+        $subSvc = new SubscriptionService($this->db);
+        $activeSub = $subSvc->findActiveForUser($userId);
+        // Cancelamento liberado só para a assinatura ativa do próprio usuário.
+        $canCancelSubscription = ($activeSub !== null && !empty($activeSub['mp_preapproval_id']));
+        // Tentativa pendente com checkout: permite retomar o pagamento.
+        $pendingSub = $subSvc->findOpenForUser($userId);
+        if ($pendingSub !== null && ($pendingSub['status'] ?? '') !== 'pending') {
+            $pendingSub = null;
+        }
+        if ($pendingSub !== null && empty($pendingSub['checkout_url'])) {
+            $pendingSub = null;
+        }
+        $checkoutAttempt = $pendingSub;
+        // Configuração (sem expor IDs/tokens): só indica se o fluxo está ativo.
+        $mpConfigured = SubscriptionService::isConfigured('pro')
+            || SubscriptionService::isConfigured('premium');
+
         $featureLabels = [
             'relatorios'          => ['label' => 'Relatórios',          'icon' => 'chart',     'desc' => 'Acesso à tela completa de relatórios'],
             'historico'           => ['label' => 'Histórico',            'icon' => 'clock',     'desc' => 'Histórico de transações por mais meses'],
@@ -190,6 +208,54 @@ class ProfileController
         $userEmail = $user->email;
 
         require basePath('meu_plano.php');
+    }
+
+    /**
+     * Retorno do checkout MP (GET autenticado).
+     * NUNCA ativa plano: apenas consulta GET /preapproval/{id} (quando
+     * informado) e informa o estado atual. A fonte da verdade é a API +
+     * o webhook.
+     */
+    public function mpReturn(): void
+    {
+        requireLogin();
+        $mpId = trim((string)($_GET['preapproval_id'] ?? $_GET['id'] ?? ''));
+        if ($mpId === '') {
+            header('Location: /index.php?action=meu_plano&mp=processing');
+            exit;
+        }
+        if (!preg_match('/^[A-Za-z0-9_-]{1,80}$/', $mpId)) {
+            header('Location: /index.php?action=meu_plano&mp=error');
+            exit;
+        }
+        if (!SubscriptionService::accessTokenPresent()) {
+            header('Location: /index.php?action=meu_plano&mp=error');
+            exit;
+        }
+        try {
+            $mp = new MercadoPagoClient();
+            $res = $mp->getSubscription($mpId);
+        } catch (Throwable $e) {
+            error_log('[mp_return] consulta falhou: ' . $e->getMessage());
+            header('Location: /index.php?action=meu_plano&mp=error');
+            exit;
+        }
+        if (!$res['ok']) {
+            header('Location: /index.php?action=meu_plano&mp=error');
+            exit;
+        }
+        $status = strtolower(trim((string)($res['data']['status'] ?? '')));
+        $map = [
+            'authorized' => 'active',
+            'pending'    => 'pending',
+            'paused'     => 'paused',
+            'cancelled'  => 'cancelled',
+        ];
+        $key = $map[$status] ?? 'error';
+        // Sincroniza leitura local de forma oportunista (sem ativar nada aqui:
+        // a ativação ocorre no webhook via syncFromApi).
+        header('Location: /index.php?action=meu_plano&mp=' . $key);
+        exit;
     }
 
     public function updatePassword(): void

@@ -48,6 +48,9 @@ require_once __DIR__ . '/../src/services/ReportService.php';
 require_once __DIR__ . '/../src/services/GoalService.php';
 require_once __DIR__ . '/../src/services/BudgetService.php';
 require_once __DIR__ . '/../src/services/PlanService.php';
+require_once __DIR__ . '/../src/services/MercadoPagoClient.php';
+require_once __DIR__ . '/../src/services/SubscriptionService.php';
+require_once __DIR__ . '/../src/services/SubscriptionWebhookService.php';
 require_once __DIR__ . '/../src/services/LancamentoLimitService.php';
 require_once __DIR__ . '/../src/services/CategoriaLimitService.php';
 require_once __DIR__ . '/../src/services/OrcamentoLimitService.php';
@@ -114,6 +117,7 @@ $csrfProtectedActions = [
     'store_goal', 'update_goal', 'delete_goal', 'update_profile',
     'update_password', 'feedback_create', 'reportar', 'reportar_create',
     'admin_bug_update', 'admin_feedback_update', 'ai_chat', 'logout',
+    'subscription_start', 'subscription_cancel',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -205,6 +209,43 @@ if ($action === 'register') {
     $profileController->index();
 } elseif ($action === 'meu_plano') {
     $profileController->meuPlano();
+} elseif ($action === 'subscription_start') {
+    // Inicia assinatura MP: POST + login + CSRF (validado acima).
+    requireLogin();
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        header('Location: /index.php?action=meu_plano&error=method');
+        exit;
+    }
+    $userId = (int)($_SESSION['user_id'] ?? 0);
+    $user = $userModel->findById($userId);
+    if (!$user) { header('Location: /?action=login'); exit; }
+    $plan = (string)($_POST['plan'] ?? '');
+    $subSvc = new SubscriptionService($db);
+    $result = $subSvc->start($userId, $user->email, $plan);
+    if ($result['ok']) {
+        header('Location: ' . $result['init_point'], true, 302);
+        exit;
+    }
+    header('Location: /index.php?action=meu_plano&error=' . urlencode($result['error']));
+    exit;
+} elseif ($action === 'subscription_cancel') {
+    // Cancela assinatura ativa do próprio usuário: POST + login + CSRF.
+    requireLogin();
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        header('Location: /index.php?action=meu_plano&error=method');
+        exit;
+    }
+    $userId = (int)($_SESSION['user_id'] ?? 0);
+    $subSvc = new SubscriptionService($db);
+    $result = $subSvc->cancelActive($userId);
+    if ($result['ok']) {
+        header('Location: /index.php?action=meu_plano&cancelled=1');
+        exit;
+    }
+    header('Location: /index.php?action=meu_plano&error=' . urlencode($result['error']));
+    exit;
+} elseif ($action === 'mp_return') {
+    $profileController->mpReturn();
 } elseif ($action === 'update_profile') {
     $profileController->updateProfile();
 } elseif ($action === 'update_password') {
