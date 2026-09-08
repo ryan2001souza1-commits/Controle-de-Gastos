@@ -59,6 +59,20 @@ function mp_guard_scan_except(string $file, array $dirs, array $exts, string $pa
     return array_values(array_filter($hits, fn($h) => strpos($h, $file) === false));
 }
 
+/** Retorna o fonte sem linhas de comentario/docblock. */
+function mp_guard_code_only(string $src): string
+{
+    $out = '';
+    foreach (explode("\n", $src) as $line) {
+        $t = ltrim($line);
+        if (str_starts_with($t, '*') || str_starts_with($t, '//') || str_starts_with($t, '#') || str_starts_with($t, '/*')) {
+            continue;
+        }
+        $out .= $line . "\n";
+    }
+    return $out;
+}
+
 /**
  * Scan que ignora linhas de comentario/docblock (para permitir mencoes
  * documentais como o motivo da remocao do POST /preapproval).
@@ -104,10 +118,21 @@ $starterSrc = (string)@file_get_contents($ROOT . '/src/services/MercadoPagoCheck
 mp_guard_assert(strpos($starterSrc, 'https://api.mercadopago.com/preapproval_plan/') !== false, 'G01b starter consulta GET /preapproval_plan/{id}');
 $ctrlSrcEarly = (string)@file_get_contents($ROOT . '/src/controllers/SubscribeController.php');
 
-// ---- G02: nenhum endpoint webhook MP ativo (etapa 1 NAO tem webhook) ----
-mp_guard_assert(!file_exists($ROOT . '/public/mercadopago_webhook.php'), 'G02a arquivo mercadopago_webhook.php ausente');
+// ---- G02: endpoint minimo de webhook (etapa webhook-1, sem efeitos) ----
+mp_guard_assert(file_exists($ROOT . '/public/mercadopago_webhook.php'), 'G02a endpoint mercadopago_webhook.php existe');
+mp_guard_assert(file_exists($ROOT . '/src/services/MercadoPagoWebhookHandler.php'), 'G02b handler MercadoPagoWebhookHandler.php existe');
 $hits = mp_guard_scan($code, $exts, '/mercadopago_webhook/i');
-mp_guard_assert($hits === [], 'G02b sem referencia a mercadopago_webhook', implode(',', $hits));
+$hitsNew = array_values(array_filter($hits, fn($h) => strpos($h, 'tests/') === false));
+$hitsAllowed = array_values(array_filter($hitsNew, fn($h) =>
+    strpos($h, 'public/mercadopago_webhook.php') !== false
+    || strpos($h, 'services/MercadoPagoWebhookHandler.php') !== false
+    || strpos($h, 'mp_removal_guards.php') !== false
+    || strpos($h, 'mp_webhook_tests.php') !== false
+));
+mp_guard_assert(count($hitsNew) === count($hitsAllowed), 'G02c mercadopago_webhook SOMENTE nos arquivos novos', implode(',', array_diff($hitsNew, $hitsAllowed)));
+$whEndpoint = (string)@file_get_contents($ROOT . '/public/mercadopago_webhook.php');
+$whHandler = (string)@file_get_contents($ROOT . '/src/services/MercadoPagoWebhookHandler.php');
+mp_guard_assert(strpos($whEndpoint, 'getDBConnection') === false && strpos($whHandler, 'getDBConnection') === false, 'G02d webhook sem DB');
 
 // ---- G03: arquitetura antiga NAO ressuscitada; rota nova permitida ----
 $hits = mp_guard_scan($code, $exts, '/subscription_start|subscription_cancel|action=mp_return|->subscriptionStart|->subscriptionCancel|->mpReturn/i');
@@ -124,9 +149,13 @@ mp_guard_assert(!file_exists($ROOT . '/src/services/MercadoPagoClient.php'), 'G0
 mp_guard_assert(!file_exists($ROOT . '/src/services/SubscriptionWebhookService.php'), 'G04c SubscriptionWebhookService.php ausente');
 mp_guard_assert(!file_exists($ROOT . '/src/services/SubscriptionService.php'), 'G04d SubscriptionService.php ausente');
 
-// ---- G05: sem HMAC/cartao/webhook; POST /preapproval REMOVIDO do starter ----
+// ---- G05: sem HMAC/cartao fora do webhook minimo; POST /preapproval REMOVIDO ----
 $hitsBad = mp_guard_scan_code($code, $exts, '/x-signature|card_token_id|authorized_payments|subscription_preapproval|subscription_authorized_payment/i');
-mp_guard_assert($hitsBad === [], 'G05a sem HMAC/card_token no codigo executavel', implode(',', $hitsBad));
+$hitsBadOutside = array_values(array_filter($hitsBad, fn($h) =>
+    strpos($h, 'services/MercadoPagoWebhookHandler.php') === false
+    && strpos($h, 'public/mercadopago_webhook.php') === false
+));
+mp_guard_assert($hitsBadOutside === [], 'G05a HMAC/cartao SOMENTE no webhook minimo', implode(',', $hitsBadOutside));
 mp_guard_assert(strpos($starterSrc, 'CURLOPT_POSTFIELDS') === false, 'G05a2 starter sem POST (sem POST /preapproval)');
 mp_guard_assert(strpos($starterSrc, '/preapproval\'') === false && strpos($starterSrc, '/preapproval"') === false, 'G05a3 starter sem endpoint POST /preapproval');
 $hitsInitOutside = mp_guard_scan_except('services/MercadoPagoCheckoutStarter.php', $code, $exts, '/[\'"]init_point[\'"]/i');
@@ -136,9 +165,9 @@ mp_guard_assert($hitsInitOutside === [], 'G05b init_point SOMENTE no starter nov
 $hitsCard = mp_guard_scan($code, $exts, '/CardForm\s*\(|createCardToken|sdk\.mercadopago\.com|MERCADOPAGO_PUBLIC_KEY/i');
 mp_guard_assert($hitsCard === [], 'G05c sem CardForm/MP.js/Public Key', implode(',', $hitsCard));
 
-// ---- G06: SOMENTE as 3 vars MP desta etapa (+ placeholders comentados) ----
+// ---- G06: SOMENTE as vars MP desta integracao (+ placeholders comentados) ----
 $hits = mp_guard_scan($code, $exts, '/MERCADOPAGO_/');
-$allowedFiles = ['services/MercadoPagoCheckoutStarter.php'];
+$allowedFiles = ['services/MercadoPagoCheckoutStarter.php', 'services/MercadoPagoWebhookHandler.php', 'public/mercadopago_webhook.php'];
 $hitsOutside = array_values(array_filter($hits, function ($h) use ($allowedFiles) {
     foreach ($allowedFiles as $a) {
         if (strpos($h, $a) !== false) {
@@ -147,9 +176,9 @@ $hitsOutside = array_values(array_filter($hits, function ($h) use ($allowedFiles
     }
     return true;
 }));
-mp_guard_assert($hitsOutside === [], 'G06a MERCADOPAGO_* SOMENTE no starter novo', implode(',', $hitsOutside));
-mp_guard_assert(preg_match('/MERCADOPAGO_PUBLIC_KEY|MERCADOPAGO_CLIENT_|MERCADOPAGO_WEBHOOK/i', $starterSrc) !== 1, 'G06b starter NAO le Public Key/Client/Webhook');
-// .env.example: permite SOMENTE placeholders comentados e vazios das 3 vars
+mp_guard_assert($hitsOutside === [], 'G06a MERCADOPAGO_* SOMENTE no starter/webhook novos', implode(',', $hitsOutside));
+mp_guard_assert(preg_match('/MERCADOPAGO_PUBLIC_KEY|MERCADOPAGO_CLIENT_/i', $starterSrc) !== 1, 'G06b starter NAO le Public Key/Client');
+// .env.example: permite SOMENTE placeholders comentados e vazios das vars oficiais
 $envExample = (string)@file_get_contents($ROOT . '/.env.example');
 $envMpLines = [];
 foreach (explode("\n", $envExample) as $i => $line) {
@@ -161,14 +190,14 @@ $envOk = true;
 foreach ($envMpLines as $e) {
     $t = trim($e['line']);
     $isCommented = str_starts_with($t, '#');
-    $isAllowedKey = str_contains($t, 'MERCADOPAGO_ACCESS_TOKEN') || str_contains($t, 'MERCADOPAGO_PLAN_ID_PRO') || str_contains($t, 'MERCADOPAGO_PLAN_ID_PREMIUM');
+    $isAllowedKey = str_contains($t, 'MERCADOPAGO_ACCESS_TOKEN') || str_contains($t, 'MERCADOPAGO_PLAN_ID_PRO') || str_contains($t, 'MERCADOPAGO_PLAN_ID_PREMIUM') || str_contains($t, 'MERCADOPAGO_WEBHOOK_SECRET');
     // placeholder deve ser comentado e sem valor real (termina com = ou vazio apos =)
     $hasRealValue = preg_match('/^#?\s*MERCADOPAGO_\w+\s*=\s*\S+/', $t) === 1;
     if (!$isCommented || !$isAllowedKey || $hasRealValue) {
         $envOk = false;
     }
 }
-mp_guard_assert($envOk && count($envMpLines) === 3, 'G06c .env.example tem SOMENTE 3 placeholders comentados/vazios', json_encode($envMpLines));
+mp_guard_assert($envOk && count($envMpLines) === 4, 'G06c .env.example tem SOMENTE 4 placeholders comentados/vazios', json_encode($envMpLines));
 // View nunca referencia segredos
 $meuPlano = (string)@file_get_contents($ROOT . '/public/meu_plano.php');
 mp_guard_assert(strpos($meuPlano, 'MERCADOPAGO_') === false, 'G06d view sem MERCADOPAGO_*');
@@ -223,6 +252,14 @@ if (preg_match('/function meuPlano\(\).*?^    \}/ms', $profileSrc, $m)) {
     $meuPlanoFn = $m[0];
 }
 mp_guard_assert(stripos($meuPlanoFn, 'UPDATE usuarios SET plano') === false, 'G10d retorno NAO ativa plano');
+
+// ---- G12: webhook minimo sem efeitos (sem token, sem banco, sem ativacao) ----
+mp_guard_assert(strpos(mp_guard_code_only($whHandler), 'MERCADOPAGO_ACCESS_TOKEN') === false && strpos(mp_guard_code_only($whEndpoint), 'MERCADOPAGO_ACCESS_TOKEN') === false, 'G12a webhook NAO usa Access Token');
+mp_guard_assert(strpos($whHandler, 'INSERT INTO') === false && strpos($whHandler, 'UPDATE ') === false && strpos($whHandler, 'DELETE FROM') === false, 'G12b handler sem escrita');
+mp_guard_assert(strpos($whEndpoint, 'INSERT INTO') === false && strpos($whEndpoint, 'UPDATE ') === false && strpos($whEndpoint, 'DELETE FROM') === false, 'G12c endpoint sem escrita');
+mp_guard_assert(strpos($whEndpoint, 'config.php') === false && strpos($whEndpoint, 'session_start') === false, 'G12d endpoint standalone (sem config/sessao)');
+mp_guard_assert(strpos($whEndpoint, 'php://input') !== false, 'G12e endpoint le body bruto');
+mp_guard_assert(stripos($whHandler . $whEndpoint, 'UPDATE usuarios SET plano') === false, 'G12f webhook nao ativa plano');
 
 echo "\n=== RESUMO GUARDAS ===\n";
 $total = $passed + $failed;
