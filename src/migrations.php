@@ -220,10 +220,10 @@ function runMigrations(PDO $db): void
         // cron de renovacoes futuras
         "CREATE INDEX IF NOT EXISTS idx_subscriptions_status_renewal
             ON subscriptions(status, next_billing_date) WHERE status = 'active'",
-        // Mercado Pago: busca por ID do MP
+        // Gateway historico: busca por ID externo
         "CREATE INDEX IF NOT EXISTS idx_subscriptions_mp_id
             ON subscriptions(mp_preapproval_id)",
-        // Mercado Pago: busca por external_reference
+        // Gateway historico: busca por external_reference
         "CREATE INDEX IF NOT EXISTS idx_subscriptions_external_ref
             ON subscriptions(external_reference)",
     ];
@@ -252,19 +252,19 @@ function runMigrations(PDO $db): void
         // Relacionamento com assinatura ativa
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS active_subscription_id
             INTEGER REFERENCES subscriptions(id) ON DELETE SET NULL",
-        // Mercado Pago: correlacionar com a assinatura externa
+        // Gateway historico: correlacionar com a assinatura externa
         "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS mp_preapproval_id VARCHAR(80)",
         // attempt_token: identificador opaco da tentativa local (UUID hex, 32 chars).
-        // Enviado ao Mercado Pago como external_reference; resolve
+        // Enviado ao gateway como external_reference; resolve
         // attempt -> user_id -> plan_slug de forma deterministica, sem
         // depender de ordem temporal, plano ou email do pagador.
         // Registros historicos permanecem com attempt_token NULL.
         "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS attempt_token VARCHAR(64)",
         // external_reference: rastreio do formato user_{ID}_{plano}
         "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS external_reference VARCHAR(120)",
-        // raw_status: status original retornado pelo Mercado Pago (auditoria)
+        // raw_status: status original retornado pelo gateway historico (auditoria)
         "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS raw_status VARCHAR(40) DEFAULT NULL",
-        // checkout_url: URL de checkout/init_point do Mercado Pago
+        // checkout_url: URL de checkout do gateway historico (coluna legada, inerte)
         "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS checkout_url TEXT NULL",
     ];
 
@@ -272,7 +272,7 @@ function runMigrations(PDO $db): void
         $db->exec($sql);
     }
 
-    // Migration de dados legados: extrair init_point de raw_status para checkout_url.
+    // Migration de dados legados: extrair URL de checkout legada de raw_status para checkout_url.
     // Idempotente: so preenche checkout_url quando NULL e raw_status contem |init:.
     // Nao modifica raw_status.
     $legacyMigration = <<<'SQL'

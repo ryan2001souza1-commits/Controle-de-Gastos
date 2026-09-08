@@ -78,12 +78,12 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     expired_at TIMESTAMP,
     grace_period_end TIMESTAMP,
     -- Correlacao com o gateway (reutilizavel pela futura integracao oficial):
-    -- mp_preapproval_id = ID do preapproval no Mercado Pago (UNIQUE parcial);
+    -- mp_preapproval_id = ID externo da assinatura no gateway historico (UNIQUE parcial);
     -- attempt_token = identificador opaco da tentativa local (UNIQUE parcial,
     --   enviado como external_reference; resolve attempt -> user_id -> plano);
     -- external_reference = rastreio legivel user_{ID}_{plano}_{attempt};
     -- raw_status = status original retornado pelo gateway (auditoria);
-    -- checkout_url = URL de checkout/init_point do gateway.
+    -- checkout_url = URL de checkout legada do gateway historico.
     mp_preapproval_id VARCHAR(80) DEFAULT NULL,
     attempt_token VARCHAR(64) DEFAULT NULL,
     external_reference VARCHAR(120) DEFAULT NULL,

@@ -132,10 +132,10 @@ class ProfileController
         $currentPrice = $planSvc->getPlanPrice($currentPlanSlug);
 
         $upgrades = [];
+        // Planos pagos internos (upgrade direto desabilitado — sem gateway ativo).
         $upgradeSlugs = array_filter(
             PlanService::getValidSlugs(),
-            fn(string $s) => !in_array($s, [$currentPlanSlug], true)
-                && in_array($s, SubscriptionService::ALLOWED_PLANS, true)
+            fn(string $s) => !in_array($s, [$currentPlanSlug, PlanService::SLUG_FREE], true)
         );
         foreach ($upgradeSlugs as $slug) {
             $upgrades[$slug] = [
@@ -183,73 +183,7 @@ class ProfileController
             'ai_insights'       => ['label' => 'Insights inteligentes', 'desc' => 'Alertas e insights automáticos.'],
         ];
 
-        // Cancelamento disponível somente com assinatura ativa local.
-        $canCancelSubscription = false;
-        try {
-            $subSvc = new SubscriptionService($this->db);
-            $canCancelSubscription = $subSvc->findActiveForUser($userId) !== null;
-        } catch (Throwable $e) {
-            $canCancelSubscription = false;
-        }
-
         require basePath('meu_plano.php');
-    }
-
-    /**
-     * POST subscription_start — cria assinatura no Mercado Pago.
-     * Preço NUNCA vem do frontend: o backend resolve plan_slug -> plano.
-     * Em sucesso redireciona ao checkout (init_point); nunca ativa plano.
-     */
-    public function subscriptionStart(): void
-    {
-        requireLogin();
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            header('Location: /index.php?action=meu_plano&error=method'); exit;
-        }
-        $userId = (int)($_SESSION['user_id'] ?? 0);
-        $user = $this->userModel->findById($userId);
-        if (!$user) { header('Location: /?action=login'); exit; }
-
-        $plan = strtolower(trim((string)($_POST['plan'] ?? '')));
-        $svc = new SubscriptionService($this->db);
-        $res = $svc->start($userId, (string)$user->email, $plan);
-        if (!$res['ok']) {
-            $map = [
-                'invalid_plan' => 'invalid_plan', 'plan_not_found' => 'plan_not_found',
-                'already_subscribed' => 'already_subscribed', 'config_error' => 'config_error',
-            ];
-            $err = $map[$res['error']] ?? 'service_error';
-            header('Location: /index.php?action=meu_plano&error=' . $err); exit;
-        }
-        header('Location: ' . $res['init_point']); exit;
-    }
-
-    /** POST subscription_cancel — cancela no MP (quando vinculado) + baixa local. */
-    public function subscriptionCancel(): void
-    {
-        requireLogin();
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            header('Location: /index.php?action=meu_plano&error=method'); exit;
-        }
-        $userId = (int)($_SESSION['user_id'] ?? 0);
-        $svc = new SubscriptionService($this->db);
-        $res = $svc->cancelActive($userId);
-        if (!$res['ok']) {
-            $err = $res['error'] === 'no_active_subscription' ? 'no_active_subscription' : 'cancel_service_error';
-            header('Location: /index.php?action=meu_plano&error=' . $err); exit;
-        }
-        header('Location: /index.php?action=meu_plano&cancelled=1'); exit;
-    }
-
-    /**
-     * GET mp_return — retorno neutro do checkout.
-     * NUNCA ativa plano: apenas devolve o usuário ao Meu Plano.
-     * A confirmação real virá pelo backend (API/webhook — ETAPA 2).
-     */
-    public function mpReturn(): void
-    {
-        requireLogin();
-        header('Location: /index.php?action=meu_plano'); exit;
     }
 
     public function updatePassword(): void

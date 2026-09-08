@@ -48,8 +48,6 @@ require_once __DIR__ . '/../src/services/ReportService.php';
 require_once __DIR__ . '/../src/services/GoalService.php';
 require_once __DIR__ . '/../src/services/BudgetService.php';
 require_once __DIR__ . '/../src/services/PlanService.php';
-require_once __DIR__ . '/../src/services/MercadoPagoClient.php';
-require_once __DIR__ . '/../src/services/SubscriptionService.php';
 require_once __DIR__ . '/../src/services/LancamentoLimitService.php';
 require_once __DIR__ . '/../src/services/CategoriaLimitService.php';
 require_once __DIR__ . '/../src/services/OrcamentoLimitService.php';
@@ -116,7 +114,6 @@ $csrfProtectedActions = [
     'store_goal', 'update_goal', 'delete_goal', 'update_profile',
     'update_password', 'feedback_create', 'reportar', 'reportar_create',
     'admin_bug_update', 'admin_feedback_update', 'ai_chat', 'logout',
-    'subscription_start', 'subscription_cancel',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -208,13 +205,6 @@ if ($action === 'register') {
     $profileController->index();
 } elseif ($action === 'meu_plano') {
     $profileController->meuPlano();
-} elseif ($action === 'subscription_start') {
-    $profileController->subscriptionStart();
-} elseif ($action === 'subscription_cancel') {
-    $profileController->subscriptionCancel();
-} elseif ($action === 'mp_return') {
-    // Retorno neutro do checkout MP: nunca ativa plano (ver ProfileController::mpReturn).
-    $profileController->mpReturn();
 } elseif ($action === 'update_profile') {
     $profileController->updateProfile();
 } elseif ($action === 'update_password') {

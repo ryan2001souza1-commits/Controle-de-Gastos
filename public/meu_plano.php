@@ -46,63 +46,7 @@ $planBadgeLabel = [
 $planIsAtivo = $planData['is_ativo'] ?? true;
 $statusLabel = $planIsAtivo ? 'Ativo' : 'Inativo';
 $statusBadgeClass = $planIsAtivo ? 'badge-success' : 'badge-warning';
-
-$flashSuccess = (($_GET['subscribed'] ?? '') === '1');
-$flashCancelled = (($_GET['cancelled'] ?? '') === '1');
-$flashError = (($_GET['error'] ?? '') !== '');
-
-$errKey = (string)($_GET['error'] ?? '');
-$errMessages = [
-    'invalid_plan'          => 'Plano inválido.',
-    'plan_not_found'        => 'Plano não encontrado.',
-    'already_subscribed'    => 'Você já possui uma assinatura ativa.',
-    'no_active_subscription'=> 'Você não possui uma assinatura ativa.',
-    'method'                => 'Método não permitido.',
-    'service_error'         => 'Não foi possível iniciar o pagamento. Tente novamente.',
-    'upgrade_service_error' => 'Não foi possível trocar de plano. Tente novamente.',
-    'cancel_service_error'  => 'Não foi possível cancelar a assinatura. Tente novamente.',
-    'gateway_unavailable'   => 'Pagamento temporariamente indisponível.',
-    'config_error'          => 'Assinaturas temporariamente indisponíveis.',
-];
-$errText = $errMessages[$errKey] ?? null;
 ?>
-
-<?php if ($flashSuccess): ?>
-    <div class="alert alert-success" role="status" style="margin-bottom:var(--space-4)">
-        <?= render_icon('check', 13) ?>
-        <span>Assinatura criada com sucesso.</span>
-    </div>
-<?php endif; ?>
-
-<?php if ($flashCancelled): ?>
-    <div class="alert alert-success" role="status" style="margin-bottom:var(--space-4)">
-        <?= render_icon('check', 13) ?>
-        <span>Assinatura cancelada.</span>
-    </div>
-<?php endif; ?>
-
-<?php if ($flashError && $errText): ?>
-    <div class="alert alert-error" role="alert" style="margin-bottom:var(--space-4)">
-        <?= render_icon('info', 13) ?>
-        <span><?= htmlspecialchars($errText) ?></span>
-    </div>
-<?php endif; ?>
-
-<?php if (!empty($canCancelSubscription)): ?>
-<section class="panel" style="margin-bottom:var(--space-5)">
-    <div class="panel-body" style="display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap">
-        <div style="flex:1;min-width:180px;font-size:13px;color:var(--color-text-2)">
-            Sua assinatura está ativa. O cancelamento interrompe a cobrança recorrente.
-        </div>
-        <form action="/index.php?action=subscription_cancel" method="POST" style="flex:0 0 auto">
-            <?= csrf_field() ?>
-            <button type="submit" class="btn btn-ghost" onclick="return confirm('Cancelar a assinatura? Você voltará ao plano gratuito.')">
-                Cancelar assinatura
-            </button>
-        </form>
-    </div>
-</section>
-<?php endif; ?>
 
 
 <section class="panel" style="margin-bottom:var(--space-5)">
@@ -258,19 +202,18 @@ $errText = $errMessages[$errKey] ?? null;
                         <?php endforeach; ?>
                     </div>
 
-                    <form action="/index.php?action=subscription_start" method="POST" style="width:100%">
-                        <?= csrf_field() ?>
-                        <input type="hidden" name="plan" value="<?= htmlspecialchars($slug) ?>">
-                        <button
-                            type="submit"
-                            class="btn"
-                            style="width:100%;justify-content:center;display:flex;align-items:center;gap:6px">
-                            <?= render_icon('zap', 15) ?>
-                            Assinar <?= htmlspecialchars($planName) ?>
-                        </button>
-                    </form>
+                    <button
+                        type="button"
+                        class="btn"
+                        disabled
+                        aria-disabled="true"
+                        title="Assinaturas temporariamente indisponíveis."
+                        style="width:100%;justify-content:center;display:flex;align-items:center;gap:6px;opacity:.55;cursor:not-allowed">
+                        <?= render_icon('zap', 15) ?>
+                        Assinar <?= htmlspecialchars($planName) ?>
+                    </button>
                     <div style="margin-top:var(--space-2);font-size:11px;color:var(--color-text-3);text-align:center">
-                        Cobrança recorrente via Mercado Pago.
+                        Assinaturas temporariamente indisponíveis.
                     </div>
                 </div>
             </div>
