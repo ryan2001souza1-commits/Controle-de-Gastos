@@ -217,19 +217,18 @@ $statusBadgeClass = $planIsAtivo ? 'badge-success' : 'badge-warning';
                         <?php endforeach; ?>
                     </div>
 
-                    <form method="POST" action="/index.php?action=subscribe" style="margin:0">
-                        <?= function_exists('csrf_field') ? csrf_field() : '' ?>
-                        <input type="hidden" name="plan" value="<?= htmlspecialchars($slug) ?>">
-                        <button
-                            type="submit"
-                            class="btn"
-                            style="width:100%;justify-content:center;display:flex;align-items:center;gap:6px">
-                            <?= render_icon('zap', 15) ?>
-                            Assinar <?= htmlspecialchars($planName) ?>
-                        </button>
-                    </form>
+                    <button
+                        type="button"
+                        class="btn"
+                        disabled
+                        aria-disabled="true"
+                        title="Pagamento temporariamente indisponível"
+                        style="width:100%;justify-content:center;display:flex;align-items:center;gap:6px;opacity:.6;cursor:not-allowed">
+                        <?= render_icon('zap', 15) ?>
+                        Assinar <?= htmlspecialchars($planName) ?>
+                    </button>
                     <div style="margin-top:var(--space-2);font-size:11px;color:var(--color-text-3);text-align:center">
-                        Pagamento seguro no site do Mercado Pago.
+                        Pagamento temporariamente indisponível.
                     </div>
                 </div>
             </div>

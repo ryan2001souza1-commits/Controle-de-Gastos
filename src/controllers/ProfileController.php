@@ -155,19 +155,10 @@ class ProfileController
         $userName = $_SESSION['user_name'] ?? $user->name;
         $userEmail = $user->email;
 
-        // Etapa 1 MP: retorno do navegador (back_url) NAO ativa plano.
-        // Serve somente para trazer o usuario de volta ao site.
+        // Pagamentos via gateway externo removidos (reconstrucao futura do zero).
+        // Nenhum retorno/callback de checkout ativa plano por esta pagina.
         $subscribeNotice = null;
         $subscribeError = null;
-        if (($_GET['subscribe'] ?? '') === 'return') {
-            $subscribeNotice = 'Você retornou do Mercado Pago. Se concluiu o pagamento por lá, aguarde a confirmação. Nenhuma alteração foi feita por esta página.';
-        }
-        $errCode = trim((string)($_GET['error'] ?? ''));
-        if (in_array($errCode, ['invalid_plan', 'invalid_method', 'invalid_csrf', 'no_email', 'config', 'checkout_unavailable'], true)) {
-            $subscribeError = $errCode === 'invalid_plan'
-                ? 'Plano inválido. Escolha Pro ou Premium.'
-                : 'Não foi possível iniciar a assinatura. Tente novamente.';
-        }
 
         // Labels da view (única definição — nunca no frontend).
         $limitLabels = [
