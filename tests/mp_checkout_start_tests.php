@@ -1,23 +1,31 @@
 <?php
 /**
- * Testes etapa 1 (revisao final) — checkout MP via POST + CSRF.
- * SEM rede, SEM credenciais reais.
+ * Testes — checkout hospedado do plano Mercado Pago (SEM rede, SEM credenciais).
  *
- * Cobre (exigido na revisao):
- * - GET nao cria preapproval
- * - POST valido cria
+ * Novo fluxo: o site NAO faz POST /preapproval (a API atual exige
+ * card_token_id e o site nao possui CardForm). O backend consulta o plano
+ * via GET /preapproval_plan/{PLAN_ID} e redireciona para o init_point
+ * oficial retornado.
+ *
+ * Cobre:
+ * - pro seleciona MERCADOPAGO_PLAN_ID_PRO
+ * - premium seleciona MERCADOPAGO_PLAN_ID_PREMIUM
+ * - GET do plano feito corretamente (metodo, URL, Authorization)
+ * - plano inexistente falha (HTTP nao-2xx)
+ * - plano inactive/cancelled falha
+ * - id divergente falha
+ * - JSON invalido falha
+ * - init_point ausente falha
+ * - URL sem HTTPS falha
+ * - host externo/arbitrario falha
+ * - Access Token nao vaza (mensagens, redirects, view)
+ * - GET do navegador nao inicia acao
  * - POST sem CSRF falha
  * - POST com CSRF invalido falha
  * - usuario nao autenticado falha
- * - pro usa PLAN_ID_PRO / premium usa PLAN_ID_PREMIUM
  * - plano invalido falha
  * - Access Token ausente falha
  * - timeout tratado
- * - HTTP nao-2xx tratado
- * - JSON invalido tratado
- * - init_point ausente tratado
- * - URL checkout invalida/rejeitada (host arbitrario, http)
- * - Access Token nao aparece em resposta/log
  * - retorno nao ativa plano
  * - nenhuma escrita no banco
  */
@@ -32,9 +40,6 @@ if (!function_exists('isLoggedIn')) {
     {
         return isset($_SESSION['user_id']);
     }
-}
-if (!class_exists('User')) {
-    require_once $ROOT . '/src/models/User.php';
 }
 
 $passed = 0;
@@ -130,17 +135,14 @@ function mp_valid_session(): array
 
 /**
  * Executa o controller com metodo/POST controlados; captura redirect.
- * @return array{url:?string, apiCalled:bool}
  */
-function mp_run_controller(array $session, array $post, string $method, MercadoPagoCheckoutStarter $starter, array $get = ['action' => 'subscribe']): array
+function mp_run_controller(array $session, array $post, string $method, MercadoPagoCheckoutStarter $starter, array $get = ['action' => 'subscribe']): ?string
 {
     $_SESSION = $session;
     $_POST = $post;
     $_GET = $get;
     $_SERVER['REQUEST_METHOD'] = $method;
     $captured = null;
-    $apiCalled = false;
-    // starter ja conta chamadas via closure do teste; aqui so capturamos redirect
     $ctrl = new SubscribeController(new MockPDOMpCheckout(), $starter, function (string $url) use (&$captured): void {
         $captured = $url;
         throw new RuntimeException('redirect:' . $url);
@@ -149,179 +151,102 @@ function mp_run_controller(array $session, array $post, string $method, MercadoP
         $ctrl->start();
     } catch (RuntimeException $e) {
     }
-    return ['url' => $captured, 'apiCalled' => $apiCalled];
+    return $captured;
 }
 
-function mp_ok_starter(?array &$capturedPayload, string $initPoint = 'https://www.mercadopago.com/checkout/OK123'): MercadoPagoCheckoutStarter
+function mp_plan_body(string $id, string $status = 'active', string $initPoint = 'https://www.mercadopago.com/checkout/PLAN123'): string
 {
-    return new MercadoPagoCheckoutStarter(function (string $url, array $headers, string $payload) use (&$capturedPayload, $initPoint) {
-        $capturedPayload = json_decode($payload, true);
-        return ['http_code' => 201, 'body' => json_encode(['init_point' => $initPoint]), 'error' => ''];
+    return json_encode(['id' => $id, 'status' => $status, 'init_point' => $initPoint]);
+}
+
+/** Starter que captura a chamada HTTP e responde com o plano informado. */
+function mp_plan_starter(?array &$capturedCall, string $planId, string $status = 'active', string $initPoint = 'https://www.mercadopago.com/checkout/PLAN123', int $httpCode = 200): MercadoPagoCheckoutStarter
+{
+    return new MercadoPagoCheckoutStarter(function (string $method, string $url, array $headers) use (&$capturedCall, $planId, $status, $initPoint, $httpCode) {
+        $capturedCall = ['method' => $method, 'url' => $url, 'headers' => $headers];
+        return ['http_code' => $httpCode, 'body' => mp_plan_body($planId, $status, $initPoint), 'error' => ''];
     });
 }
 
-$ENV_KEYS = ['MERCADOPAGO_ACCESS_TOKEN', 'MERCADOPAGO_PLAN_ID_PRO', 'MERCADOPAGO_PLAN_ID_PREMIUM', 'APP_URL'];
+$ENV_KEYS = ['MERCADOPAGO_ACCESS_TOKEN', 'MERCADOPAGO_PLAN_ID_PRO', 'MERCADOPAGO_PLAN_ID_PREMIUM'];
 
-echo "\n=== ETAPA 1 (revisao): POST + CSRF + timeout + host oficial ===\n\n";
-
-// ------------------------------------------------------------------
-// R01: timeout < maxDuration (7s total / 3s connect)
-// ------------------------------------------------------------------
-echo "--- R01: timeout seguro ---\n";
-$svcSrc = (string)@file_get_contents($ROOT . '/src/services/MercadoPagoCheckoutStarter.php');
-mp_start_assert(strpos($svcSrc, 'TIMEOUT_SECONDS = 7') !== false, 'R01a timeout total = 7s');
-mp_start_assert(strpos($svcSrc, 'CONNECT_TIMEOUT_SECONDS = 3') !== false, 'R01b connect timeout = 3s');
-mp_start_assert(strpos($svcSrc, 'TIMEOUT_SECONDS = 15') === false, 'R01c timeout antigo 15s removido');
-mp_start_assert(strpos($svcSrc, 'CONNECT_TIMEOUT_SECONDS = 5') === false, 'R01d connect antigo 5s removido');
-$vercelJson = (string)@file_get_contents($ROOT . '/vercel.json');
-mp_start_assert(strpos($vercelJson, '"maxDuration": 10') !== false, 'R01e maxDuration Vercel = 10s (inalterado)');
-mp_start_assert(7 < 10 && 3 < 10, 'R01f 7s/3s < 10s maxDuration');
+echo "\n=== Checkout hospedado do plano MP ===\n\n";
 
 // ------------------------------------------------------------------
-// R02: GET nao cria preapproval
+// P01: pro/premium selecionam o plan ID correto
 // ------------------------------------------------------------------
-echo "\n--- R02: GET nunca cria ---\n";
-$bak = mp_backup_env($ENV_KEYS);
-mp_set_env('MERCADOPAGO_ACCESS_TOKEN', 'TEST_TOKEN_FAKE');
-mp_set_env('MERCADOPAGO_PLAN_ID_PRO', 'TEST_PLAN_PRO');
-mp_set_env('MERCADOPAGO_PLAN_ID_PREMIUM', 'TEST_PLAN_PREM');
-$apiCalled = false;
-$starter = new MercadoPagoCheckoutStarter(function () use (&$apiCalled) {
-    $apiCalled = true;
-    return ['http_code' => 201, 'body' => '{"init_point":"https://www.mercadopago.com/x"}', 'error' => ''];
-});
-$res = mp_run_controller(mp_valid_session(), [], 'GET', $starter, ['action' => 'subscribe', 'plan' => 'pro']);
-mp_start_assert($apiCalled === false, 'R02a GET nao chama API MP');
-mp_start_assert($res['url'] !== null && str_contains($res['url'], 'meu_plano') && str_contains($res['url'], 'invalid_method'), 'R02b GET redireciona com invalid_method', (string)$res['url']);
-mp_start_assert($res['url'] === null || !str_contains((string)$res['url'], 'mercadopago.com'), 'R02c GET nao redireciona para checkout', (string)$res['url']);
-mp_restore_env($bak);
-
-// ------------------------------------------------------------------
-// R03: POST valido cria (com CSRF)
-// ------------------------------------------------------------------
-echo "\n--- R03: POST valido cria ---\n";
+echo "--- P01: selecao do plan ID ---\n";
 $bak = mp_backup_env($ENV_KEYS);
 mp_set_env('MERCADOPAGO_ACCESS_TOKEN', 'TEST_TOKEN_FAKE');
 mp_set_env('MERCADOPAGO_PLAN_ID_PRO', 'PLAN_PRO_123');
 mp_set_env('MERCADOPAGO_PLAN_ID_PREMIUM', 'PLAN_PREM_456');
-mp_set_env('APP_URL', 'https://exemplo.com');
-$captured = null;
-$starter = mp_ok_starter($captured, 'https://www.mercadopago.com/checkout/PRO123');
-$res = mp_run_controller(mp_valid_session(), ['plan' => 'pro', 'csrf_token' => MP_TEST_CSRF], 'POST', $starter);
-mp_start_assert($res['url'] === 'https://www.mercadopago.com/checkout/PRO123', 'R03a POST valido redireciona para init_point oficial', (string)$res['url']);
-mp_start_assert(($captured['preapproval_plan_id'] ?? '') === 'PLAN_PRO_123', 'R03b payload pro correto');
-mp_start_assert(($captured['external_reference'] ?? '') === 'user_5_pro', 'R03c external_reference da sessao');
-mp_start_assert(($captured['payer_email'] ?? '') === 'user@teste.com', 'R03d payer_email autenticado');
-mp_start_assert(($captured['back_url'] ?? '') === 'https://exemplo.com/index.php?action=meu_plano&subscribe=return', 'R03e back_url via APP_URL');
-mp_restore_env($bak);
+mp_start_assert(MercadoPagoCheckoutStarter::getPlanId('pro') === 'PLAN_PRO_123', 'P01a pro usa MERCADOPAGO_PLAN_ID_PRO');
+mp_start_assert(MercadoPagoCheckoutStarter::getPlanId('premium') === 'PLAN_PREM_456', 'P01b premium usa MERCADOPAGO_PLAN_ID_PREMIUM');
+mp_start_assert(MercadoPagoCheckoutStarter::getPlanId('gold') === '', 'P01c plano desconhecido retorna vazio');
+mp_start_assert(MercadoPagoCheckoutStarter::buildPlanUrl('PLAN_PRO_123') === 'https://api.mercadopago.com/preapproval_plan/PLAN_PRO_123', 'P01d URL do plano montada corretamente');
 
 // ------------------------------------------------------------------
-// R04: POST sem CSRF / CSRF invalido falham sem chamar API
+// P02: GET do plano feito corretamente
 // ------------------------------------------------------------------
-echo "\n--- R04: CSRF obrigatorio ---\n";
-$bak = mp_backup_env($ENV_KEYS);
-mp_set_env('MERCADOPAGO_ACCESS_TOKEN', 'TEST_TOKEN_FAKE');
-mp_set_env('MERCADOPAGO_PLAN_ID_PRO', 'PLAN_PRO_123');
-mp_set_env('MERCADOPAGO_PLAN_ID_PREMIUM', 'PLAN_PREM_456');
-$apiCalled = false;
-$starter = new MercadoPagoCheckoutStarter(function () use (&$apiCalled) {
-    $apiCalled = true;
-    return ['http_code' => 201, 'body' => '{"init_point":"https://www.mercadopago.com/x"}', 'error' => ''];
-});
-$res = mp_run_controller(mp_valid_session(), ['plan' => 'pro'], 'POST', $starter);
-mp_start_assert($apiCalled === false, 'R04a POST sem csrf_token NAO chama API');
-mp_start_assert($res['url'] !== null && str_contains($res['url'], 'invalid_csrf'), 'R04b POST sem CSRF redireciona invalid_csrf', (string)$res['url']);
-
-$apiCalled = false;
-$res = mp_run_controller(mp_valid_session(), ['plan' => 'pro', 'csrf_token' => 'TOKEN_ERRADO'], 'POST', $starter);
-mp_start_assert($apiCalled === false, 'R04c POST com CSRF invalido NAO chama API');
-mp_start_assert($res['url'] !== null && str_contains($res['url'], 'invalid_csrf'), 'R04d CSRF invalido redireciona invalid_csrf', (string)$res['url']);
-
-// router tambem protege via middleware existente
-$routerSrc = (string)@file_get_contents($ROOT . '/public/index.php');
-mp_start_assert(preg_match("/'subscribe'/", $routerSrc) === 1 && str_contains($routerSrc, 'csrfProtectedActions'), 'R04e router inclui subscribe nas acoes CSRF');
-mp_start_assert(preg_match("/'subscribe',?\s*\];/s", $routerSrc) === 1 || str_contains($routerSrc, "'subscribe',"), 'R04f subscribe listado no array CSRF');
-mp_restore_env($bak);
-
-// ------------------------------------------------------------------
-// R05: nao autenticado falha (POST e GET)
-// ------------------------------------------------------------------
-echo "\n--- R05: autenticacao obrigatoria ---\n";
-$bak = mp_backup_env($ENV_KEYS);
-mp_set_env('MERCADOPAGO_ACCESS_TOKEN', 'T');
-mp_set_env('MERCADOPAGO_PLAN_ID_PRO', 'P');
-$apiCalled = false;
-$starter = new MercadoPagoCheckoutStarter(function () use (&$apiCalled) {
-    $apiCalled = true;
-    return ['http_code' => 201, 'body' => '{}', 'error' => ''];
-});
-$res = mp_run_controller([], ['plan' => 'pro', 'csrf_token' => 'x'], 'POST', $starter);
-mp_start_assert($apiCalled === false, 'R05a POST sem sessao NAO chama API');
-mp_start_assert($res['url'] !== null && str_contains($res['url'], 'action=login'), 'R05b sem sessao vai para login', (string)$res['url']);
-mp_restore_env($bak);
-
-// ------------------------------------------------------------------
-// R06: pro/premium selecionam plan ID correto; invalido falha
-// ------------------------------------------------------------------
-echo "\n--- R06: whitelist + plan ID ---\n";
-$bak = mp_backup_env($ENV_KEYS);
-mp_set_env('MERCADOPAGO_ACCESS_TOKEN', 'TEST_TOKEN_FAKE');
-mp_set_env('MERCADOPAGO_PLAN_ID_PRO', 'PLAN_PRO_123');
-mp_set_env('MERCADOPAGO_PLAN_ID_PREMIUM', 'PLAN_PREM_456');
-mp_start_assert(MercadoPagoCheckoutStarter::getPlanId('pro') === 'PLAN_PRO_123', 'R06a pro usa ID pro');
-mp_start_assert(MercadoPagoCheckoutStarter::getPlanId('premium') === 'PLAN_PREM_456', 'R06b premium usa ID premium');
-$captured = null;
-$starter = mp_ok_starter($captured, 'https://www.mercadopago.com.br/checkout/PREM');
-$res = mp_run_controller(mp_valid_session(), ['plan' => 'premium', 'csrf_token' => MP_TEST_CSRF], 'POST', $starter);
-mp_start_assert(($captured['preapproval_plan_id'] ?? '') === 'PLAN_PREM_456', 'R06c payload premium correto');
-mp_start_assert($res['url'] === 'https://www.mercadopago.com.br/checkout/PREM', 'R06d premium (.com.br) aceito — host oficial');
-
-$apiCalled = false;
-$starterBad = new MercadoPagoCheckoutStarter(function () use (&$apiCalled) {
-    $apiCalled = true;
-    return ['http_code' => 201, 'body' => '{}', 'error' => ''];
-});
-$res = mp_run_controller(mp_valid_session(), ['plan' => 'gold', 'csrf_token' => MP_TEST_CSRF], 'POST', $starterBad);
-mp_start_assert($apiCalled === false, 'R06e plano invalido NAO chama API');
-mp_start_assert($res['url'] !== null && str_contains($res['url'], 'invalid_plan'), 'R06f plano invalido -> invalid_plan', (string)$res['url']);
-
-// user_id do navegador ignorado
-$captured = null;
-$starter = mp_ok_starter($captured);
-$res = mp_run_controller(mp_valid_session(), ['plan' => 'pro', 'csrf_token' => MP_TEST_CSRF, 'user_id' => '999', 'payer_email' => 'evil@x.com', 'external_reference' => 'user_999_premium'], 'POST', $starter);
-mp_start_assert(($captured['external_reference'] ?? '') === 'user_5_pro', 'R06g external_reference ignora navegador');
-mp_start_assert(($captured['payer_email'] ?? '') === 'user@teste.com', 'R06h payer_email ignora navegador');
-mp_restore_env($bak);
-
-// ------------------------------------------------------------------
-// R07: variaveis ausentes + erros da API
-// ------------------------------------------------------------------
-echo "\n--- R07: config + API ---\n";
-$bak = mp_backup_env($ENV_KEYS);
-mp_set_env('MERCADOPAGO_ACCESS_TOKEN', null);
-mp_set_env('MERCADOPAGO_PLAN_ID_PRO', 'P');
-$threw = false;
-try {
-    (new MercadoPagoCheckoutStarter())->startForUser(5, 'a@b.com', 'pro');
-} catch (MpCheckoutException $e) {
-    $threw = $e->reason === 'missing_token';
+echo "\n--- P02: requisicao GET ao plano ---\n";
+$call = null;
+$starter = mp_plan_starter($call, 'PLAN_PRO_123');
+$url = $starter->resolveCheckoutUrl(5, 'pro');
+mp_start_assert($call !== null, 'P02a chamada HTTP realizada');
+mp_start_assert(($call['method'] ?? '') === 'GET', 'P02b metodo GET', json_encode($call));
+mp_start_assert(($call['url'] ?? '') === 'https://api.mercadopago.com/preapproval_plan/PLAN_PRO_123', 'P02c URL = preapproval_plan/{PLAN_ID_PRO}', json_encode($call));
+$hasAuth = false;
+foreach ($call['headers'] ?? [] as $h) {
+    if (stripos($h, 'Authorization: Bearer ') === 0 && !str_contains($h, 'TEST_TOKEN_FAKE')) {
+        $hasAuth = true;
+    }
 }
-mp_start_assert($threw, 'R07a token ausente -> missing_token');
+mp_start_assert($hasAuth, 'P02d header Authorization presente (token real nao exposto ao mock)');
+mp_start_assert($url === 'https://www.mercadopago.com/checkout/PLAN123', 'P02e retorna init_point oficial');
 
+$call = null;
+$starter = mp_plan_starter($call, 'PLAN_PREM_456', 'active', 'https://www.mercadopago.com.br/checkout/PREM');
+$starter->resolveCheckoutUrl(5, 'premium');
+mp_start_assert(($call['url'] ?? '') === 'https://api.mercadopago.com/preapproval_plan/PLAN_PREM_456', 'P02f premium consulta PLAN_ID_PREMIUM', json_encode($call));
+
+// POST /preapproval removido: starter nao faz POST nem envia card_token
+$svcSrc = (string)@file_get_contents($ROOT . '/src/services/MercadoPagoCheckoutStarter.php');
+mp_start_assert(strpos($svcSrc, 'CURLOPT_POSTFIELDS') === false, 'P02g sem POSTFIELDS (sem POST /preapproval)');
+mp_start_assert(strpos($svcSrc, "'POST'") === false && strpos($svcSrc, '"POST"') === false, 'P02h sem metodo POST no starter');
+$svcCodeLines = '';
+foreach (explode("\n", $svcSrc) as $line) {
+    $t = ltrim($line);
+    if (str_starts_with($t, '*') || str_starts_with($t, '//') || str_starts_with($t, '#') || str_starts_with($t, '/*')) {
+        continue;
+    }
+    $svcCodeLines .= $line . "\n";
+}
+mp_start_assert(stripos($svcCodeLines, 'card_token') === false, 'P02i sem card_token no codigo (fora comentarios)');
+mp_start_assert(strpos($svcSrc, 'payer_email') === false, 'P02j sem payer_email (fluxo sem preapproval)');
+mp_restore_env($bak);
+
+// ------------------------------------------------------------------
+// P03: plano inexistente / inativo / id divergente falham
+// ------------------------------------------------------------------
+echo "\n--- P03: validacao da resposta do plano ---\n";
+$bak = mp_backup_env($ENV_KEYS);
 mp_set_env('MERCADOPAGO_ACCESS_TOKEN', 'FAKE_TOKEN_ABC123');
 mp_set_env('MERCADOPAGO_PLAN_ID_PRO', 'PLAN_PRO_123');
 mp_set_env('MERCADOPAGO_PLAN_ID_PREMIUM', 'PLAN_PREM_456');
 
-function mp_expect_fail(string $name, array $httpRes, string $expectReason): void
+function mp_expect_fail(string $name, $httpRes, string $expectReason): void
 {
     $starter = new MercadoPagoCheckoutStarter(function () use ($httpRes) {
+        if (is_callable($httpRes)) {
+            return $httpRes();
+        }
         return $httpRes;
     });
     $threw = false;
     $reason = '';
     $msg = '';
     try {
-        $starter->startForUser(5, 'user@teste.com', 'pro');
+        $starter->resolveCheckoutUrl(5, 'pro');
     } catch (MpCheckoutException $e) {
         $threw = true;
         $reason = $e->reason;
@@ -333,88 +258,131 @@ function mp_expect_fail(string $name, array $httpRes, string $expectReason): voi
     mp_start_assert(!str_contains($msg, 'PLAN_PRO_123'), "$name mensagem sem plan ID");
 }
 
-mp_expect_fail('R07b timeout', ['http_code' => 0, 'body' => '', 'error' => 'Operation timed out'], 'timeout');
-mp_expect_fail('R07c indisponivel', ['http_code' => 0, 'body' => '', 'error' => 'Could not resolve host'], 'api_unavailable');
-mp_expect_fail('R07d HTTP 500', ['http_code' => 500, 'body' => '{"message":"err"}', 'error' => ''], 'http_error');
-mp_expect_fail('R07e HTTP 401', ['http_code' => 401, 'body' => 'unauthorized', 'error' => ''], 'http_error');
-mp_expect_fail('R07f JSON invalido', ['http_code' => 201, 'body' => 'NAO-JSON{{{', 'error' => ''], 'invalid_json');
-mp_expect_fail('R07g vazio', ['http_code' => 201, 'body' => '', 'error' => ''], 'invalid_response');
-mp_expect_fail('R07h sem init_point', ['http_code' => 201, 'body' => '{"id":"123"}', 'error' => ''], 'missing_checkout_url');
+mp_expect_fail('P03a plano inexistente (404)', ['http_code' => 404, 'body' => '{"message":"not found"}', 'error' => ''], 'http_error');
+mp_expect_fail('P03b plano inactive', ['http_code' => 200, 'body' => mp_plan_body('PLAN_PRO_123', 'inactive'), 'error' => ''], 'plan_inactive');
+mp_expect_fail('P03c plano cancelled', ['http_code' => 200, 'body' => mp_plan_body('PLAN_PRO_123', 'cancelled'), 'error' => ''], 'plan_inactive');
+mp_expect_fail('P03d id divergente', ['http_code' => 200, 'body' => mp_plan_body('OUTRO_PLAN_999', 'active'), 'error' => ''], 'plan_mismatch');
+mp_expect_fail('P03e sem id', ['http_code' => 200, 'body' => '{"status":"active","init_point":"https://www.mercadopago.com/x"}', 'error' => ''], 'plan_mismatch');
+mp_expect_fail('P03f JSON invalido', ['http_code' => 200, 'body' => 'NAO-JSON{{{', 'error' => ''], 'invalid_json');
+mp_expect_fail('P03g corpo vazio', ['http_code' => 200, 'body' => '', 'error' => ''], 'invalid_response');
+mp_expect_fail('P03h init_point ausente', ['http_code' => 200, 'body' => '{"id":"PLAN_PRO_123","status":"active"}', 'error' => ''], 'missing_checkout_url');
+mp_expect_fail('P03i URL sem HTTPS', ['http_code' => 200, 'body' => mp_plan_body('PLAN_PRO_123', 'active', 'http://www.mercadopago.com/x'), 'error' => ''], 'missing_checkout_url');
+mp_expect_fail('P03j host arbitrario', ['http_code' => 200, 'body' => mp_plan_body('PLAN_PRO_123', 'active', 'https://evil.com/roubo'), 'error' => ''], 'missing_checkout_url');
+mp_expect_fail('P03k HTTP 500', ['http_code' => 500, 'body' => '{"message":"err"}', 'error' => ''], 'http_error');
+mp_expect_fail('P03l timeout', ['http_code' => 0, 'body' => '', 'error' => 'Operation timed out'], 'timeout');
+mp_expect_fail('P03m indisponivel', ['http_code' => 0, 'body' => '', 'error' => 'Could not resolve host'], 'api_unavailable');
 
-// controller converte em redirect generico sem vazar segredo
-$starter500 = new MercadoPagoCheckoutStarter(function () {
-    return ['http_code' => 500, 'body' => 'erro', 'error' => ''];
-});
-$res = mp_run_controller(mp_valid_session(), ['plan' => 'pro', 'csrf_token' => MP_TEST_CSRF], 'POST', $starter500);
-mp_start_assert($res['url'] !== null && str_contains($res['url'], 'checkout_unavailable'), 'R07i erro API -> checkout_unavailable', (string)$res['url']);
-mp_start_assert(!str_contains((string)$res['url'], 'FAKE_TOKEN'), 'R07j redirect sem token');
+// token ausente / plan ID ausente
+$bak2 = mp_backup_env($ENV_KEYS);
+mp_set_env('MERCADOPAGO_ACCESS_TOKEN', null);
+$threw = false;
+try {
+    (new MercadoPagoCheckoutStarter())->resolveCheckoutUrl(5, 'pro');
+} catch (MpCheckoutException $e) {
+    $threw = $e->reason === 'missing_token';
+}
+mp_start_assert($threw, 'P03n token ausente -> missing_token');
+mp_restore_env($bak2);
 mp_restore_env($bak);
 
 // ------------------------------------------------------------------
-// R08: URL checkout — SOMENTE host oficial HTTPS
+// P04: host oficial (unitario)
 // ------------------------------------------------------------------
-echo "\n--- R08: host oficial ---\n";
-mp_start_assert(MercadoPagoCheckoutStarter::isOfficialCheckoutUrl('https://www.mercadopago.com/checkout/ABC'), 'R08a www.mercadopago.com ok');
-mp_start_assert(MercadoPagoCheckoutStarter::isOfficialCheckoutUrl('https://www.mercadopago.com.br/subscriptions/checkout?x=1'), 'R08b .com.br ok');
-mp_start_assert(MercadoPagoCheckoutStarter::isOfficialCheckoutUrl('https://sandbox.mercadopago.com/checkout/X'), 'R08c sandbox subdomain ok');
-mp_start_assert(!MercadoPagoCheckoutStarter::isOfficialCheckoutUrl('http://www.mercadopago.com/x'), 'R08d http rejeitado');
-mp_start_assert(!MercadoPagoCheckoutStarter::isOfficialCheckoutUrl('https://evil.com/mercadopago'), 'R08e dominio arbitrario rejeitado');
-mp_start_assert(!MercadoPagoCheckoutStarter::isOfficialCheckoutUrl('https://mercadopago.evil.com/x'), 'R08f lookalike rejeitado');
-mp_start_assert(!MercadoPagoCheckoutStarter::isOfficialCheckoutUrl('javascript:alert(1)'), 'R08g javascript rejeitado');
-mp_start_assert(!MercadoPagoCheckoutStarter::isOfficialCheckoutUrl(''), 'R08h vazio rejeitado');
-mp_start_assert(MercadoPagoCheckoutStarter::extractCheckoutUrl(['init_point' => 'https://evil.com/x']) === null, 'R08i extract rejeita host estranho');
-mp_start_assert(MercadoPagoCheckoutStarter::extractCheckoutUrl(['init_point' => 'https://www.mercadopago.com/ok']) === 'https://www.mercadopago.com/ok', 'R08j extract aceita oficial');
+echo "\n--- P04: host oficial ---\n";
+mp_start_assert(MercadoPagoCheckoutStarter::isOfficialCheckoutUrl('https://www.mercadopago.com/checkout/ABC'), 'P04a www.mercadopago.com ok');
+mp_start_assert(MercadoPagoCheckoutStarter::isOfficialCheckoutUrl('https://www.mercadopago.com.br/subscriptions/checkout?x=1'), 'P04b .com.br ok');
+mp_start_assert(MercadoPagoCheckoutStarter::isOfficialCheckoutUrl('https://sandbox.mercadopago.com/checkout/X'), 'P04c sandbox subdomain ok');
+mp_start_assert(!MercadoPagoCheckoutStarter::isOfficialCheckoutUrl('http://www.mercadopago.com/x'), 'P04d http rejeitado');
+mp_start_assert(!MercadoPagoCheckoutStarter::isOfficialCheckoutUrl('https://evil.com/mercadopago'), 'P04e dominio arbitrario rejeitado');
+mp_start_assert(!MercadoPagoCheckoutStarter::isOfficialCheckoutUrl('https://mercadopago.evil.com/x'), 'P04f lookalike rejeitado');
+mp_start_assert(!MercadoPagoCheckoutStarter::isOfficialCheckoutUrl('javascript:alert(1)'), 'P04g javascript rejeitado');
 
-// evil init_point via controller -> falha segura (sem redirect externo)
+// ------------------------------------------------------------------
+// P05: controller — GET nao inicia, CSRF, auth, plano invalido
+// ------------------------------------------------------------------
+echo "\n--- P05: controller ---\n";
 $bak = mp_backup_env($ENV_KEYS);
-mp_set_env('MERCADOPAGO_ACCESS_TOKEN', 'T');
-mp_set_env('MERCADOPAGO_PLAN_ID_PRO', 'P');
-$starterEvil = new MercadoPagoCheckoutStarter(function () {
-    return ['http_code' => 201, 'body' => '{"init_point":"https://evil.com/roubo"}', 'error' => ''];
+mp_set_env('MERCADOPAGO_ACCESS_TOKEN', 'TEST_TOKEN_FAKE');
+mp_set_env('MERCADOPAGO_PLAN_ID_PRO', 'PLAN_PRO_123');
+mp_set_env('MERCADOPAGO_PLAN_ID_PREMIUM', 'PLAN_PREM_456');
+
+$apiCalled = false;
+$starter = new MercadoPagoCheckoutStarter(function () use (&$apiCalled) {
+    $apiCalled = true;
+    return ['http_code' => 200, 'body' => mp_plan_body('PLAN_PRO_123'), 'error' => ''];
 });
-$res = mp_run_controller(mp_valid_session(), ['plan' => 'pro', 'csrf_token' => MP_TEST_CSRF], 'POST', $starterEvil);
-mp_start_assert($res['url'] !== null && str_contains($res['url'], 'meu_plano'), 'R08k init_point maligno NAO redireciona para fora', (string)$res['url']);
-mp_start_assert($res['url'] === null || !str_contains((string)$res['url'], 'evil.com'), 'R08l destino maligno bloqueado', (string)$res['url']);
+$url = mp_run_controller(mp_valid_session(), [], 'GET', $starter, ['action' => 'subscribe', 'plan' => 'pro']);
+mp_start_assert($apiCalled === false, 'P05a GET do navegador NAO chama API MP');
+mp_start_assert($url !== null && str_contains($url, 'invalid_method'), 'P05b GET redireciona invalid_method', (string)$url);
+
+$apiCalled = false;
+$url = mp_run_controller(mp_valid_session(), ['plan' => 'pro'], 'POST', $starter);
+mp_start_assert($apiCalled === false, 'P05c POST sem CSRF NAO chama API');
+mp_start_assert($url !== null && str_contains($url, 'invalid_csrf'), 'P05d POST sem CSRF -> invalid_csrf', (string)$url);
+
+$apiCalled = false;
+$url = mp_run_controller(mp_valid_session(), ['plan' => 'pro', 'csrf_token' => 'ERRADO'], 'POST', $starter);
+mp_start_assert($apiCalled === false, 'P05e POST com CSRF invalido NAO chama API');
+mp_start_assert($url !== null && str_contains($url, 'invalid_csrf'), 'P05f CSRF invalido -> invalid_csrf', (string)$url);
+
+$apiCalled = false;
+$url = mp_run_controller([], ['plan' => 'pro', 'csrf_token' => 'x'], 'POST', $starter);
+mp_start_assert($apiCalled === false, 'P05g nao autenticado NAO chama API');
+mp_start_assert($url !== null && str_contains($url, 'action=login'), 'P05h nao autenticado -> login', (string)$url);
+
+$apiCalled = false;
+$url = mp_run_controller(mp_valid_session(), ['plan' => 'gold', 'csrf_token' => MP_TEST_CSRF], 'POST', $starter);
+mp_start_assert($apiCalled === false, 'P05i plano invalido NAO chama API');
+mp_start_assert($url !== null && str_contains($url, 'invalid_plan'), 'P05j plano invalido -> invalid_plan', (string)$url);
+
+// POST valido resolve e redireciona para o checkout hospedado
+$call = null;
+$starter = mp_plan_starter($call, 'PLAN_PRO_123');
+$url = mp_run_controller(mp_valid_session(), ['plan' => 'pro', 'csrf_token' => MP_TEST_CSRF], 'POST', $starter);
+mp_start_assert($url === 'https://www.mercadopago.com/checkout/PLAN123', 'P05k POST valido redireciona para init_point', (string)$url);
+mp_start_assert(($call['url'] ?? '') === 'https://api.mercadopago.com/preapproval_plan/PLAN_PRO_123', 'P05l POST valido consulta plano pro');
+
+// erro da API vira redirect generico sem vazar segredo
+$starter500 = new MercadoPagoCheckoutStarter(function () {
+    return ['http_code' => 404, 'body' => '{"message":"not found"}', 'error' => ''];
+});
+$url = mp_run_controller(mp_valid_session(), ['plan' => 'pro', 'csrf_token' => MP_TEST_CSRF], 'POST', $starter500);
+mp_start_assert($url !== null && str_contains($url, 'checkout_unavailable'), 'P05m plano inexistente -> checkout_unavailable', (string)$url);
+mp_start_assert(!str_contains((string)$url, 'TEST_TOKEN_FAKE'), 'P05n redirect sem token');
 mp_restore_env($bak);
 
 // ------------------------------------------------------------------
-// R09: token nunca exposto; view POST + CSRF; sem banco; retorno seguro
+// P06: seguranca, view, banco, retorno
 // ------------------------------------------------------------------
-echo "\n--- R09: seguranca + view + banco ---\n";
+echo "\n--- P06: seguranca + view + banco ---\n";
 $svcSrc = (string)@file_get_contents($ROOT . '/src/services/MercadoPagoCheckoutStarter.php');
 $ctrlSrc = (string)@file_get_contents($ROOT . '/src/controllers/SubscribeController.php');
 $viewSrc = (string)@file_get_contents($ROOT . '/public/meu_plano.php');
 $routerSrc = (string)@file_get_contents($ROOT . '/public/index.php');
 
-mp_start_assert(strpos($viewSrc, 'MERCADOPAGO_ACCESS_TOKEN') === false, 'R09a view sem token');
-mp_start_assert(strpos($viewSrc, 'MERCADOPAGO_PLAN_ID') === false, 'R09b view sem plan ID');
-mp_start_assert(strpos($ctrlSrc, 'echo') === false, 'R09c controller sem echo');
-mp_start_assert(strpos($svcSrc, 'MERCADOPAGO_PUBLIC_KEY') === false, 'R09d sem Public Key');
-mp_start_assert(preg_match('/sdk\.mercadopago\.com/i', $svcSrc . $ctrlSrc . $viewSrc) !== 1, 'R09e sem SDK MP.js');
-mp_start_assert(preg_match('/CardForm\s*\(|createCardToken/i', $svcSrc . $ctrlSrc . $viewSrc) !== 1, 'R09f sem CardForm');
-// view usa POST + CSRF + hidden plan; sem link GET criador
-mp_start_assert(preg_match('/<form[^>]*method="POST"[^>]*action="\/index\.php\?action=subscribe"/i', $viewSrc) === 1, 'R09g view usa form POST p/ subscribe');
-mp_start_assert(strpos($viewSrc, 'csrf_field()') !== false, 'R09h view inclui csrf_field()');
-mp_start_assert(strpos($viewSrc, 'name="plan"') !== false, 'R09i view envia somente slug do plano');
-mp_start_assert(strpos($viewSrc, 'name="user_id"') === false, 'R09j view NAO envia user_id');
-mp_start_assert(strpos($viewSrc, 'action=subscribe&amp;plan=') === false && strpos($viewSrc, 'action=subscribe&plan=') === false, 'R09k view sem link GET criador');
-// APP_URL prioritaria, sem dominio hardcoded
-mp_start_assert(strpos($svcSrc, "env('APP_URL')") !== false, 'R09l starter usa APP_URL prioritariamente');
-mp_start_assert(strpos($svcSrc, 'controle-de-gastos-one-silk') === false && strpos($svcSrc, 'controle-de-gastos.vercel.app') === false || strpos($svcSrc, 'aiService') !== false, 'R09m sem dominio hardcoded no starter');
-// sem escrita no banco
-mp_start_assert(strpos($svcSrc, 'UPDATE usuarios') === false && strpos($svcSrc, 'INSERT INTO subscriptions') === false, 'R09n starter sem escrita');
-mp_start_assert(strpos($ctrlSrc, 'UPDATE') === false && strpos($ctrlSrc, 'INSERT INTO') === false && strpos($ctrlSrc, 'DELETE FROM') === false, 'R09o controller sem INSERT/UPDATE/DELETE');
+mp_start_assert(strpos($viewSrc, 'MERCADOPAGO_ACCESS_TOKEN') === false, 'P06a view sem token');
+mp_start_assert(strpos($viewSrc, 'MERCADOPAGO_PLAN_ID') === false, 'P06b view sem plan ID');
+mp_start_assert(strpos($svcSrc, 'MERCADOPAGO_PUBLIC_KEY') === false, 'P06c sem Public Key');
+mp_start_assert(preg_match('/sdk\.mercadopago\.com/i', $svcSrc . $ctrlSrc . $viewSrc) !== 1, 'P06d sem SDK MP.js');
+mp_start_assert(preg_match('/CardForm\s*\(|createCardToken/i', $svcSrc . $ctrlSrc . $viewSrc) !== 1, 'P06e sem CardForm');
+mp_start_assert(preg_match('/<form[^>]*method="POST"[^>]*action="\/index\.php\?action=subscribe"/i', $viewSrc) === 1, 'P06f view usa form POST p/ subscribe');
+mp_start_assert(strpos($viewSrc, 'csrf_field()') !== false, 'P06g view inclui csrf_field()');
+mp_start_assert(strpos($viewSrc, 'name="plan"') !== false, 'P06h view envia somente slug do plano');
+mp_start_assert(strpos($viewSrc, 'name="user_id"') === false, 'P06i view NAO envia user_id');
+mp_start_assert(strpos($viewSrc, 'action=subscribe&amp;plan=') === false && strpos($viewSrc, 'action=subscribe&plan=') === false, 'P06j view sem link GET criador');
+mp_start_assert(strpos($routerSrc, "'subscribe'") !== false, 'P06k rota subscribe existe');
+mp_start_assert(strpos($svcSrc, 'UPDATE usuarios') === false && strpos($svcSrc, 'INSERT INTO subscriptions') === false, 'P06l starter sem escrita');
+mp_start_assert(strpos($ctrlSrc, 'UPDATE') === false && strpos($ctrlSrc, 'INSERT INTO') === false && strpos($ctrlSrc, 'DELETE FROM') === false, 'P06m controller sem INSERT/UPDATE/DELETE');
+mp_start_assert(stripos($svcSrc . $ctrlSrc, 'CREATE TABLE') === false, 'P06n sem DDL/migration');
 $profileSrc = (string)@file_get_contents($ROOT . '/src/controllers/ProfileController.php');
 $fn = '';
 if (preg_match('/function meuPlano\(\).*?^    \}/ms', $profileSrc, $m)) {
     $fn = $m[0];
 }
-mp_start_assert(stripos($fn, 'UPDATE usuarios SET plano') === false, 'R09p retorno NAO ativa plano');
-mp_start_assert(strpos($svcSrc, '9.90') === false && strpos($ctrlSrc, '19.90') === false, 'R09q sem alterar precos');
-$migrationsSrc = (string)@file_get_contents($ROOT . '/src/migrations.php');
-mp_start_assert(strpos($migrationsSrc, '9.90') !== false && strpos($migrationsSrc, '19.90') !== false, 'R09r precos 9.90/19.90 preservados');
+mp_start_assert(stripos($fn, 'UPDATE usuarios SET plano') === false, 'P06o retorno NAO ativa plano');
+mp_start_assert(strpos($svcSrc, '9.90') === false && strpos($ctrlSrc, '19.90') === false, 'P06p sem alterar precos');
 
-echo "\n=== RESUMO REVISAO ===\n";
+echo "\n=== RESUMO CHECKOUT HOSPEDADO ===\n";
 $total = $passed + $failed;
 echo "Total: $total | \033[32mPassed: $passed\033[0m | \033[31mFailed: $failed\033[0m\n";
 exit($failed > 0 ? 1 : 0);

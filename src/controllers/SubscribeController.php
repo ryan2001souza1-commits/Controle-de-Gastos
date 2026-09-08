@@ -5,18 +5,18 @@ if (!class_exists('CsrfService', false)) {
 }
 
 /**
- * SubscribeController — etapa 1 do checkout de assinatura.
+ * SubscribeController — checkout hospedado do plano Mercado Pago.
  *
  * Rota: POST /index.php?action=subscribe (autenticada, com CSRF).
- * GET NUNCA cria preapproval (falha segura com redirect, sem efeito colateral).
+ * GET NUNCA inicia a acao (falha segura com redirect, sem efeito colateral).
  *
  * - Valida metodo POST + CSRF (mecanismo existente: CsrfService + csrf_field).
  * - Valida plano por whitelist estrita (pro/premium) vindo de $_POST['plan'].
  * - Exige usuario autenticado; NUNCA confia em ID vindo do navegador.
- * - Usa e-mail do usuario autenticado (banco/sessao) como payer_email.
- * - Delega criacao do preapproval ao MercadoPagoCheckoutStarter.
- * - Redireciona SOMENTE para checkout HTTPS em host oficial MP (init_point).
- * - O retorno (back_url -> meu_plano?subscribe=return) NAO ativa plano.
+ * - Consulta o plano via GET /preapproval_plan/{PLAN_ID} e redireciona
+ *   SOMENTE para o init_point HTTPS em host oficial MP retornado pela API.
+ * - NAO faz POST /preapproval (exige card_token_id; sem CardForm no site).
+ * - O retorno do checkout NAO ativa plano.
  * - Nao escreve no banco, nao cria migration, nao ativa Pro/Premium.
  */
 class SubscribeController
@@ -34,7 +34,7 @@ class SubscribeController
     }
 
     /**
-     * Normaliza e valida o plano bruto vindo de $_GET['plan'].
+     * Normaliza e valida o plano bruto vindo de $_POST['plan'].
      * Retorna 'pro'|'premium' ou null quando invalido.
      */
     public static function resolvePlan(?string $raw): ?string
@@ -54,7 +54,7 @@ class SubscribeController
             $this->redirect('/index.php?action=login');
         }
 
-        // 2. GET (ou qualquer metodo != POST) NUNCA cria assinatura.
+        // 2. GET (ou qualquer metodo != POST) NUNCA inicia a acao.
         $method = strtoupper(trim((string)($_SERVER['REQUEST_METHOD'] ?? 'GET')));
         if ($method !== 'POST') {
             error_log('[subscribe] metodo rejeitado user_id=' . $userId . ' method=' . $method);
@@ -74,16 +74,11 @@ class SubscribeController
             $this->redirect('/index.php?action=meu_plano&error=invalid_plan');
         }
 
-        // 5. E-mail do usuario AUTENTICADO (banco; fallback sessao).
-        $email = $this->getAuthenticatedUserEmail($userId);
-        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            error_log('[subscribe] usuario sem e-mail valido user_id=' . $userId);
-            $this->redirect('/index.php?action=meu_plano&error=no_email');
-        }
-
-        // 6. Cria preapproval e redireciona para checkout oficial.
+        // 5. Consulta o plano e redireciona para o checkout hospedado oficial.
+        // (Sem POST /preapproval: a API atual exige card_token_id e o site
+        // nao possui CardForm por decisao do projeto.)
         try {
-            $checkoutUrl = $this->starter->startForUser($userId, $email, $plan);
+            $checkoutUrl = $this->starter->resolveCheckoutUrl($userId, $plan);
         } catch (MpCheckoutException $e) {
             // Mensagem ao usuario e GENERICA (detalhes so no log, sem segredos).
             error_log('[subscribe] falha user_id=' . $userId . ' plano=' . $plan . ' reason=' . $e->reason);
@@ -93,7 +88,7 @@ class SubscribeController
             $this->redirect('/index.php?action=meu_plano&error=checkout_unavailable');
         }
 
-        // 7. Valida URL oficial antes de redirecionar (nunca monta manualmente,
+        // 6. Valida URL oficial antes de redirecionar (nunca monta manualmente,
         // nem redireciona para host arbitrario — SOMENTE host oficial MP em HTTPS).
         if (!is_string($checkoutUrl) || !MercadoPagoCheckoutStarter::isOfficialCheckoutUrl($checkoutUrl)) {
             error_log('[subscribe] checkout_url invalida user_id=' . $userId . ' plano=' . $plan);
@@ -121,23 +116,6 @@ class SubscribeController
             error_log('[subscribe] falha csrf user_id=' . $userId);
             return false;
         }
-    }
-
-    private function getAuthenticatedUserEmail(int $userId): string
-    {
-        try {
-            if (class_exists('User')) {
-                $model = new User($this->db);
-                $user = $model->findById($userId);
-                if ($user && !empty($user->email)) {
-                    return trim((string)$user->email);
-                }
-            }
-        } catch (Throwable $e) {
-            error_log('[subscribe] falha ao ler usuario user_id=' . $userId);
-        }
-        $sessEmail = trim((string)($_SESSION['user_email'] ?? ''));
-        return $sessEmail;
     }
 
     /** @return never */

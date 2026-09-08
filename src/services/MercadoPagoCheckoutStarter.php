@@ -1,20 +1,29 @@
 <?php
 /**
- * MercadoPagoCheckoutStarter — inicio MINIMO de assinatura (etapa 1).
+ * MercadoPagoCheckoutStarter — inicio MINIMO de assinatura via checkout
+ * hospedado do plano (etapa revisada).
  *
- * Escopo desta etapa (reconstrucao limpa, incremental):
- * - SOMENTE cria preapproval via POST https://api.mercadopago.com/preapproval
- *   e redireciona para o checkout OFICIAL retornado pela API (init_point).
+ * Motivo da troca: a API atual do Mercado Pago exige `card_token_id` ao
+ * criar assinatura com plano via POST /preapproval (HTTP 400 sem ele).
+ * Por decisao do projeto NAO ha CardForm/tokenizacao no site, portanto
+ * esta etapa NAO faz POST /preapproval. Em vez disso, consulta o plano
+ * existente e redireciona para o checkout OFICIAL dele:
+ *
+ *   GET https://api.mercadopago.com/preapproval_plan/{PLAN_ID}
+ *   Authorization: Bearer MERCADOPAGO_ACCESS_TOKEN
+ *
+ * Escopo desta etapa:
+ * - SOMENTE le o plano e redireciona para o init_point OFICIAL retornado.
  * - NAO implementa webhook, NAO altera banco, NAO ativa plano,
  *   NAO usa CardForm/MercadoPago.js, NAO tokeniza cartao,
- *   NAO faz polling, NAO usa Public Key, NAO cria planos no MP.
+ *   NAO faz polling, NAO usa Public Key, NAO cria planos no MP,
+ *   NAO faz POST /preapproval.
  *
  * Seguranca:
  * - Le SOMENTE: MERCADOPAGO_ACCESS_TOKEN, MERCADOPAGO_PLAN_ID_PRO,
- *   MERCADOPAGO_PLAN_ID_PREMIUM (+ APP_URL para back_url).
+ *   MERCADOPAGO_PLAN_ID_PREMIUM.
  * - NUNCA expoe o Access Token ao frontend/HTML/JS/logs/erros/URL.
- * - external_reference deterministica: user_{id}_{plano} (ID vem da sessao).
- * - back_url aponta para rota segura de retorno (meu_plano) e NAO ativa plano.
+ * - O retorno do checkout NAO ativa plano (serve so para voltar ao site).
  */
 
 class MpCheckoutException extends RuntimeException
@@ -31,7 +40,7 @@ class MpCheckoutException extends RuntimeException
 
 class MercadoPagoCheckoutStarter
 {
-    public const API_URL = 'https://api.mercadopago.com/preapproval';
+    public const PLAN_API_BASE = 'https://api.mercadopago.com/preapproval_plan/';
 
     /** Whitelist estrita de planos aceitos nesta etapa. */
     public const ALLOWED_PLANS = ['pro', 'premium'];
@@ -44,7 +53,7 @@ class MercadoPagoCheckoutStarter
     private const TIMEOUT_SECONDS = 7;
     private const CONNECT_TIMEOUT_SECONDS = 3;
 
-    /** @var callable|null Handler injetavel para testes: fn(string $url, array $headers, string $payload): array{http_code:int, body:string, error:string} */
+    /** @var callable|null Handler injetavel para testes: fn(string $method, string $url, array $headers): array{http_code:int, body:string, error:string} */
     private $httpHandler;
 
     public function __construct(?callable $httpHandler = null)
@@ -103,64 +112,15 @@ class MercadoPagoCheckoutStarter
     }
 
     /**
-     * Referencia externa deterministica e segura.
-     * O ID vem SEMPRE do servidor (sessao), nunca do navegador.
+     * URL de consulta do plano (GET). O ID vem do ambiente, nunca do navegador.
      */
-    public static function buildExternalReference(int $userId, string $plan): string
+    public static function buildPlanUrl(string $planId): string
     {
-        $p = self::normalizePlan($plan);
-        if ($userId <= 0) {
-            throw new MpCheckoutException('invalid_user', 'Não foi possível iniciar a assinatura. Tente novamente.');
-        }
-        if (!in_array($p, self::ALLOWED_PLANS, true)) {
-            throw new MpCheckoutException('invalid_plan', 'Plano inválido.');
-        }
-        return 'user_' . $userId . '_' . $p;
+        return self::PLAN_API_BASE . rawurlencode($planId);
     }
 
     /**
-     * Base URL segura: prefere APP_URL, com fallbacks deterministicos.
-     * Nunca confia cegamente em Host sem sanitizar.
-     */
-    public static function getBaseUrl(?string $appUrlOverride = null): string
-    {
-        $appUrl = $appUrlOverride !== null ? trim($appUrlOverride) : self::env('APP_URL');
-        if ($appUrl !== '') {
-            $appUrl = rtrim($appUrl, '/');
-            if (filter_var($appUrl, FILTER_VALIDATE_URL)) {
-                return $appUrl;
-            }
-        }
-        $vercel = self::env('VERCEL_URL');
-        if ($vercel !== '') {
-            $vercel = ltrim($vercel, '/');
-            if (preg_match('/^[a-z0-9.-]+(\/.*)?$/i', $vercel)) {
-                return 'https://' . $vercel;
-            }
-        }
-        $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-            || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
-            || (($_SERVER['HTTP_X_VERCEL_FORWARDED_PROTO'] ?? '') === 'https');
-        $host = strtolower(trim((string)($_SERVER['HTTP_HOST'] ?? 'localhost')));
-        $host = preg_replace('/:\d+$/', '', $host);
-        if (!preg_match('/^[a-z0-9.-]+$/', $host) || str_contains($host, '..') || $host === '') {
-            $host = 'localhost';
-        }
-        return ($https ? 'https' : 'http') . '://' . $host;
-    }
-
-    /**
-     * back_url aponta para rota segura de retorno.
-     * O retorno do navegador NAO ativa Pro/Premium — serve so para
-     * trazer o usuario de volta ao site.
-     */
-    public static function buildBackUrl(?string $appUrlOverride = null): string
-    {
-        return self::getBaseUrl($appUrlOverride) . '/index.php?action=meu_plano&subscribe=return';
-    }
-
-    /**
-     * Extrai a URL OFICIAL de checkout da resposta da API.
+     * Extrai a URL OFICIAL de checkout da resposta da API do plano.
      * Nunca monta URL manualmente quando a API fornece uma.
      *
      * Seguranca: aceita SOMENTE HTTPS em host oficial do Mercado Pago
@@ -210,41 +170,40 @@ class MercadoPagoCheckoutStarter
     }
 
     /**
-     * Monta o payload minimo do preapproval (sem nenhum segredo no retorno).
+     * Valida a resposta do GET /preapproval_plan/{id} e retorna o
+     * init_point oficial. Falha segura em qualquer divergencia.
      *
-     * @return array{url:string, payload:array}
+     * @throws MpCheckoutException com reason especifico e mensagem GENERICA.
      */
-    public static function buildPayload(int $userId, string $email, string $plan, ?string $appUrlOverride = null): array
+    public static function validatePlanResponse(array $data, string $expectedPlanId, string $plan, int $userId): string
     {
-        $p = self::normalizePlan($plan);
-        if (!in_array($p, self::ALLOWED_PLANS, true)) {
-            throw new MpCheckoutException('invalid_plan', 'Plano inválido.');
+        $returnedId = trim((string)($data['id'] ?? ''));
+        if ($returnedId === '' || $returnedId !== $expectedPlanId) {
+            error_log('[mp_checkout] plan_id divergente plano=' . $plan . ' user_id=' . $userId);
+            throw new MpCheckoutException('plan_mismatch', 'Não foi possível iniciar a assinatura. Tente novamente mais tarde.');
         }
-        $email = trim($email);
-        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            throw new MpCheckoutException('missing_email', 'Não foi possível iniciar a assinatura. Verifique seu e-mail e tente novamente.');
+
+        $status = strtolower(trim((string)($data['status'] ?? '')));
+        if ($status !== 'active') {
+            error_log('[mp_checkout] plano nao ativo plano=' . $plan . ' user_id=' . $userId . ' status=' . substr($status, 0, 20));
+            throw new MpCheckoutException('plan_inactive', 'Não foi possível iniciar a assinatura. Tente novamente mais tarde.');
         }
-        $planId = self::getPlanId($p);
-        if ($planId === '') {
-            error_log('[mp_checkout] plan_id ausente para plano=' . $p);
-            throw new MpCheckoutException('missing_plan_id', 'Não foi possível iniciar a assinatura. Tente novamente mais tarde.');
+
+        $checkoutUrl = self::extractCheckoutUrl($data);
+        if ($checkoutUrl === null) {
+            error_log('[mp_checkout] checkout_url ausente/invalida plano=' . $plan . ' user_id=' . $userId
+                . ' keys=' . implode(',', array_slice(array_keys($data), 0, 10)));
+            throw new MpCheckoutException('missing_checkout_url', 'Não foi possível iniciar a assinatura. Tente novamente mais tarde.');
         }
-        return [
-            'url' => self::API_URL,
-            'payload' => [
-                'preapproval_plan_id' => $planId,
-                'payer_email' => $email,
-                'external_reference' => self::buildExternalReference($userId, $p),
-                'back_url' => self::buildBackUrl($appUrlOverride),
-            ],
-        ];
+
+        return $checkoutUrl;
     }
 
     /**
-     * Inicia a assinatura e retorna a URL OFICIAL de checkout.
+     * Consulta o plano no Mercado Pago e retorna a URL OFICIAL de checkout.
      * Lanca MpCheckoutException com mensagem GENERICA (sem segredos).
      */
-    public function startForUser(int $userId, string $email, string $plan, ?string $appUrlOverride = null): string
+    public function resolveCheckoutUrl(int $userId, string $plan): string
     {
         $p = self::normalizePlan($plan);
         if (!in_array($p, self::ALLOWED_PLANS, true)) {
@@ -258,16 +217,16 @@ class MercadoPagoCheckoutStarter
             error_log('[mp_checkout] access token ausente');
             throw new MpCheckoutException('missing_token', 'Não foi possível iniciar a assinatura. Tente novamente mais tarde.');
         }
-
-        $built = self::buildPayload($userId, $email, $p, $appUrlOverride);
-        $payloadJson = json_encode($built['payload'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        if ($payloadJson === false) {
-            error_log('[mp_checkout] falha ao serializar payload plano=' . $p . ' user_id=' . $userId);
-            throw new MpCheckoutException('payload_error', 'Não foi possível iniciar a assinatura. Tente novamente.');
+        $planId = self::getPlanId($p);
+        if ($planId === '') {
+            error_log('[mp_checkout] plan_id ausente para plano=' . $p);
+            throw new MpCheckoutException('missing_plan_id', 'Não foi possível iniciar a assinatura. Tente novamente mais tarde.');
         }
 
+        $url = self::buildPlanUrl($planId);
+
         // NUNCA logar o token nem os headers de autorizacao.
-        $result = $this->doHttp(self::API_URL, $token, $payloadJson);
+        $result = $this->doHttp('GET', $url, $token);
         $httpCode = $result['http_code'];
         $body = $result['body'];
         $curlError = $result['error'];
@@ -309,24 +268,17 @@ class MercadoPagoCheckoutStarter
             throw new MpCheckoutException('invalid_json', 'Resposta inválida do serviço de pagamento. Tente novamente.');
         }
 
-        $checkoutUrl = self::extractCheckoutUrl($data);
-        if ($checkoutUrl === null) {
-            error_log('[mp_checkout] checkout_url ausente code=' . $httpCode . ' plano=' . $p . ' user_id=' . $userId
-                . ' keys=' . implode(',', array_slice(array_keys($data), 0, 10)));
-            throw new MpCheckoutException('missing_checkout_url', 'Não foi possível iniciar a assinatura. Tente novamente mais tarde.');
-        }
-
-        return $checkoutUrl;
+        return self::validatePlanResponse($data, $planId, $p, $userId);
     }
 
     /**
      * @return array{http_code:int, body:string, error:string}
      */
-    private function doHttp(string $url, string $token, string $payloadJson): array
+    private function doHttp(string $method, string $url, string $token): array
     {
         if ($this->httpHandler !== null) {
             $fn = $this->httpHandler;
-            $res = $fn($url, ['Authorization: Bearer ***REDACTED***', 'Content-Type: application/json'], $payloadJson);
+            $res = $fn($method, $url, ['Authorization: Bearer ***REDACTED***']);
             return [
                 'http_code' => (int)($res['http_code'] ?? 0),
                 'body' => (string)($res['body'] ?? ''),
@@ -335,28 +287,15 @@ class MercadoPagoCheckoutStarter
         }
 
         if (!function_exists('curl_init')) {
+            $headers = "Authorization: Bearer " . $token . "\r\n";
             $ctx = stream_context_create([
                 'http' => [
-                    'method' => 'POST',
-                    'header' => "Content-Type: application/json\r\n",
-                    'content' => $payloadJson,
-                    'timeout' => self::TIMEOUT_SECONDS,
-                    'ignore_errors' => true,
-                ],
-            ]);
-            // Header Authorization via stream: montado sem logar.
-            $ctxOpts = stream_context_get_options($ctx);
-            $headers = "Content-Type: application/json\r\nAuthorization: Bearer " . $token . "\r\n";
-            $ctx = stream_context_create([
-                'http' => [
-                    'method' => 'POST',
+                    'method' => 'GET',
                     'header' => $headers,
-                    'content' => $payloadJson,
                     'timeout' => self::TIMEOUT_SECONDS,
                     'ignore_errors' => true,
                 ],
             ]);
-            unset($ctxOpts);
             $resp = @file_get_contents($url, false, $ctx);
             $code = 0;
             $hdr = $http_response_header ?? [];
@@ -377,10 +316,8 @@ class MercadoPagoCheckoutStarter
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => $payloadJson,
+            CURLOPT_HTTPGET => true,
             CURLOPT_HTTPHEADER => [
-                'Content-Type: application/json',
                 'Authorization: Bearer ' . $token,
             ],
             CURLOPT_TIMEOUT => self::TIMEOUT_SECONDS,

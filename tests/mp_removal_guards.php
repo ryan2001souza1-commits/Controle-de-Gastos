@@ -1,17 +1,20 @@
 <?php
 /**
- * Guardas etapa 1 — checkout simplificado Mercado Pago (SEM rede, SEM credenciais).
+ * Guardas — checkout hospedado do plano Mercado Pago (SEM rede, SEM credenciais).
  *
- * Evolucao dos guardas de remocao: a etapa 1 REINTRODUZ de forma minima e
- * controlada SOMENTE o inicio de checkout via preapproval:
+ * Evolucao: o inicio usa SOMENTE o checkout hospedado do plano:
+ *   GET https://api.mercadopago.com/preapproval_plan/{PLAN_ID}
  *   src/services/MercadoPagoCheckoutStarter.php
- *   src/controllers/SubscribeController.php
- *   rota /index.php?action=subscribe&plan=pro|premium
- *   botoes Assinar Pro/Premium no Meu Plano
+ *   src/controllers/SubscribeController.php (POST + CSRF no site)
+ *   botoes Assinar Pro/Premium no Meu Plano (form POST)
  *
- * Estes guardas garantem que a reintroducao NAO ressuscite a arquitetura
+ * POST /preapproval foi REMOVIDO (a API atual exige card_token_id e o
+ * site nao possui CardForm por decisao do projeto).
+ *
+ * Estes guardas garantem que a integracao NAO ressuscite a arquitetura
  * antiga (webhook, ativacao por retorno, CardForm, Public Key, polling,
- * escrita no banco, novas migrations) e que os segredos nao vazem.
+ * POST /preapproval, escrita no banco, novas migrations) e que os
+ * segredos nao vazem.
  */
 $ROOT = dirname(__DIR__);
 require_once $ROOT . '/src/services/PlanService.php';
@@ -56,16 +59,49 @@ function mp_guard_scan_except(string $file, array $dirs, array $exts, string $pa
     return array_values(array_filter($hits, fn($h) => strpos($h, $file) === false));
 }
 
+/**
+ * Scan que ignora linhas de comentario/docblock (para permitir mencoes
+ * documentais como o motivo da remocao do POST /preapproval).
+ */
+function mp_guard_scan_code(array $dirs, array $exts, string $pattern): array
+{
+    global $ROOT;
+    $hits = [];
+    foreach ($dirs as $d) {
+        $base = $ROOT . '/' . $d;
+        if (!is_dir($base)) continue;
+        $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($base, FilesystemIterator::SKIP_DOTS));
+        foreach ($it as $f) {
+            if (!$f->isFile()) continue;
+            $ext = strtolower(pathinfo($f->getFilename(), PATHINFO_EXTENSION));
+            if (!in_array($ext, $exts, true)) continue;
+            $content = @file_get_contents($f->getPathname());
+            if ($content === false) continue;
+            foreach (explode("\n", $content) as $i => $line) {
+                $t = ltrim($line);
+                if (str_starts_with($t, '*') || str_starts_with($t, '//') || str_starts_with($t, '#') || str_starts_with($t, '/*')) {
+                    continue;
+                }
+                if (preg_match($pattern, $line)) {
+                    $hits[] = $d . '/' . substr($f->getPathname(), strlen($base) + 1) . ':' . ($i + 1);
+                    break;
+                }
+            }
+        }
+    }
+    return $hits;
+}
+
 echo "\n=== GUARDAS etapa 1: checkout minimo controlado ===\n\n";
 $code = ['src', 'public', 'api'];
 $exts = ['php', 'js'];
 
-// ---- G01: api.mercadopago.com SOMENTE no starter novo (preapproval) ----
+// ---- G01: api.mercadopago.com SOMENTE no starter novo (GET preapproval_plan) ----
 $hitsAll = mp_guard_scan($code, $exts, '/api\.mercadopago\.com/i');
 $hitsOutside = array_values(array_filter($hitsAll, fn($h) => strpos($h, 'services/MercadoPagoCheckoutStarter.php') === false));
 mp_guard_assert($hitsOutside === [], 'G01 api.mercadopago.com SOMENTE em MercadoPagoCheckoutStarter.php', implode(',', $hitsOutside));
 $starterSrc = (string)@file_get_contents($ROOT . '/src/services/MercadoPagoCheckoutStarter.php');
-mp_guard_assert(strpos($starterSrc, 'https://api.mercadopago.com/preapproval') !== false, 'G01b starter usa POST /preapproval oficial');
+mp_guard_assert(strpos($starterSrc, 'https://api.mercadopago.com/preapproval_plan/') !== false, 'G01b starter consulta GET /preapproval_plan/{id}');
 $ctrlSrcEarly = (string)@file_get_contents($ROOT . '/src/controllers/SubscribeController.php');
 
 // ---- G02: nenhum endpoint webhook MP ativo (etapa 1 NAO tem webhook) ----
@@ -88,9 +124,11 @@ mp_guard_assert(!file_exists($ROOT . '/src/services/MercadoPagoClient.php'), 'G0
 mp_guard_assert(!file_exists($ROOT . '/src/services/SubscriptionWebhookService.php'), 'G04c SubscriptionWebhookService.php ausente');
 mp_guard_assert(!file_exists($ROOT . '/src/services/SubscriptionService.php'), 'G04d SubscriptionService.php ausente');
 
-// ---- G05: sem HMAC/cartao/webhook; init_point/preapproval SOMENTE no starter ----
-$hitsBad = mp_guard_scan($code, $exts, '/x-signature|card_token_id|authorized_payments|subscription_preapproval|subscription_authorized_payment/i');
-mp_guard_assert($hitsBad === [], 'G05a sem HMAC/cartao/preapproval antigo no executavel', implode(',', $hitsBad));
+// ---- G05: sem HMAC/cartao/webhook; POST /preapproval REMOVIDO do starter ----
+$hitsBad = mp_guard_scan_code($code, $exts, '/x-signature|card_token_id|authorized_payments|subscription_preapproval|subscription_authorized_payment/i');
+mp_guard_assert($hitsBad === [], 'G05a sem HMAC/card_token no codigo executavel', implode(',', $hitsBad));
+mp_guard_assert(strpos($starterSrc, 'CURLOPT_POSTFIELDS') === false, 'G05a2 starter sem POST (sem POST /preapproval)');
+mp_guard_assert(strpos($starterSrc, '/preapproval\'') === false && strpos($starterSrc, '/preapproval"') === false, 'G05a3 starter sem endpoint POST /preapproval');
 $hitsInitOutside = mp_guard_scan_except('services/MercadoPagoCheckoutStarter.php', $code, $exts, '/[\'"]init_point[\'"]/i');
 $hitsInitOutside = array_values(array_filter($hitsInitOutside, fn($h) => strpos($h, 'tests/') === false && strpos($h, 'mp_checkout_start_tests.php') === false));
 mp_guard_assert($hitsInitOutside === [], 'G05b init_point SOMENTE no starter novo', implode(',', $hitsInitOutside));
@@ -158,6 +196,8 @@ mp_guard_assert(strpos($ctrlSrcEarly, "\$_POST['plan']") !== false, 'G11e plano 
 mp_guard_assert(strpos($starterSrc, 'TIMEOUT_SECONDS = 7') !== false && strpos($starterSrc, 'CONNECT_TIMEOUT_SECONDS = 3') !== false, 'G11f timeouts 7s/3s (< 10s)');
 mp_guard_assert(strpos($starterSrc, 'isOfficialCheckoutUrl') !== false, 'G11g validacao de host oficial presente');
 mp_guard_assert(strpos($starterSrc, '.mercadopago.com') !== false, 'G11h allowlist mercadopago.com');
+mp_guard_assert(strpos($starterSrc, 'resolveCheckoutUrl') !== false, 'G11i starter resolve via GET do plano');
+mp_guard_assert(strpos($starterSrc, 'validatePlanResponse') !== false, 'G11j starter valida id/status/init_point');
 
 // ---- G08: planos internos Gratuito/Pro/Premium continuam existindo ----
 $slugs = PlanService::getValidSlugs();
