@@ -5,17 +5,21 @@
 // URL: https://controle-de-gastos-one-silk.vercel.app/mercadopago_webhook.php
 //
 // - Servido diretamente por api/index.php (ramo generico, sem DB/sessao).
-// - Arquivo standalone: NAO requer config, banco, sessao ou Access Token.
+// - Arquivo standalone: NAO requer config, banco ou sessao.
 // - Aceita SOMENTE POST para processamento; outros metodos => 405.
-// - Delega toda a logica a MercadoPagoWebhookHandler (pura, sem efeitos).
+// - Delega o gate a MercadoPagoWebhookHandler e, SOMENTE para
+//   subscription_preapproval com x-signature valida, verifica a assinatura
+//   real via GET /preapproval/{ID} (MercadoPagoSubscriptionVerifier).
 // - NESTA ETAPA: nenhum efeito colateral — sem INSERT/UPDATE/DELETE,
-//   sem ativacao de planos, sem consulta a API do Mercado Pago.
+//   sem ativacao de planos. Falha temporaria da API => 500 (retry do MP).
 // =============================================================================
 
 declare(strict_types=1);
 
 $__mpRoot = dirname(__DIR__);
 require_once $__mpRoot . '/src/services/MercadoPagoWebhookHandler.php';
+require_once $__mpRoot . '/src/services/MercadoPagoSubscriptionVerifier.php';
+require_once $__mpRoot . '/src/services/MercadoPagoWebhookProcessor.php';
 
 $__mpMethod = strtoupper(trim((string)($_SERVER['REQUEST_METHOD'] ?? 'GET')));
 
@@ -53,7 +57,15 @@ if ($__mpSecret === '' && isset($_ENV['MERCADOPAGO_WEBHOOK_SECRET'])) {
 }
 $__mpSecret = trim($__mpSecret);
 
-$__mpResult = MercadoPagoWebhookHandler::process($__mpMethod, $__mpHeaders, $__mpQuery, $__mpRaw, $__mpSecret);
+$__mpVerifier = MercadoPagoSubscriptionVerifier::fromEnv();
+$__mpResult = MercadoPagoWebhookProcessor::processNotification(
+    $__mpMethod,
+    $__mpHeaders,
+    $__mpQuery,
+    $__mpRaw,
+    $__mpSecret,
+    $__mpVerifier
+);
 
 // Log minimo e seguro (o handler garante: sem segredos ou dados sensiveis).
 error_log('[mp_webhook] ' . json_encode($__mpResult['log'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));

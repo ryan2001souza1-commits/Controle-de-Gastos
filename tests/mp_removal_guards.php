@@ -110,10 +110,13 @@ echo "\n=== GUARDAS etapa 1: checkout minimo controlado ===\n\n";
 $code = ['src', 'public', 'api'];
 $exts = ['php', 'js'];
 
-// ---- G01: api.mercadopago.com SOMENTE no starter novo (GET preapproval_plan) ----
+// ---- G01: api.mercadopago.com SOMENTE no starter (planos) e verificador ----
 $hitsAll = mp_guard_scan($code, $exts, '/api\.mercadopago\.com/i');
-$hitsOutside = array_values(array_filter($hitsAll, fn($h) => strpos($h, 'services/MercadoPagoCheckoutStarter.php') === false));
-mp_guard_assert($hitsOutside === [], 'G01 api.mercadopago.com SOMENTE em MercadoPagoCheckoutStarter.php', implode(',', $hitsOutside));
+$hitsOutside = array_values(array_filter($hitsAll, fn($h) =>
+    strpos($h, 'services/MercadoPagoCheckoutStarter.php') === false
+    && strpos($h, 'services/MercadoPagoSubscriptionVerifier.php') === false
+));
+mp_guard_assert($hitsOutside === [], 'G01 api.mercadopago.com SOMENTE em starter/verificador', implode(',', $hitsOutside));
 $starterSrc = (string)@file_get_contents($ROOT . '/src/services/MercadoPagoCheckoutStarter.php');
 mp_guard_assert(strpos($starterSrc, 'https://api.mercadopago.com/preapproval_plan/') !== false, 'G01b starter consulta GET /preapproval_plan/{id}');
 $ctrlSrcEarly = (string)@file_get_contents($ROOT . '/src/controllers/SubscribeController.php');
@@ -126,8 +129,11 @@ $hitsNew = array_values(array_filter($hits, fn($h) => strpos($h, 'tests/') === f
 $hitsAllowed = array_values(array_filter($hitsNew, fn($h) =>
     strpos($h, 'public/mercadopago_webhook.php') !== false
     || strpos($h, 'services/MercadoPagoWebhookHandler.php') !== false
+    || strpos($h, 'services/MercadoPagoSubscriptionVerifier.php') !== false
+    || strpos($h, 'services/MercadoPagoWebhookProcessor.php') !== false
     || strpos($h, 'mp_removal_guards.php') !== false
     || strpos($h, 'mp_webhook_tests.php') !== false
+    || strpos($h, 'mp_webhook_verify_tests.php') !== false
 ));
 mp_guard_assert(count($hitsNew) === count($hitsAllowed), 'G02c mercadopago_webhook SOMENTE nos arquivos novos', implode(',', array_diff($hitsNew, $hitsAllowed)));
 $whEndpoint = (string)@file_get_contents($ROOT . '/public/mercadopago_webhook.php');
@@ -148,12 +154,15 @@ mp_guard_assert($hits === [], 'G04a sem classes antigas no executavel', implode(
 mp_guard_assert(!file_exists($ROOT . '/src/services/MercadoPagoClient.php'), 'G04b MercadoPagoClient.php ausente');
 mp_guard_assert(!file_exists($ROOT . '/src/services/SubscriptionWebhookService.php'), 'G04c SubscriptionWebhookService.php ausente');
 mp_guard_assert(!file_exists($ROOT . '/src/services/SubscriptionService.php'), 'G04d SubscriptionService.php ausente');
+mp_guard_assert(file_exists($ROOT . '/src/services/MercadoPagoSubscriptionVerifier.php'), 'G04e SubscriptionVerifier existe');
+mp_guard_assert(file_exists($ROOT . '/src/services/MercadoPagoWebhookProcessor.php'), 'G04f WebhookProcessor existe');
 
 // ---- G05: sem HMAC/cartao fora do webhook minimo; POST /preapproval REMOVIDO ----
 $hitsBad = mp_guard_scan_code($code, $exts, '/x-signature|card_token_id|authorized_payments|subscription_preapproval|subscription_authorized_payment/i');
 $hitsBadOutside = array_values(array_filter($hitsBad, fn($h) =>
     strpos($h, 'services/MercadoPagoWebhookHandler.php') === false
     && strpos($h, 'public/mercadopago_webhook.php') === false
+    && strpos($h, 'services/MercadoPagoWebhookProcessor.php') === false
 ));
 mp_guard_assert($hitsBadOutside === [], 'G05a HMAC/cartao SOMENTE no webhook minimo', implode(',', $hitsBadOutside));
 mp_guard_assert(strpos($starterSrc, 'CURLOPT_POSTFIELDS') === false, 'G05a2 starter sem POST (sem POST /preapproval)');
@@ -260,6 +269,22 @@ mp_guard_assert(strpos($whEndpoint, 'INSERT INTO') === false && strpos($whEndpoi
 mp_guard_assert(strpos($whEndpoint, 'config.php') === false && strpos($whEndpoint, 'session_start') === false, 'G12d endpoint standalone (sem config/sessao)');
 mp_guard_assert(strpos($whEndpoint, 'php://input') !== false, 'G12e endpoint le body bruto');
 mp_guard_assert(stripos($whHandler . $whEndpoint, 'UPDATE usuarios SET plano') === false, 'G12f webhook nao ativa plano');
+
+// ---- G13: verificacao via API sem efeitos (fonte de verdade = API oficial) ----
+$vfySrc = (string)@file_get_contents($ROOT . '/src/services/MercadoPagoSubscriptionVerifier.php');
+$procSrc = (string)@file_get_contents($ROOT . '/src/services/MercadoPagoWebhookProcessor.php');
+mp_guard_assert(strpos($vfySrc, 'https://api.mercadopago.com/preapproval/') !== false, 'G13a base GET /preapproval fixa + TLS');
+mp_guard_assert(strpos($vfySrc, 'Authorization: Bearer ') !== false, 'G13b verificador usa Bearer');
+mp_guard_assert(strpos($vfySrc, 'INSERT INTO') === false && strpos($vfySrc, 'UPDATE ') === false && strpos($vfySrc, 'DELETE FROM') === false, 'G13c verificador sem escrita');
+mp_guard_assert(strpos($procSrc, 'INSERT INTO') === false && strpos($procSrc, 'UPDATE ') === false && strpos($procSrc, 'DELETE FROM') === false, 'G13d processador sem escrita');
+mp_guard_assert(stripos($vfySrc . $procSrc, 'UPDATE usuarios SET plano') === false, 'G13e verificacao nao ativa plano');
+mp_guard_assert(stripos($vfySrc . $procSrc, 'CardForm') === false, 'G13f sem CardForm na verificacao');
+mp_guard_assert(file_exists($ROOT . '/tests/mp_webhook_verify_tests.php'), 'G13g testes de verificacao existem');
+// Correlacao separada da verificacao: sem referencia valida, user_id=null
+mp_guard_assert(strpos($vfySrc, 'correlated_user') !== false, 'G13h resultado distingue correlated_user');
+mp_guard_assert(strpos($vfySrc, "'uncorrelated'") !== false, 'G13i ref ausente => uncorrelated (sem inventar user)');
+mp_guard_assert(preg_match('/payer_email|payer_id/', mp_guard_code_only($vfySrc)) !== 1, 'G13j payer nunca identifica usuario');
+mp_guard_assert(strpos($procSrc, 'correlated_user') !== false, 'G13k processador propaga correlacao');
 
 echo "\n=== RESUMO GUARDAS ===\n";
 $total = $passed + $failed;
