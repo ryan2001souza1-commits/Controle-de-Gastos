@@ -1,171 +1,252 @@
 <?php
 /**
- * MercadoPagoClient — cliente REST mínimo para a API de Assinaturas.
+ * MercadoPagoClient — comunicação HTTP com a API oficial de Assinaturas.
  *
- * Usa cURL nativo (sem SDK). Cobre o fluxo oficial:
- *   POST /preapproval          — criar assinatura vinculada a um plano
- *   GET  /preapproval/{id}     — consultar assinatura (fonte da verdade)
- *   PUT  /preapproval/{id}     — pausar/cancelar assinatura
+ * Referência oficial (fonte de verdade):
+ *   https://www.mercadopago.com.br/developers/pt/reference/online-payments/subscriptions/overview
+ *   POST https://api.mercadopago.com/preapproval          (criar assinatura)
+ *   GET  https://api.mercadopago.com/preapproval/{id}   (obter assinatura)
+ *   PUT  https://api.mercadopago.com/preapproval/{id}   (atualizar; ex: status "canceled")
+ *
+ * Responsabilidade EXCLUSIVA: transporte HTTP + autenticação Bearer.
+ * NÃO contém: banco, sessão, HTML, redirects, regras de plano.
  *
  * Segurança:
- * - Access Token lido SOMENTE via getenv()/$_ENV/$_SERVER em runtime.
- * - Token NUNCA vai para logs, exceptions ou respostas.
- * - Timeouts curtos (connect 5s, total 8s) compatíveis com Vercel (10s).
- * - Sem curl_close() (evita depreciação no PHP 8.5).
+ * - Access Token existe SOMENTE no backend (lido de env).
+ * - Token NUNCA vai para logs, exceptions, responses ou frontend.
+ * - IDs usados no path são validados (evita path injection/SSRF).
  *
- * Testabilidade: o transporte HTTP pode ser substituído via
- * MercadoPagoClient::$transport (callable) nos testes — nenhuma
- * requisição real é feita pela suíte automatizada.
+ * Retorno padrão de todas as operações:
+ *   ['ok'=>bool, 'http'=>int, 'data'=>array, 'error'=>string]
+ *   error: '' | missing_access_token | invalid_id | timeout |
+ *          connection_error | http_400 | http_401 | http_403 | http_404 |
+ *          http_409 | http_429 | http_5xx | http_error |
+ *          invalid_json | empty_response
  */
 class MercadoPagoClient
 {
-    public const API_BASE = 'https://api.mercadopago.com';
+    public const BASE_URL = 'https://api.mercadopago.com';
 
-    private const CONNECT_TIMEOUT = 5;
-    private const TOTAL_TIMEOUT = 8;
+    private const CONNECT_TIMEOUT = 10;
+    private const REQUEST_TIMEOUT = 30;
 
-    /** @var callable|null (string $method, string $url, array|null $body, string $token): array */
+    private string $accessToken;
+
+    /**
+     * Transporte HTTP injetável (testes). Assinatura:
+     *   fn(string $method, string $url, ?array $body, string $token): array
+     * Deve retornar o mesmo formato padrão (ok/http/data/error).
+     * Quando null, usa cURL (com fallback para PHP streams).
+     */
     public static $transport = null;
 
-    /**
-     * Cria uma assinatura vinculada a um plano existente.
-     * NUNCA cria preapproval_plan (planos de produção já existem).
-     *
-     * @return array{ok:bool,http:int,data:array,error:string}
-     */
-    public function createSubscription(array $payload): array
+    public function __construct(?string $accessToken = null)
     {
-        return $this->request('POST', self::API_BASE . '/preapproval', $payload);
+        $token = $accessToken ?? self::readAccessToken();
+        $this->accessToken = is_string($token) ? trim($token) : '';
     }
 
     /**
-     * Consulta uma assinatura pela API (fonte da verdade).
-     *
-     * @return array{ok:bool,http:int,data:array,error:string}
+     * Lê MERCADOPAGO_ACCESS_TOKEN de getenv/$_ENV/$_SERVER (nesta ordem).
+     * Retorna '' quando ausente (o chamador decide como falhar).
      */
-    public function getSubscription(string $id): array
+    public static function readAccessToken(): string
     {
-        $id = trim($id);
-        if ($id === '' || strlen($id) > 80 || !preg_match('/^[A-Za-z0-9_-]+$/', $id)) {
-            return ['ok' => false, 'http' => 0, 'data' => [], 'error' => 'invalid_id'];
-        }
-        return $this->request('GET', self::API_BASE . '/preapproval/' . $id, null);
+        return self::readEnv('MERCADOPAGO_ACCESS_TOKEN');
+    }
+
+    public static function readEnv(string $key): string
+    {
+        $v = getenv($key);
+        if (is_string($v) && trim($v) !== '') return trim($v);
+        if (isset($_ENV[$key]) && trim((string)$_ENV[$key]) !== '') return trim((string)$_ENV[$key]);
+        if (isset($_SERVER[$key]) && trim((string)$_SERVER[$key]) !== '') return trim((string)$_SERVER[$key]);
+        return '';
+    }
+
+    public function hasToken(): bool
+    {
+        return $this->accessToken !== '';
     }
 
     /**
-     * Atualiza uma assinatura (ex: ['status' => 'cancelled']).
-     *
-     * @return array{ok:bool,http:int,data:array,error:string}
+     * POST /preapproval — cria assinatura (com ou sem preapproval_plan_id).
+     * Payload montado pelo chamador SOMENTE com campos oficiais.
      */
-    public function updateSubscription(string $id, array $payload): array
+    public function createPreapproval(array $payload): array
     {
-        $id = trim($id);
-        if ($id === '' || strlen($id) > 80 || !preg_match('/^[A-Za-z0-9_-]+$/', $id)) {
-            return ['ok' => false, 'http' => 0, 'data' => [], 'error' => 'invalid_id'];
+        return $this->request('POST', '/preapproval', $payload);
+    }
+
+    /** GET /preapproval/{id} — fonte da verdade sobre a assinatura. */
+    public function getPreapproval(string $id): array
+    {
+        if (!self::isValidId($id)) {
+            return self::fail(0, 'invalid_id');
         }
-        return $this->request('PUT', self::API_BASE . '/preapproval/' . $id, $payload);
+        return $this->request('GET', '/preapproval/' . $id, null);
     }
 
     /**
-     * @return array{ok:bool,http:int,data:array,error:string}
+     * PUT /preapproval/{id} — atualiza assinatura.
+     * Cancelamento oficial: ['status' => 'canceled'].
+     * Pausa oficial: ['status' => 'paused'].
      */
-    private function request(string $method, string $url, ?array $body): array
+    public function updatePreapproval(string $id, array $payload): array
     {
-        $token = $this->readToken();
-        if ($token === '') {
-            error_log('[mp] MERCADOPAGO_ACCESS_TOKEN ausente no ambiente');
-            return ['ok' => false, 'http' => 0, 'data' => [], 'error' => 'missing_token'];
+        if (!self::isValidId($id)) {
+            return self::fail(0, 'invalid_id');
+        }
+        return $this->request('PUT', '/preapproval/' . $id, $payload);
+    }
+
+    /** IDs do MP: opacos, alfanuméricos com - e _. Limite defensivo de 80 chars. */
+    public static function isValidId(string $id): bool
+    {
+        return $id !== '' && strlen($id) <= 80 && preg_match('/^[A-Za-z0-9_-]+$/', $id) === 1;
+    }
+
+    private function request(string $method, string $path, ?array $body): array
+    {
+        if ($this->accessToken === '') {
+            return self::fail(0, 'missing_access_token');
         }
 
-        if (self::$transport !== null) {
+        $url = self::BASE_URL . $path;
+
+        if (is_callable(self::$transport)) {
             try {
-                $res = (self::$transport)($method, $url, $body, $token);
-                if (!is_array($res)) {
-                    return ['ok' => false, 'http' => 0, 'data' => [], 'error' => 'transport_error'];
-                }
-                return [
-                    'ok'    => (bool)($res['ok'] ?? false),
-                    'http'  => (int)($res['http'] ?? 0),
-                    'data'  => is_array($res['data'] ?? null) ? $res['data'] : [],
-                    'error' => (string)($res['error'] ?? 'unknown'),
-                ];
+                $res = (self::$transport)($method, $url, $body, $this->accessToken);
             } catch (Throwable $e) {
-                error_log('[mp] transport exception: ' . $e->getMessage());
-                return ['ok' => false, 'http' => 0, 'data' => [], 'error' => 'transport_error'];
+                error_log('[mp-client] transport falhou: ' . substr($e->getMessage(), 0, 120));
+                return self::fail(0, 'connection_error');
             }
-        }
-
-        if (!function_exists('curl_init')) {
-            error_log('[mp] curl indisponivel no ambiente');
-            return ['ok' => false, 'http' => 0, 'data' => [], 'error' => 'curl_unavailable'];
-        }
-
-        $json = null;
-        if ($body !== null) {
-            $json = json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-            if ($json === false) {
-                return ['ok' => false, 'http' => 0, 'data' => [], 'error' => 'json_encode_error'];
+            if (!is_array($res) || !isset($res['ok'])) {
+                return self::fail(0, 'connection_error');
             }
+            return [
+                'ok'    => (bool)($res['ok'] ?? false),
+                'http'  => (int)($res['http'] ?? 0),
+                'data'  => is_array($res['data'] ?? null) ? $res['data'] : [],
+                'error' => (string)($res['error'] ?? 'connection_error'),
+            ];
         }
 
+        if (function_exists('curl_init')) {
+            return $this->requestCurl($method, $url, $body);
+        }
+        return $this->requestStream($method, $url, $body);
+    }
+
+    private function requestCurl(string $method, string $url, ?array $body): array
+    {
         $ch = curl_init($url);
-        $headers = [
-            'Authorization: Bearer ' . $token,
-            'Content-Type: application/json',
-            'Accept: application/json',
-        ];
+        if ($ch === false) {
+            return self::fail(0, 'connection_error');
+        }
+
+        $headers = ['Content-Type: application/json', 'Accept: application/json'];
         $opts = [
+            CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CUSTOMREQUEST  => $method,
             CURLOPT_HTTPHEADER     => $headers,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => self::TOTAL_TIMEOUT,
             CURLOPT_CONNECTTIMEOUT => self::CONNECT_TIMEOUT,
+            CURLOPT_TIMEOUT        => self::REQUEST_TIMEOUT,
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
         ];
-        if ($json !== null) {
+        // Authorization aplicado via CURLOPT_HTTPHEADER separado para nunca
+        // aparecer em logs de headers genéricos.
+        $opts[CURLOPT_HTTPHEADER][] = 'Authorization: Bearer ' . $this->accessToken;
+        if ($body !== null) {
+            $json = json_encode($body);
+            if ($json === false) {
+                return self::fail(0, 'invalid_json');
+            }
             $opts[CURLOPT_POSTFIELDS] = $json;
         }
         curl_setopt_array($ch, $opts);
-        $resp = curl_exec($ch);
-        $errno = curl_errno($ch);
-        $err = $errno !== 0 ? (string)curl_error($ch) : '';
-        $http = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        // Sem curl_close(): o handle é liberado pelo GC; evita depreciação no PHP 8.5.
 
-        if ($resp === false) {
-            error_log('[mp] curl fail method=' . $method . ' http=0 errno=' . $errno
-                . ' err=' . substr($err, 0, 120));
-            return ['ok' => false, 'http' => 0, 'data' => [], 'error' => 'network_error'];
+        $raw = curl_exec($ch);
+        if ($raw === false) {
+            $errno = curl_errno($ch);
+            // O handle é liberado pelo GC; não fechar manualmente (compat PHP 8.5).
+            error_log('[mp-client] curl erro ' . $errno . ' ' . $method . ' ' . $this->safePath($url));
+            return self::fail(0, $errno === CURLE_OPERATION_TIMEDOUT ? 'timeout' : 'connection_error');
         }
-
-        $data = json_decode((string)$resp, true);
-        if (!is_array($data)) {
-            error_log('[mp] invalid json method=' . $method . ' http=' . $http
-                . ' json_err=' . json_last_error_msg());
-            return ['ok' => false, 'http' => $http, 'data' => [], 'error' => 'invalid_json'];
-        }
-
-        if ($http < 200 || $http >= 300) {
-            $msg = (string)($data['message'] ?? $data['error'] ?? 'http_error');
-            error_log('[mp] http_error method=' . $method . ' http=' . $http
-                . ' msg=' . substr($msg, 0, 160));
-            return ['ok' => false, 'http' => $http, 'data' => $data, 'error' => 'http_' . $http];
-        }
-
-        return ['ok' => true, 'http' => $http, 'data' => $data, 'error' => ''];
+        $http = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        return self::parseResponse($http, is_string($raw) ? $raw : '', $method, $url);
     }
 
-    private function readToken(): string
+    private function requestStream(string $method, string $url, ?array $body): array
     {
-        $v = getenv('MERCADOPAGO_ACCESS_TOKEN');
-        if (is_string($v) && $v !== '') return $v;
-        if (isset($_ENV['MERCADOPAGO_ACCESS_TOKEN']) && $_ENV['MERCADOPAGO_ACCESS_TOKEN'] !== '') {
-            return (string)$_ENV['MERCADOPAGO_ACCESS_TOKEN'];
+        $content = null;
+        if ($body !== null) {
+            $content = json_encode($body);
+            if ($content === false) {
+                return self::fail(0, 'invalid_json');
+            }
         }
-        if (isset($_SERVER['MERCADOPAGO_ACCESS_TOKEN']) && $_SERVER['MERCADOPAGO_ACCESS_TOKEN'] !== '') {
-            return (string)$_SERVER['MERCADOPAGO_ACCESS_TOKEN'];
+        $ctx = stream_context_create([
+            'http' => [
+                'method'        => $method,
+                'header'        => "Content-Type: application/json\r\nAccept: application/json\r\n",
+                'content'       => $content,
+                'timeout'       => self::REQUEST_TIMEOUT,
+                'ignore_errors' => true,
+            ],
+            'ssl' => ['verify_peer' => true, 'verify_peer_name' => true],
+        ]);
+        // Token via header adicional (fora do bloco genérico acima).
+        stream_context_set_option($ctx, 'http', 'header',
+            "Content-Type: application/json\r\nAccept: application/json\r\nAuthorization: Bearer " . $this->accessToken . "\r\n");
+
+        $raw = @file_get_contents($url, false, $ctx);
+        if ($raw === false) {
+            error_log('[mp-client] stream falhou ' . $method . ' ' . $this->safePath($url));
+            return self::fail(0, 'connection_error');
         }
-        return '';
+        $http = 0;
+        if (isset($http_response_header[0]) && preg_match('/\s(\d{3})\s/', $http_response_header[0], $m)) {
+            $http = (int)$m[1];
+        }
+        return self::parseResponse($http, $raw, $method, $url);
+    }
+
+    private static function parseResponse(int $http, string $raw, string $method, string $url): array
+    {
+        if ($http >= 200 && $http < 300) {
+            if (trim($raw) === '') {
+                return self::fail($http, 'empty_response');
+            }
+            $data = json_decode($raw, true);
+            if (!is_array($data)) {
+                error_log('[mp-client] JSON invalido http=' . $http . ' ' . $method);
+                return self::fail($http, 'invalid_json');
+            }
+            return ['ok' => true, 'http' => $http, 'data' => $data, 'error' => ''];
+        }
+
+        error_log('[mp-client] http=' . $http . ' ' . $method);
+        if ($http === 400) return self::fail($http, 'http_400');
+        if ($http === 401) return self::fail($http, 'http_401');
+        if ($http === 403) return self::fail($http, 'http_403');
+        if ($http === 404) return self::fail($http, 'http_404');
+        if ($http === 409) return self::fail($http, 'http_409');
+        if ($http === 429) return self::fail($http, 'http_429');
+        if ($http >= 500)  return self::fail($http, 'http_5xx');
+        return self::fail($http, 'http_error');
+    }
+
+    private static function fail(int $http, string $error): array
+    {
+        return ['ok' => false, 'http' => $http, 'data' => [], 'error' => $error];
+    }
+
+    /** Path sem query para logs (nunca inclui token). */
+    private function safePath(string $url): string
+    {
+        $parts = parse_url($url);
+        return is_array($parts) ? (string)($parts['path'] ?? '?') : '?';
     }
 }

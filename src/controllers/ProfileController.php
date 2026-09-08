@@ -135,6 +135,7 @@ class ProfileController
         $upgradeSlugs = array_filter(
             PlanService::getValidSlugs(),
             fn(string $s) => !in_array($s, [$currentPlanSlug], true)
+                && in_array($s, SubscriptionService::ALLOWED_PLANS, true)
         );
         foreach ($upgradeSlugs as $slug) {
             $upgrades[$slug] = [
@@ -147,59 +148,6 @@ class ProfileController
             ];
         }
 
-        // Sem gateway de pagamento ativo: sem cancelamento via app e sem
-        // checkout. Assinaturas temporariamente indisponíveis (Fase 4).
-        $canCancelSubscription = false;
-
-        $checkoutAttempt = null;
-        $mpPublicKey = '';
-
-        // ---- Assinaturas Mercado Pago (produção) ----
-        $subSvc = new SubscriptionService($this->db);
-        $activeSub = $subSvc->findActiveForUser($userId);
-        // Cancelamento liberado só para a assinatura ativa do próprio usuário.
-        $canCancelSubscription = ($activeSub !== null && !empty($activeSub['mp_preapproval_id']));
-        // Tentativa pendente com checkout: permite retomar o pagamento.
-        $pendingSub = $subSvc->findOpenForUser($userId);
-        if ($pendingSub !== null && ($pendingSub['status'] ?? '') !== 'pending') {
-            $pendingSub = null;
-        }
-        if ($pendingSub !== null && empty($pendingSub['checkout_url'])) {
-            $pendingSub = null;
-        }
-        $checkoutAttempt = $pendingSub;
-        // Configuração (sem expor IDs/tokens): só indica se o fluxo está ativo.
-        $mpConfigured = SubscriptionService::isConfigured('pro')
-            || SubscriptionService::isConfigured('premium');
-
-        $featureLabels = [
-            'relatorios'          => ['label' => 'Relatórios',          'icon' => 'chart',     'desc' => 'Acesso à tela completa de relatórios'],
-            'historico'           => ['label' => 'Histórico',            'icon' => 'clock',     'desc' => 'Histórico de transações por mais meses'],
-            'exportar_csv'        => ['label' => 'Exportar CSV',         'icon' => 'download',  'desc' => 'Baixar relatórios em CSV'],
-            'exportar_pdf'        => ['label' => 'Exportar PDF',         'icon' => 'file-text', 'desc' => 'Baixar relatórios em PDF'],
-            'comparacao_meses'    => ['label' => 'Comparação de meses',   'icon' => 'bar-chart', 'desc' => 'Comparar gastos entre meses'],
-            'filtros_avancados'   => ['label' => 'Filtros avançados',    'icon' => 'filter',    'desc' => 'Filtros detalhados nos relatórios'],
-            'ia_analise_metas'    => ['label' => 'Análise de metas IA', 'icon' => 'target',    'desc' => 'IA analisa suas metas financeiras'],
-            'ia_assistant'        => ['label' => 'Assistente IA',        'icon' => 'zap',        'desc' => 'Acesso ao assistente financeiro IA'],
-            'categorias_ilimitadas' => ['label' => 'Categorias ilimitadas', 'icon' => 'folder', 'desc' => 'Sem limite de categorias'],
-            'metas_ilimitadas'   => ['label' => 'Metas ilimitadas',    'icon' => 'target',    'desc' => 'Sem limite de metas financeiras'],
-            'ia_history'          => ['label' => 'Histórico de IA',       'icon' => 'message-square', 'desc' => 'Manter histórico da conversa com IA'],
-            'ia_upload'           => ['label' => 'Upload para IA',        'icon' => 'upload',    'desc' => 'Enviar arquivos para análise da IA'],
-            'ia_images'           => ['label' => 'Imagens da IA',         'icon' => 'image',     'desc' => 'Gerar imagens com IA'],
-            'dashboard_advanced'   => ['label' => 'Dashboard avançado',     'icon' => 'layout',     'desc' => 'Cards e gráficos avançados no dashboard'],
-            'ai_insights'         => ['label' => 'Insights da IA',        'icon' => 'lightbulb', 'desc' => 'Alertas e insights inteligentes'],
-        ];
-
-        $limitLabels = [
-            'lancamentos'       => ['label' => 'Lançamentos / mês',     'icon' => 'list'],
-            'categorias'        => ['label' => 'Categorias personalizadas', 'icon' => 'folder'],
-            'orcamentos'        => ['label' => 'Orçamentos ativos',   'icon' => 'wallet'],
-            'metas'             => ['label' => 'Metas financeiras',   'icon' => 'target'],
-            'historico_meses'   => ['label' => 'Meses de histórico',   'icon' => 'clock'],
-            'ia_perguntas_dia' => ['label' => 'Perguntas IA / dia',  'icon' => 'zap'],
-            'ia_insights_dia'  => ['label' => 'Insights IA / dia',    'icon' => 'lightbulb'],
-        ];
-
         $pageTitle = 'Meu Plano';
         $pageSubtitle = 'Gerencie seu plano e veja os recursos disponíveis para você.';
         $activeMenu = 'meu_plano';
@@ -207,55 +155,101 @@ class ProfileController
         $userName = $_SESSION['user_name'] ?? $user->name;
         $userEmail = $user->email;
 
+        // Labels da view (única definição — nunca no frontend).
+        $limitLabels = [
+            'lancamentos'     => ['label' => 'Lançamentos/mês', 'icon' => 'wallet'],
+            'categorias'      => ['label' => 'Categorias', 'icon' => 'tag'],
+            'orcamentos'      => ['label' => 'Orçamentos', 'icon' => 'chart'],
+            'metas'           => ['label' => 'Metas', 'icon' => 'target'],
+            'historico_meses' => ['label' => 'Histórico (meses)', 'icon' => 'history'],
+            'ia_perguntas_dia'=> ['label' => 'Perguntas IA/dia', 'icon' => 'sparkles'],
+            'ia_insights_dia' => ['label' => 'Insights IA/dia', 'icon' => 'zap'],
+        ];
+        $featureLabels = [
+            'relatorios'        => ['label' => 'Relatórios', 'desc' => 'Acesso à tela de relatórios.'],
+            'historico'         => ['label' => 'Histórico completo', 'desc' => 'Consulta estendida do histórico.'],
+            'exportar_csv'      => ['label' => 'Exportar CSV', 'desc' => 'Exporte relatórios em CSV/Excel.'],
+            'exportar_pdf'      => ['label' => 'Exportar PDF', 'desc' => 'Exporte relatórios em PDF.'],
+            'comparacao_meses'  => ['label' => 'Comparação de meses', 'desc' => 'Compare meses lado a lado.'],
+            'filtros_avancados' => ['label' => 'Filtros avançados', 'desc' => 'Filtros avançados nos relatórios.'],
+            'ia_analise_metas'  => ['label' => 'IA analisa metas', 'desc' => 'Análise das metas pela IA.'],
+            'ia_assistant'      => ['label' => 'Assistente IA', 'desc' => 'Acesso ao assistente financeiro.'],
+            'categorias_ilimitadas' => ['label' => 'Categorias ilimitadas', 'desc' => 'Sem limite de categorias.'],
+            'metas_ilimitadas'  => ['label' => 'Metas ilimitadas', 'desc' => 'Sem limite de metas financeiras.'],
+            'ia_history'        => ['label' => 'Histórico da IA', 'desc' => 'Salva conversas com a IA.'],
+            'ia_upload'         => ['label' => 'Upload para IA', 'desc' => 'Envie arquivos para a IA.'],
+            'ia_images'         => ['label' => 'Imagens pela IA', 'desc' => 'Geração de imagens.'],
+            'dashboard_advanced'=> ['label' => 'Dashboard avançado', 'desc' => 'Cards avançados no painel.'],
+            'ai_insights'       => ['label' => 'Insights inteligentes', 'desc' => 'Alertas e insights automáticos.'],
+        ];
+
+        // Cancelamento disponível somente com assinatura ativa local.
+        $canCancelSubscription = false;
+        try {
+            $subSvc = new SubscriptionService($this->db);
+            $canCancelSubscription = $subSvc->findActiveForUser($userId) !== null;
+        } catch (Throwable $e) {
+            $canCancelSubscription = false;
+        }
+
         require basePath('meu_plano.php');
     }
 
     /**
-     * Retorno do checkout MP (GET autenticado).
-     * NUNCA ativa plano: apenas consulta GET /preapproval/{id} (quando
-     * informado) e informa o estado atual. A fonte da verdade é a API +
-     * o webhook.
+     * POST subscription_start — cria assinatura no Mercado Pago.
+     * Preço NUNCA vem do frontend: o backend resolve plan_slug -> plano.
+     * Em sucesso redireciona ao checkout (init_point); nunca ativa plano.
+     */
+    public function subscriptionStart(): void
+    {
+        requireLogin();
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            header('Location: /index.php?action=meu_plano&error=method'); exit;
+        }
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        $user = $this->userModel->findById($userId);
+        if (!$user) { header('Location: /?action=login'); exit; }
+
+        $plan = strtolower(trim((string)($_POST['plan'] ?? '')));
+        $svc = new SubscriptionService($this->db);
+        $res = $svc->start($userId, (string)$user->email, $plan);
+        if (!$res['ok']) {
+            $map = [
+                'invalid_plan' => 'invalid_plan', 'plan_not_found' => 'plan_not_found',
+                'already_subscribed' => 'already_subscribed', 'config_error' => 'config_error',
+            ];
+            $err = $map[$res['error']] ?? 'service_error';
+            header('Location: /index.php?action=meu_plano&error=' . $err); exit;
+        }
+        header('Location: ' . $res['init_point']); exit;
+    }
+
+    /** POST subscription_cancel — cancela no MP (quando vinculado) + baixa local. */
+    public function subscriptionCancel(): void
+    {
+        requireLogin();
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            header('Location: /index.php?action=meu_plano&error=method'); exit;
+        }
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        $svc = new SubscriptionService($this->db);
+        $res = $svc->cancelActive($userId);
+        if (!$res['ok']) {
+            $err = $res['error'] === 'no_active_subscription' ? 'no_active_subscription' : 'cancel_service_error';
+            header('Location: /index.php?action=meu_plano&error=' . $err); exit;
+        }
+        header('Location: /index.php?action=meu_plano&cancelled=1'); exit;
+    }
+
+    /**
+     * GET mp_return — retorno neutro do checkout.
+     * NUNCA ativa plano: apenas devolve o usuário ao Meu Plano.
+     * A confirmação real virá pelo backend (API/webhook — ETAPA 2).
      */
     public function mpReturn(): void
     {
         requireLogin();
-        $mpId = trim((string)($_GET['preapproval_id'] ?? $_GET['id'] ?? ''));
-        if ($mpId === '') {
-            header('Location: /index.php?action=meu_plano&mp=processing');
-            exit;
-        }
-        if (!preg_match('/^[A-Za-z0-9_-]{1,80}$/', $mpId)) {
-            header('Location: /index.php?action=meu_plano&mp=error');
-            exit;
-        }
-        if (!SubscriptionService::accessTokenPresent()) {
-            header('Location: /index.php?action=meu_plano&mp=error');
-            exit;
-        }
-        try {
-            $mp = new MercadoPagoClient();
-            $res = $mp->getSubscription($mpId);
-        } catch (Throwable $e) {
-            error_log('[mp_return] consulta falhou: ' . $e->getMessage());
-            header('Location: /index.php?action=meu_plano&mp=error');
-            exit;
-        }
-        if (!$res['ok']) {
-            header('Location: /index.php?action=meu_plano&mp=error');
-            exit;
-        }
-        $status = strtolower(trim((string)($res['data']['status'] ?? '')));
-        $map = [
-            'authorized' => 'active',
-            'pending'    => 'pending',
-            'paused'     => 'paused',
-            'cancelled'  => 'cancelled',
-        ];
-        $key = $map[$status] ?? 'error';
-        // Sincroniza leitura local de forma oportunista (sem ativar nada aqui:
-        // a ativação ocorre no webhook via syncFromApi).
-        header('Location: /index.php?action=meu_plano&mp=' . $key);
-        exit;
+        header('Location: /index.php?action=meu_plano'); exit;
     }
 
     public function updatePassword(): void

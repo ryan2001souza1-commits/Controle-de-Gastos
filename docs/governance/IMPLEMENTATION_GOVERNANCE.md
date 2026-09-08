@@ -246,13 +246,7 @@ explícita de documentação normativa:
 - `src/config/config.php` — configuração de segurança
 - Arquivos de autenticação/autorização
 - Arquivos de migração de banco de produção
-- Futuros arquivos de webhook/retorno de pagamento (quando a nova
-  integração oficial for construída) — segurança de pagamento
-
-> Nota: a integração antiga do Mercado Pago foi removida por completo
-> (`public/mercadopago_webhook.php` e `public/mercadopago_return.php`
-> não existem mais). Não há integração de pagamento executável ativa;
-> a nova integração será construída posteriormente como etapa separada.
+- Futuros arquivos de webhook/retorno de pagamento (quando um novo gateway for adotado) — segurança de pagamento
 
 ---
 
