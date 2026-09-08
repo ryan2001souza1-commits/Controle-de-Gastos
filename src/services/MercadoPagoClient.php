@@ -88,6 +88,20 @@ class MercadoPagoClient
     }
 
     /**
+     * GET /authorized_payments/{id} — dados da fatura (tópico oficial
+     * subscription_authorized_payment). A resposta traz `preapproval_id`,
+     * usado para correlacionar com a assinatura via GET /preapproval/{id}.
+     * Referência: .../subscriptions/get-authorized-payment/get
+     */
+    public function getAuthorizedPayment(string $id): array
+    {
+        if (!self::isValidId($id)) {
+            return self::fail(0, 'invalid_id');
+        }
+        return $this->request('GET', '/authorized_payments/' . $id, null);
+    }
+
+    /**
      * PUT /preapproval/{id} — atualiza assinatura.
      * Cancelamento oficial: ['status' => 'canceled'].
      * Pausa oficial: ['status' => 'paused'].

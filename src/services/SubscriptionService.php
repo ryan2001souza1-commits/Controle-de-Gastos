@@ -345,6 +345,138 @@ class SubscriptionService
     }
 
     // =====================================================================
+    // Sincronização a partir do objeto oficial da API (fonte da verdade)
+    // =====================================================================
+
+    /**
+     * Mapeia status oficial do preapproval -> status interno.
+     * Confirmado na documentação/respostas oficiais:
+     * pending, authorized, paused, cancelled. "canceled" (grafia do PUT
+     * de cancelamento) é aceito defensivamente com o mesmo sentido.
+     * Desconhecido => null (NUNCA concede acesso pago).
+     */
+    public function mapApiStatus(string $apiStatus): ?string
+    {
+        switch (strtolower(trim($apiStatus))) {
+            case 'pending':    return self::LOCAL_PENDING;
+            case 'authorized': return self::LOCAL_ACTIVE;
+            case 'paused':     return self::LOCAL_PAUSED;
+            case 'cancelled':
+            case 'canceled':   return self::LOCAL_CANCELLED;
+            case 'expired':    return self::LOCAL_EXPIRED;
+            case 'rejected':   return self::LOCAL_REJECTED;
+            default:           return null;
+        }
+    }
+
+    /**
+     * Sincroniza a assinatura local com o objeto retornado por
+     * GET /preapproval/{id} (ou via fatura authorized_payments).
+     *
+     * Correlação estrita (nada é atualizado sob inconsistência):
+     * localiza por mp_preapproval_id, ou por attempt do external_reference,
+     * e exige user_id + plan_slug + external_reference idênticos ao banco.
+     * payer_id/e-mail do payload são só auditoria — nunca localizam usuário.
+     *
+     * Idempotente: reaplicar o mesmo estado não duplica nem alterna nada.
+     * Transação curta: SOMENTE writes locais (HTTP já aconteceu antes).
+     *
+     * @param array $api objeto da assinatura vindo da API do MP
+     * @return array{ok:bool,error:string,local_status:string}
+     *   error: invalid_api_object|external_reference_mismatch|
+     *          unknown_subscription|unknown_status|db_error
+     */
+    public function syncFromApi(array $api): array
+    {
+        $fail = static fn(string $e) => ['ok' => false, 'error' => $e, 'local_status' => ''];
+
+        $mpId = (string)($api['id'] ?? '');
+        $apiStatus = strtolower(trim((string)($api['status'] ?? '')));
+        $externalRef = (string)($api['external_reference'] ?? '');
+        if ($mpId === '' || $apiStatus === '' || $externalRef === '') {
+            return $fail('invalid_api_object');
+        }
+
+        $parsed = self::parseExternalReference($externalRef);
+        if ($parsed === null) {
+            error_log('[subscription] external_reference invalido no sync');
+            return $fail('external_reference_mismatch');
+        }
+
+        $local = $this->findByMpId($mpId);
+        if ($local === null) {
+            $local = $this->findByAttempt($parsed['attempt']);
+        }
+        if ($local === null) {
+            error_log('[subscription] sync sem tentativa local mp_id=' . $this->maskId($mpId));
+            return $fail('unknown_subscription');
+        }
+
+        if ((int)$local['user_id'] !== $parsed['user_id']
+            || (string)$local['plan_slug'] !== $parsed['plan']
+            || (string)($local['external_reference'] ?? '') !== $externalRef
+        ) {
+            error_log('[subscription] divergencia external_reference x banco');
+            return $fail('external_reference_mismatch');
+        }
+
+        $mapped = $this->mapApiStatus($apiStatus);
+        if ($mapped === null) {
+            error_log('[subscription] status MP desconhecido: ' . substr($apiStatus, 0, 40));
+            return $fail('unknown_status');
+        }
+
+        try {
+            $this->db->beginTransaction();
+
+            $upd = $this->db->prepare(
+                'UPDATE subscriptions
+                    SET mp_preapproval_id = COALESCE(NULLIF(mp_preapproval_id,\'\'), ?),
+                        raw_status = ?, status = ?, updated_at = NOW()
+                  WHERE id = ?'
+            );
+            $upd->execute([$mpId, substr($apiStatus, 0, 40), $mapped, (int)$local['id']]);
+
+            $userId = (int)$local['user_id'];
+            $planSlug = (string)$local['plan_slug'];
+            $localId = (int)$local['id'];
+
+            if ($mapped === self::LOCAL_ACTIVE) {
+                $u = $this->db->prepare(
+                    "UPDATE usuarios
+                        SET plano = ?, plano_status = 'ativo', plano_inicio = COALESCE(plano_inicio, NOW()),
+                            plano_fim = NULL, active_subscription_id = ?, updated_at = NOW()
+                      WHERE id = ?"
+                );
+                $u->execute([$planSlug, $localId, $userId]);
+            } elseif ($mapped === self::LOCAL_CANCELLED || $mapped === self::LOCAL_EXPIRED) {
+                $chk = $this->db->prepare('SELECT active_subscription_id FROM usuarios WHERE id = ?');
+                $chk->execute([$userId]);
+                $row = $chk->fetch(PDO::FETCH_ASSOC);
+                if ($row && (int)($row['active_subscription_id'] ?? 0) === $localId) {
+                    $u = $this->db->prepare(
+                        "UPDATE usuarios
+                            SET plano = 'gratuito', plano_status = 'ativo',
+                                active_subscription_id = NULL, updated_at = NOW()
+                          WHERE id = ?"
+                    );
+                    $u->execute([$userId]);
+                }
+            }
+            // pending/paused/rejected: só a linha da assinatura; nunca
+            // liberam nem revogam plano pago.
+
+            $this->db->commit();
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            error_log('[subscription] sync transaction falhou: ' . $e->getMessage());
+            return $fail('db_error');
+        }
+
+        return ['ok' => true, 'error' => '', 'local_status' => $mapped];
+    }
+
+    // =====================================================================
     // Utilidades
     // =====================================================================
 
