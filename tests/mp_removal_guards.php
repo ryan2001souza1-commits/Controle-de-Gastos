@@ -1,10 +1,17 @@
 <?php
 /**
- * Guardas de remocao do Mercado Pago — SEM rede, SEM credenciais.
+ * Guardas etapa 1 — checkout simplificado Mercado Pago (SEM rede, SEM credenciais).
  *
- * A integracao MP foi removida do codigo executavel para reconstrucao
- * futura. Estes guardas garantem que nenhum fluxo executavel de gateway
- * ressurja, preservando planos internos, historico e schema do banco.
+ * Evolucao dos guardas de remocao: a etapa 1 REINTRODUZ de forma minima e
+ * controlada SOMENTE o inicio de checkout via preapproval:
+ *   src/services/MercadoPagoCheckoutStarter.php
+ *   src/controllers/SubscribeController.php
+ *   rota /index.php?action=subscribe&plan=pro|premium
+ *   botoes Assinar Pro/Premium no Meu Plano
+ *
+ * Estes guardas garantem que a reintroducao NAO ressuscite a arquitetura
+ * antiga (webhook, ativacao por retorno, CardForm, Public Key, polling,
+ * escrita no banco, novas migrations) e que os segredos nao vazem.
  */
 $ROOT = dirname(__DIR__);
 require_once $ROOT . '/src/services/PlanService.php';
@@ -42,50 +49,115 @@ function mp_guard_scan(array $dirs, array $exts, string $pattern): array
     return $hits;
 }
 
-echo "\n=== GUARDAS: Mercado Pago removido do executavel ===\n\n";
+function mp_guard_scan_except(string $file, array $dirs, array $exts, string $pattern): array
+{
+    global $ROOT;
+    $hits = mp_guard_scan($dirs, $exts, $pattern);
+    return array_values(array_filter($hits, fn($h) => strpos($h, $file) === false));
+}
+
+echo "\n=== GUARDAS etapa 1: checkout minimo controlado ===\n\n";
 $code = ['src', 'public', 'api'];
 $exts = ['php', 'js'];
 
-// ---- G01: nenhuma chamada executavel para api.mercadopago.com ----
-$hits = mp_guard_scan($code, $exts, '/api\.mercadopago\.com/i');
-mp_guard_assert($hits === [], 'G01 sem api.mercadopago.com em src/public/api', implode(',', $hits));
+// ---- G01: api.mercadopago.com SOMENTE no starter novo (preapproval) ----
+$hitsAll = mp_guard_scan($code, $exts, '/api\.mercadopago\.com/i');
+$hitsOutside = array_values(array_filter($hitsAll, fn($h) => strpos($h, 'services/MercadoPagoCheckoutStarter.php') === false));
+mp_guard_assert($hitsOutside === [], 'G01 api.mercadopago.com SOMENTE em MercadoPagoCheckoutStarter.php', implode(',', $hitsOutside));
+$starterSrc = (string)@file_get_contents($ROOT . '/src/services/MercadoPagoCheckoutStarter.php');
+mp_guard_assert(strpos($starterSrc, 'https://api.mercadopago.com/preapproval') !== false, 'G01b starter usa POST /preapproval oficial');
+$ctrlSrcEarly = (string)@file_get_contents($ROOT . '/src/controllers/SubscribeController.php');
 
-// ---- G02: nenhum endpoint webhook MP ativo ----
-mp_guard_assert(!file_exists($ROOT . '/public/mercadopago_webhook.php'), 'G02a arquivo mercadopago_webhook.php removido');
+// ---- G02: nenhum endpoint webhook MP ativo (etapa 1 NAO tem webhook) ----
+mp_guard_assert(!file_exists($ROOT . '/public/mercadopago_webhook.php'), 'G02a arquivo mercadopago_webhook.php ausente');
 $hits = mp_guard_scan($code, $exts, '/mercadopago_webhook/i');
 mp_guard_assert($hits === [], 'G02b sem referencia a mercadopago_webhook', implode(',', $hits));
 
-// ---- G03: nenhum botao/fluxo inicia pagamento ----
+// ---- G03: arquitetura antiga NAO ressuscitada; rota nova permitida ----
 $hits = mp_guard_scan($code, $exts, '/subscription_start|subscription_cancel|action=mp_return|->subscriptionStart|->subscriptionCancel|->mpReturn/i');
-mp_guard_assert($hits === [], 'G03 sem rota/metodo de assinatura ativa', implode(',', $hits));
+mp_guard_assert($hits === [], 'G03a sem rota/metodo da arquitetura antiga', implode(',', $hits));
+$routerSrc = (string)@file_get_contents($ROOT . '/public/index.php');
+mp_guard_assert(strpos($routerSrc, "'subscribe'") !== false, 'G03b rota action=subscribe existe');
+mp_guard_assert(file_exists($ROOT . '/src/controllers/SubscribeController.php'), 'G03c SubscribeController.php existe');
+mp_guard_assert(file_exists($ROOT . '/src/services/MercadoPagoCheckoutStarter.php'), 'G03d MercadoPagoCheckoutStarter.php existe');
 
-// ---- G04: nenhuma classe/servico MP referenciado no executavel ----
+// ---- G04: classes antigas NAO voltaram; classes novas permitidas ----
 $hits = mp_guard_scan($code, $exts, '/MercadoPagoClient|SubscriptionWebhookService|SubscriptionService/i');
-mp_guard_assert($hits === [], 'G04 sem classes MP no executavel', implode(',', $hits));
-mp_guard_assert(!file_exists($ROOT . '/src/services/MercadoPagoClient.php'), 'G04b MercadoPagoClient.php removido');
-mp_guard_assert(!file_exists($ROOT . '/src/services/SubscriptionWebhookService.php'), 'G04c SubscriptionWebhookService.php removido');
-mp_guard_assert(!file_exists($ROOT . '/src/services/SubscriptionService.php'), 'G04d SubscriptionService.php removido');
+mp_guard_assert($hits === [], 'G04a sem classes antigas no executavel', implode(',', $hits));
+mp_guard_assert(!file_exists($ROOT . '/src/services/MercadoPagoClient.php'), 'G04b MercadoPagoClient.php ausente');
+mp_guard_assert(!file_exists($ROOT . '/src/services/SubscriptionWebhookService.php'), 'G04c SubscriptionWebhookService.php ausente');
+mp_guard_assert(!file_exists($ROOT . '/src/services/SubscriptionService.php'), 'G04d SubscriptionService.php ausente');
 
-// ---- G05: sem tokens de gateway no executavel ----
-$hits = mp_guard_scan($code, $exts, '/x-signature|card_token_id|init_point|authorized_payments|subscription_preapproval|subscription_authorized_payment/i');
-mp_guard_assert($hits === [], 'G05 sem HMAC/token/init_point/preapproval no executavel', implode(',', $hits));
+// ---- G05: sem HMAC/cartao/webhook; init_point/preapproval SOMENTE no starter ----
+$hitsBad = mp_guard_scan($code, $exts, '/x-signature|card_token_id|authorized_payments|subscription_preapproval|subscription_authorized_payment/i');
+mp_guard_assert($hitsBad === [], 'G05a sem HMAC/cartao/preapproval antigo no executavel', implode(',', $hitsBad));
+$hitsInitOutside = mp_guard_scan_except('services/MercadoPagoCheckoutStarter.php', $code, $exts, '/[\'"]init_point[\'"]/i');
+$hitsInitOutside = array_values(array_filter($hitsInitOutside, fn($h) => strpos($h, 'tests/') === false && strpos($h, 'mp_checkout_start_tests.php') === false));
+mp_guard_assert($hitsInitOutside === [], 'G05b init_point SOMENTE no starter novo', implode(',', $hitsInitOutside));
+// Sem CardForm / MP.js / polling / Public Key em codigo executavel
+$hitsCard = mp_guard_scan($code, $exts, '/CardForm\s*\(|createCardToken|sdk\.mercadopago\.com|MERCADOPAGO_PUBLIC_KEY/i');
+mp_guard_assert($hitsCard === [], 'G05c sem CardForm/MP.js/Public Key', implode(',', $hitsCard));
 
-// ---- G06: nenhuma MERCADOPAGO_* exigida pelo app ----
+// ---- G06: SOMENTE as 3 vars MP desta etapa (+ placeholders comentados) ----
 $hits = mp_guard_scan($code, $exts, '/MERCADOPAGO_/');
+$allowedFiles = ['services/MercadoPagoCheckoutStarter.php'];
+$hitsOutside = array_values(array_filter($hits, function ($h) use ($allowedFiles) {
+    foreach ($allowedFiles as $a) {
+        if (strpos($h, $a) !== false) {
+            return false;
+        }
+    }
+    return true;
+}));
+mp_guard_assert($hitsOutside === [], 'G06a MERCADOPAGO_* SOMENTE no starter novo', implode(',', $hitsOutside));
+mp_guard_assert(preg_match('/MERCADOPAGO_PUBLIC_KEY|MERCADOPAGO_CLIENT_|MERCADOPAGO_WEBHOOK/i', $starterSrc) !== 1, 'G06b starter NAO le Public Key/Client/Webhook');
+// .env.example: permite SOMENTE placeholders comentados e vazios das 3 vars
 $envExample = (string)@file_get_contents($ROOT . '/.env.example');
-$hitsEnv = [];
+$envMpLines = [];
 foreach (explode("\n", $envExample) as $i => $line) {
-    if (preg_match('/MERCADOPAGO_/', $line)) { $hitsEnv[] = '.env.example:' . ($i + 1); }
+    if (preg_match('/MERCADOPAGO_/', $line)) {
+        $envMpLines[] = ['n' => $i + 1, 'line' => $line];
+    }
 }
-mp_guard_assert($hits === [], 'G06a sem MERCADOPAGO_* em src/public/api', implode(',', $hits));
-mp_guard_assert($hitsEnv === [], 'G06b sem MERCADOPAGO_* no .env.example', implode(',', $hitsEnv));
-
-// ---- G07: Meu Plano continua funcionando (cards + precos, sem pagamento) ----
+$envOk = true;
+foreach ($envMpLines as $e) {
+    $t = trim($e['line']);
+    $isCommented = str_starts_with($t, '#');
+    $isAllowedKey = str_contains($t, 'MERCADOPAGO_ACCESS_TOKEN') || str_contains($t, 'MERCADOPAGO_PLAN_ID_PRO') || str_contains($t, 'MERCADOPAGO_PLAN_ID_PREMIUM');
+    // placeholder deve ser comentado e sem valor real (termina com = ou vazio apos =)
+    $hasRealValue = preg_match('/^#?\s*MERCADOPAGO_\w+\s*=\s*\S+/', $t) === 1;
+    if (!$isCommented || !$isAllowedKey || $hasRealValue) {
+        $envOk = false;
+    }
+}
+mp_guard_assert($envOk && count($envMpLines) === 3, 'G06c .env.example tem SOMENTE 3 placeholders comentados/vazios', json_encode($envMpLines));
+// View nunca referencia segredos
 $meuPlano = (string)@file_get_contents($ROOT . '/public/meu_plano.php');
-mp_guard_assert(strpos($meuPlano, 'action=subscription_start') === false, 'G07a sem form de assinatura no Meu Plano');
-mp_guard_assert(strpos($meuPlano, 'Assinaturas temporariamente indisponíveis.') !== false, 'G07b mensagem neutra presente');
-mp_guard_assert(substr_count($meuPlano, 'disabled') >= 1, 'G07c botao desabilitado presente');
+mp_guard_assert(strpos($meuPlano, 'MERCADOPAGO_') === false, 'G06d view sem MERCADOPAGO_*');
+
+// ---- G07: Meu Plano etapa 1 (POST + CSRF, sem cartao, precos ok) ----
+mp_guard_assert(strpos($meuPlano, 'action=subscribe') !== false, 'G07a form aponta para action=subscribe');
+mp_guard_assert(preg_match('/<form[^>]*method="POST"[^>]*action="\/index\.php\?action=subscribe"/i', $meuPlano) === 1, 'G07b form POST para subscribe');
+mp_guard_assert(strpos($meuPlano, 'csrf_field()') !== false, 'G07c form inclui csrf_field()');
+mp_guard_assert(strpos($meuPlano, 'name="plan"') !== false, 'G07d form envia slug do plano');
+mp_guard_assert(strpos($meuPlano, 'action=subscribe&amp;plan=') === false && strpos($meuPlano, 'action=subscribe&plan=') === false, 'G07e sem link GET criador de assinatura');
+mp_guard_assert(stripos($meuPlano, 'cardform') === false && stripos($meuPlano, 'mercadopago.js') === false, 'G07f sem CardForm/MP.js na view');
 mp_guard_assert(strpos($meuPlano, '$planPrice') !== false && strpos($meuPlano, '$currentPrice') !== false, 'G07d precos Pro/Premium preservados (via PlanService)');
+mp_guard_assert(strpos($meuPlano, 'Assinaturas temporariamente indisponíveis.') === false, 'G07e mensagem de indisponibilidade removida (etapa 1 ativa)');
+
+// ---- G11: revisao final — POST-only, CSRF, timeout, host oficial ----
+mp_guard_assert(strpos($routerSrc, "'subscribe'") !== false && strpos($routerSrc, 'csrfProtectedActions') !== false, 'G11a subscribe no router com CSRF');
+$csrfBlock = '';
+if (preg_match("/\\\$csrfProtectedActions\s*=\s*\[(.*?)\];/s", $routerSrc, $m)) {
+    $csrfBlock = $m[1];
+}
+mp_guard_assert(strpos($csrfBlock, "'subscribe'") !== false, 'G11b subscribe listado em csrfProtectedActions');
+mp_guard_assert(strpos($ctrlSrcEarly, "REQUEST_METHOD") !== false && strpos($ctrlSrcEarly, "'POST'") !== false, 'G11c controller exige POST');
+mp_guard_assert(strpos($ctrlSrcEarly, 'csrf') !== false && strpos($ctrlSrcEarly, 'invalid_csrf') !== false, 'G11d controller valida CSRF');
+mp_guard_assert(strpos($ctrlSrcEarly, "\$_POST['plan']") !== false, 'G11e plano lido de $_POST');
+mp_guard_assert(strpos($starterSrc, 'TIMEOUT_SECONDS = 7') !== false && strpos($starterSrc, 'CONNECT_TIMEOUT_SECONDS = 3') !== false, 'G11f timeouts 7s/3s (< 10s)');
+mp_guard_assert(strpos($starterSrc, 'isOfficialCheckoutUrl') !== false, 'G11g validacao de host oficial presente');
+mp_guard_assert(strpos($starterSrc, '.mercadopago.com') !== false, 'G11h allowlist mercadopago.com');
 
 // ---- G08: planos internos Gratuito/Pro/Premium continuam existindo ----
 $slugs = PlanService::getValidSlugs();
@@ -99,6 +171,18 @@ $migrations = (string)@file_get_contents($ROOT . '/src/migrations.php');
 mp_guard_assert(strpos($schema, 'mp_preapproval_id') !== false, 'G09a coluna historica mp_preapproval_id preservada no schema');
 mp_guard_assert(strpos($migrations, 'ADD COLUMN IF NOT EXISTS mp_preapproval_id') !== false, 'G09b migration mantem mp_preapproval_id');
 mp_guard_assert(!preg_match('/DROP\s+COLUMN[^;]*mp_preapproval_id/i', $migrations), 'G09c sem DROP COLUMN em mp_preapproval_id');
+
+// ---- G10: etapa 1 nao escreve no banco nem ativa plano ----
+$ctrlSrc = (string)@file_get_contents($ROOT . '/src/controllers/SubscribeController.php');
+mp_guard_assert(strpos($starterSrc, 'UPDATE usuarios') === false && strpos($starterSrc, 'INSERT INTO subscriptions') === false, 'G10a starter sem escrita no banco');
+mp_guard_assert(strpos($ctrlSrc, 'UPDATE') === false && strpos($ctrlSrc, 'INSERT INTO') === false, 'G10b controller sem escrita no banco');
+mp_guard_assert(stripos($ctrlSrc, 'CREATE TABLE') === false && stripos($starterSrc, 'CREATE TABLE') === false, 'G10c sem DDL/migration');
+$profileSrc = (string)@file_get_contents($ROOT . '/src/controllers/ProfileController.php');
+$meuPlanoFn = '';
+if (preg_match('/function meuPlano\(\).*?^    \}/ms', $profileSrc, $m)) {
+    $meuPlanoFn = $m[0];
+}
+mp_guard_assert(stripos($meuPlanoFn, 'UPDATE usuarios SET plano') === false, 'G10d retorno NAO ativa plano');
 
 echo "\n=== RESUMO GUARDAS ===\n";
 $total = $passed + $failed;

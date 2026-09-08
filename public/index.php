@@ -67,6 +67,8 @@ require_once __DIR__ . '/../src/controllers/FeedbackController.php';
 require_once __DIR__ . '/../src/services/AiFinanceContext.php';
 require_once __DIR__ . '/../src/services/AiService.php';
 require_once __DIR__ . '/../src/controllers/AiController.php';
+require_once __DIR__ . '/../src/services/MercadoPagoCheckoutStarter.php';
+require_once __DIR__ . '/../src/controllers/SubscribeController.php';
 
 
 $db = getDBConnection();
@@ -103,6 +105,7 @@ $adminController = new AdminController($userModel, $bugModel, $planModel, $feedb
 $bugReportController = new BugReportController($bugModel, $db);
 $feedbackController = new FeedbackController($feedbackModel, $db);
 $aiController = new AiController($db);
+$subscribeController = new SubscribeController($db);
 
 $action = $_GET['action'] ?? null;
 
@@ -114,6 +117,7 @@ $csrfProtectedActions = [
     'store_goal', 'update_goal', 'delete_goal', 'update_profile',
     'update_password', 'feedback_create', 'reportar', 'reportar_create',
     'admin_bug_update', 'admin_feedback_update', 'ai_chat', 'logout',
+    'subscribe',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -205,6 +209,10 @@ if ($action === 'register') {
     $profileController->index();
 } elseif ($action === 'meu_plano') {
     $profileController->meuPlano();
+} elseif ($action === 'subscribe') {
+    // Etapa 1: inicio de assinatura MP (SOMENTE POST + CSRF, sem escrita no banco).
+    // GET nunca cria preapproval — o controller rejeita com redirect seguro.
+    $subscribeController->start();
 } elseif ($action === 'update_profile') {
     $profileController->updateProfile();
 } elseif ($action === 'update_password') {

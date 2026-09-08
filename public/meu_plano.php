@@ -142,6 +142,21 @@ $statusBadgeClass = $planIsAtivo ? 'badge-success' : 'badge-warning';
 
 
 
+<?php if (!empty($subscribeNotice)): ?>
+<section class="panel" style="margin-bottom:var(--space-5);border:1px solid rgba(16,185,129,.25);background:rgba(16,185,129,.06)">
+    <div class="panel-body-sm" style="font-size:13px;color:var(--color-text-1)">
+        <?= htmlspecialchars($subscribeNotice) ?>
+    </div>
+</section>
+<?php endif; ?>
+<?php if (!empty($subscribeError)): ?>
+<section class="panel" style="margin-bottom:var(--space-5);border:1px solid rgba(220,38,38,.25);background:rgba(220,38,38,.06)">
+    <div class="panel-body-sm" style="font-size:13px;color:var(--color-text-1)">
+        <?= htmlspecialchars($subscribeError) ?>
+    </div>
+</section>
+<?php endif; ?>
+
 <?php if (!empty($upgrades)): ?>
 <section>
     <div style="margin-bottom:var(--space-4)">
@@ -202,18 +217,19 @@ $statusBadgeClass = $planIsAtivo ? 'badge-success' : 'badge-warning';
                         <?php endforeach; ?>
                     </div>
 
-                    <button
-                        type="button"
-                        class="btn"
-                        disabled
-                        aria-disabled="true"
-                        title="Assinaturas temporariamente indisponíveis."
-                        style="width:100%;justify-content:center;display:flex;align-items:center;gap:6px;opacity:.55;cursor:not-allowed">
-                        <?= render_icon('zap', 15) ?>
-                        Assinar <?= htmlspecialchars($planName) ?>
-                    </button>
+                    <form method="POST" action="/index.php?action=subscribe" style="margin:0">
+                        <?= function_exists('csrf_field') ? csrf_field() : '' ?>
+                        <input type="hidden" name="plan" value="<?= htmlspecialchars($slug) ?>">
+                        <button
+                            type="submit"
+                            class="btn"
+                            style="width:100%;justify-content:center;display:flex;align-items:center;gap:6px">
+                            <?= render_icon('zap', 15) ?>
+                            Assinar <?= htmlspecialchars($planName) ?>
+                        </button>
+                    </form>
                     <div style="margin-top:var(--space-2);font-size:11px;color:var(--color-text-3);text-align:center">
-                        Assinaturas temporariamente indisponíveis.
+                        Pagamento seguro no site do Mercado Pago.
                     </div>
                 </div>
             </div>
