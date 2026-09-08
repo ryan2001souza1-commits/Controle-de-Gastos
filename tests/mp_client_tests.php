@@ -95,6 +95,26 @@ mp_client_assert(strpos($src, 'curl_close') === false, 'C09 sem curl_close (PHP 
 mp_client_assert(strpos($src, 'api.mercadopago.com') !== false, 'C09b base oficial presente');
 mp_client_assert(preg_match('/BASE_URL\s*=\s*\'https:\/\/api\.mercadopago\.com\'/', $src) === 1, 'C09c BASE_URL exata oficial');
 
+// ---- C10: HTTP 400 preserva erro sanitizado (diagnóstico, sem segredos) ----
+$parse = new ReflectionMethod(MercadoPagoClient::class, 'parseResponse');
+$parse->setAccessible(true);
+$body400 = json_encode([
+    'message' => 'Invalid payer_email for this collector',
+    'error' => 'bad_request',
+    'status' => 400,
+    'access_token' => 'APP_USR-TRAP-SECRET-999',
+    'cause' => [['code' => 'PA001', 'description' => 'payer must differ from collector']],
+]);
+$res400 = $parse->invoke(null, 400, (string)$body400, 'POST', 'https://api.mercadopago.com/preapproval');
+mp_client_assert(!$res400['ok'] && $res400['error'] === 'http_400' && $res400['http'] === 400, 'C10 código http_400 preservado');
+mp_client_assert(strpos((string)($res400['detail'] ?? ''), 'payer_email') !== false
+    && strpos((string)($res400['detail'] ?? ''), 'PA001') !== false, 'C10b detalhe com message/cause');
+mp_client_assert(strpos((string)($res400['detail'] ?? ''), 'TRAP-SECRET') === false
+    && strpos(json_encode($res400), 'TRAP-SECRET') === false, 'C10c segredo redactado do detalhe');
+$resTxt = $parse->invoke(null, 500, 'Internal Server Error', 'GET', 'https://api.mercadopago.com/x');
+mp_client_assert($resTxt['error'] === 'http_5xx' && ($resTxt['detail'] ?? '') !== '', 'C10d body não-JSON preservado truncado');
+mp_client_assert(MercadoPagoClient::sanitizedErrorDetail('') === '', 'C10e body vazio sem detalhe');
+
 MercadoPagoClient::$transport = null;
 putenv('MERCADOPAGO_ACCESS_TOKEN'); unset($_ENV['MERCADOPAGO_ACCESS_TOKEN']);
 

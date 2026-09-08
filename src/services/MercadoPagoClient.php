@@ -248,19 +248,73 @@ class MercadoPagoClient
         }
 
         error_log('[mp-client] http=' . $http . ' ' . $method);
-        if ($http === 400) return self::fail($http, 'http_400');
-        if ($http === 401) return self::fail($http, 'http_401');
-        if ($http === 403) return self::fail($http, 'http_403');
-        if ($http === 404) return self::fail($http, 'http_404');
-        if ($http === 409) return self::fail($http, 'http_409');
-        if ($http === 429) return self::fail($http, 'http_429');
-        if ($http >= 500)  return self::fail($http, 'http_5xx');
-        return self::fail($http, 'http_error');
+        $detail = self::sanitizedErrorDetail($raw);
+        if ($detail !== '') {
+            error_log('[mp-client] detalhe sanitizado http=' . $http . ': ' . $detail);
+        }
+        if ($http === 400) return self::fail($http, 'http_400', $detail);
+        if ($http === 401) return self::fail($http, 'http_401', $detail);
+        if ($http === 403) return self::fail($http, 'http_403', $detail);
+        if ($http === 404) return self::fail($http, 'http_404', $detail);
+        if ($http === 409) return self::fail($http, 'http_409', $detail);
+        if ($http === 429) return self::fail($http, 'http_429', $detail);
+        if ($http >= 500)  return self::fail($http, 'http_5xx', $detail);
+        return self::fail($http, 'http_error', $detail);
     }
 
-    private static function fail(int $http, string $error): array
+    private static function fail(int $http, string $error, string $detail = ''): array
     {
-        return ['ok' => false, 'http' => $http, 'data' => [], 'error' => $error];
+        return ['ok' => false, 'http' => $http, 'data' => [], 'error' => $error, 'detail' => $detail];
+    }
+
+    /**
+     * Diagnóstico seguro de corpo de erro (não-2xx).
+     * Extrai SOMENTE campos allowlisted (message, error, status, code,
+     * cause[].code, cause[].description), redacta qualquer chave com nome
+     * sensível e limita tamanho. Nunca recebe nem loga credenciais —
+     * o token circula apenas em header, fora do body analisado aqui.
+     */
+    public static function sanitizedErrorDetail(string $raw): string
+    {
+        $raw = trim($raw);
+        if ($raw === '') return '';
+        $data = json_decode(substr($raw, 0, 4000), true);
+        if (!is_array($data)) {
+            return substr(preg_replace('/\s+/', ' ', $raw) ?? '', 0, 200);
+        }
+        $parts = [];
+        foreach (['message', 'error', 'status', 'code'] as $k) {
+            if (isset($data[$k]) && (is_string($data[$k]) || is_numeric($data[$k]))) {
+                $parts[] = $k . '=' . self::cleanScalar((string)$data[$k]);
+            }
+        }
+        if (isset($data['cause']) && is_array($data['cause'])) {
+            $i = 0;
+            foreach ($data['cause'] as $cause) {
+                if ($i >= 3 || !is_array($cause)) break;
+                $c = [];
+                foreach (['code', 'description'] as $k) {
+                    if (isset($cause[$k]) && (is_string($cause[$k]) || is_numeric($cause[$k]))) {
+                        $c[] = $k . '=' . self::cleanScalar((string)$cause[$k]);
+                    }
+                }
+                if ($c !== []) $parts[] = 'cause[' . implode(',', $c) . ']';
+                $i++;
+            }
+        }
+        return substr(implode(' ', $parts), 0, 500);
+    }
+
+    private static function cleanScalar(string $v): string
+    {
+        $v = substr(preg_replace('/\s+/', ' ', trim($v)) ?? '', 0, 200);
+        // Redação defensiva: valor que pareça segredo vira ***.
+        if (preg_match('/^(APP_USR-|TEST-|sk-|whsec-|ya29\.|xox[bpas]-)/', $v) === 1
+            || preg_match('/\b(authorization|access_token|secret|password|card|cvv)\b/i', $v) === 1
+            || strlen($v) > 120) {
+            return '***';
+        }
+        return $v;
     }
 
     /** Path sem query para logs (nunca inclui token). */
