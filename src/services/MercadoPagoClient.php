@@ -221,7 +221,13 @@ class MercadoPagoClient
             return self::fail(0, 'connection_error');
         }
         $http = 0;
-        if (isset($http_response_header[0]) && preg_match('/\s(\d{3})\s/', $http_response_header[0], $m)) {
+        // PHP 8.3+: http_get_last_response_headers() (a variável local
+        // $http_response_header é deprecated no PHP 8.5). Fallback para
+        // runtimes antigos preserva comportamento idêntico.
+        $respHeaders = function_exists('http_get_last_response_headers')
+            ? (http_get_last_response_headers() ?: [])
+            : (isset($http_response_header) && is_array($http_response_header) ? $http_response_header : []);
+        if (isset($respHeaders[0]) && preg_match('/\s(\d{3})\s/', $respHeaders[0], $m)) {
             $http = (int)$m[1];
         }
         return self::parseResponse($http, $raw, $method, $url);
