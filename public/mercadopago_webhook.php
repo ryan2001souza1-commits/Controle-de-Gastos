@@ -27,7 +27,11 @@ try {
     require_once __DIR__ . '/../src/controllers/MpWebhookController.php';
 
     $db = getDBConnection();
-    $controller = new MpWebhookController($db, new User($db), new PlanService($db));
+    // Timeout enxuto no caminho do webhook: GET oficial (5s/3s) + sync
+    // precisam caber com folga no maxDuration da Vercel. Nunca abrir
+    // transacao antes de chamadas HTTP (o controller respeita essa ordem).
+    $webhookClient = new MercadoPagoClient(null, null, 5, 3);
+    $controller = new MpWebhookController($db, new User($db), new PlanService($db), $webhookClient);
     $controller->handle([
         'method' => $_SERVER['REQUEST_METHOD'] ?? 'GET',
         'headers' => [
@@ -38,7 +42,7 @@ try {
         'rawBody' => (string)file_get_contents('php://input'),
     ]);
 } catch (Throwable $e) {
-    error_log('[mp_webhook] fatal ' . substr($e->getMessage(), 0, 200));
+    error_log('[mp_webhook] stage=fatal err=erro_interno');
     http_response_code(500);
     echo json_encode(['success' => false, 'error' => 'erro_interno'], JSON_UNESCAPED_UNICODE);
 }

@@ -81,6 +81,29 @@ class MercadoPagoClient
     }
 
     /**
+     * Valida formato do Device Session ID (doc oficial Subscriptions).
+     * Defensivo: somente formato, nunca o valor e registrado/logado.
+     */
+    public static function isValidDeviceSessionId(?string $value): bool
+    {
+        if (!is_string($value)) {
+            return false;
+        }
+        $v = trim($value);
+        return $v !== '' && strlen($v) <= 128 && preg_match('/^[A-Za-z0-9_.:-]{8,128}$/', $v) === 1;
+    }
+
+    /**
+     * Sanitiza fragmento vindo da API para log: sem quebras de linha
+     * (anti log-injection) e truncado. Nunca recebe segredos.
+     */
+    private static function logSafe(string $v, int $max = 200): string
+    {
+        $v = str_replace(["\r", "\n"], ' ', $v);
+        return substr(trim($v), 0, $max);
+    }
+
+    /**
      * Cria uma assinatura (preapproval) com plano associado + cartao
      * tokenizado no frontend (Core Methods / MercadoPago.js).
      * Checkout com cartao: exige card_token_id e status authorized —
@@ -90,10 +113,13 @@ class MercadoPagoClient
      * temporario (uso unico, 7 dias), que jamais e logado ou persistido.
      *
      * @param array{preapproval_plan_id:string, reason:string, external_reference:string, payer_email:string, card_token_id:string, status?:string, back_url?:string} $payload
+     * @param string|null $deviceSessionId Device ID (MP_DEVICE_SESSION_ID).
+     *   Enviado SOMENTE no header X-meli-session-id, nunca no body, nunca
+     *   em log. Null/ausente = header omitido (fluxo continua funcionando).
      * @return array Resposta decodificada (id, init_point, status, ...).
      * @throws MercadoPagoException
      */
-    public function createPreapproval(array $payload): array
+    public function createPreapproval(array $payload, ?string $deviceSessionId = null): array
     {
         if (!$this->isConfigured()) {
             throw new MercadoPagoException('mp_not_configured', 'Integracao de pagamento nao configurada no servidor.');
@@ -103,7 +129,11 @@ class MercadoPagoClient
                 throw new MercadoPagoException('mp_payload_invalido', "Campo obrigatorio ausente: {$required}.");
             }
         }
-        return $this->request('POST', '/preapproval', $payload, 'create_preapproval');
+        $extraHeaders = [];
+        if (self::isValidDeviceSessionId($deviceSessionId)) {
+            $extraHeaders[] = 'X-meli-session-id: ' . trim((string)$deviceSessionId);
+        }
+        return $this->request('POST', '/preapproval', $payload, 'create_preapproval', $extraHeaders);
     }
 
     /**
@@ -127,10 +157,11 @@ class MercadoPagoClient
 
     /**
      * @param array|null $payload Null para GET (sem corpo).
+     * @param string[] $extraHeaders Headers adicionais seguros (ex: antifraude).
      * @return array Resposta JSON decodificada.
      * @throws MercadoPagoException
      */
-    private function request(string $method, string $path, ?array $payload, string $operation): array
+    private function request(string $method, string $path, ?array $payload, string $operation, array $extraHeaders = []): array
     {
         $url = self::BASE_URL . $path;
         $body = '';
@@ -142,12 +173,13 @@ class MercadoPagoClient
             $body = $encoded;
         }
 
-        // Authorization e montado aqui e jamais logado.
-        $headers = [
+        // Authorization e montado aqui e jamais logado. Extra headers sao
+        // valores estaticos/seguros definidos pelo chamador (ex: antifraude).
+        $headers = array_merge([
             'Content-Type: application/json',
             'Accept: application/json',
             'Authorization: Bearer ' . $this->accessToken,
-        ];
+        ], array_values($extraHeaders));
 
         $start = microtime(true);
         if ($this->transport !== null) {
@@ -201,11 +233,10 @@ class MercadoPagoClient
             return $data;
         }
 
-        // Mensagem do provedor somente para log sanitizado (nunca com segredos).
-        $providerMsg = '';
-        if (isset($data['message']) && is_string($data['message'])) {
-            $providerMsg = substr($data['message'], 0, 200);
-        }
+        // Detalhe seguro da resposta de erro: SOMENTE campos nao sensiveis
+        // (error/message/causes/status_detail). Nunca inclui request,
+        // headers, tokens ou dados de cartao.
+        $detail = self::errorDetail($data);
         $map = [
             400 => ['mp_http_400', 'Requisicao recusada pelo Mercado Pago.'],
             401 => ['mp_http_401', 'Credencial do Mercado Pago invalida.'],
@@ -223,7 +254,60 @@ class MercadoPagoClient
             $code = 'mp_http_' . $httpStatus;
             $msg = 'Erro inesperado do Mercado Pago.';
         }
-        error_log("[mp] op={$operation} http={$httpStatus} err={$code} dur_ms={$durationMs} msg={$providerMsg}");
+        error_log("[mp] op={$operation} http={$httpStatus} err={$code} dur_ms={$durationMs}{$detail}");
         throw new MercadoPagoException($code, $msg, $httpStatus);
+    }
+
+    /**
+     * Monta sufixo de diagnostico a partir da resposta de erro oficial.
+     * Extrai apenas: error, message, causes[].code, causes[].description,
+     * status_detail — todos sanitizados e truncados. Retorna '' se nada
+     * seguro existir. Nunca inventa campos.
+     */
+    private static function errorDetail(array $data): string
+    {
+        $parts = '';
+        if (isset($data['error']) && is_string($data['error']) && $data['error'] !== '') {
+            $parts .= ' api_error=' . self::logSafe($data['error'], 60);
+        }
+        if (isset($data['message']) && is_string($data['message']) && $data['message'] !== '') {
+            $parts .= ' msg=' . self::logSafe($data['message']);
+        }
+        if (isset($data['status_detail']) && is_string($data['status_detail']) && $data['status_detail'] !== '') {
+            $parts .= ' status_detail=' . self::logSafe($data['status_detail'], 80);
+        }
+        if (isset($data['cause']) && is_array($data['cause'])) {
+            $codes = [];
+            foreach (array_slice($data['cause'], 0, 3) as $c) {
+                if (!is_array($c)) {
+                    continue;
+                }
+                $code = isset($c['code']) && is_string($c['code']) ? self::logSafe($c['code'], 60) : '';
+                $desc = isset($c['description']) && is_string($c['description']) ? self::logSafe($c['description'], 120) : '';
+                if ($code !== '' || $desc !== '') {
+                    $codes[] = trim($code . ' ' . $desc);
+                }
+            }
+            if ($codes !== []) {
+                $parts .= ' cause_code=' . implode('|', $codes);
+            }
+        }
+        // Algumas respostas usam 'causes' (plural).
+        if (isset($data['causes']) && is_array($data['causes'])) {
+            $codes = [];
+            foreach (array_slice($data['causes'], 0, 3) as $c) {
+                if (!is_array($c)) {
+                    continue;
+                }
+                $code = isset($c['code']) && is_string($c['code']) ? self::logSafe($c['code'], 60) : '';
+                if ($code !== '') {
+                    $codes[] = $code;
+                }
+            }
+            if ($codes !== []) {
+                $parts .= ' cause_code=' . implode('|', $codes);
+            }
+        }
+        return $parts;
     }
 }

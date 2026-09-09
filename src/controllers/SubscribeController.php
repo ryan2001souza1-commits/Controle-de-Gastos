@@ -112,7 +112,6 @@ class SubscribeController
                 $this->json(200, ['success' => true, 'checkout_url' => $reuse['checkout_url'], 'reused' => true]);
                 return;
             }
-
             // card_token_id: token temporario gerado no frontend via
             // MercadoPago.js (Core Methods). Numero/CVV NUNCA chegam aqui.
             // Validado por formato; jamais logado ou persistido.
@@ -124,6 +123,16 @@ class SubscribeController
             if (!preg_match('/^[A-Za-z0-9_-]{8,128}$/', $cardToken)) {
                 $this->json(400, ['success' => false, 'error' => 'card_token_invalido']);
                 return;
+            }
+
+            // Device ID oficial (MP_DEVICE_SESSION_ID, via security.js):
+            // melhora a avaliacao antifraude. Opcional: formato validado,
+            // enviado SOMENTE no header X-meli-session-id. Nunca logado
+            // (só presente yes/no), nunca persistido, nunca retornado.
+            $deviceId = trim((string)($input['device_id'] ?? ''));
+            $devicePresent = MercadoPagoClient::isValidDeviceSessionId($deviceId);
+            if (!$devicePresent) {
+                $deviceId = '';
             }
 
             $attemptToken = bin2hex(random_bytes(16));
@@ -155,17 +164,18 @@ class SubscribeController
         }
 
         $client = $this->client ?? new MercadoPagoClient($accessToken);
+        $deviceFlag = $devicePresent ? 'yes' : 'no';
         try {
-            $resp = $client->createPreapproval($payload);
+            $resp = $client->createPreapproval($payload, $devicePresent ? $deviceId : null);
         } catch (MercadoPagoException $e) {
             $this->markAttemptFailed($attemptId, $userId);
             $http = $this->httpForClientError($e->getErrorCode());
-            error_log("[subscribe_start] user={$userId} plan={$plan} attempt={$attemptId} err={$e->getErrorCode()}");
+            error_log("[subscribe_start] user={$userId} plan={$plan} attempt={$attemptId} mp_device={$deviceFlag} err={$e->getErrorCode()}");
             $this->json($http, ['success' => false, 'error' => $e->getErrorCode()]);
             return;
         } catch (Throwable $e) {
             $this->markAttemptFailed($attemptId, $userId);
-            error_log("[subscribe_start] user={$userId} plan={$plan} attempt={$attemptId} err=mp_unexpected");
+            error_log("[subscribe_start] user={$userId} plan={$plan} attempt={$attemptId} mp_device={$deviceFlag} err=mp_unexpected");
             $this->json(502, ['success' => false, 'error' => 'mp_erro']);
             return;
         }
@@ -216,7 +226,7 @@ class SubscribeController
 
         // CRIAR PREAPPROVAL NAO E PAGAMENTO APROVADO: usuarios.plano segue intacto.
         // Sincronizacao final continua sendo responsabilidade do webhook.
-        error_log("[subscribe_start] user={$userId} plan={$plan} attempt={$attemptId} sub={$mpId} ok=1");
+        error_log("[subscribe_start] user={$userId} plan={$plan} attempt={$attemptId} mp_device={$deviceFlag} sub={$mpId} ok=1");
         $this->json(200, ['success' => true, 'checkout_url' => $checkoutUrl, 'status' => $apiStatus, 'reused' => false]);
     }
 

@@ -88,6 +88,28 @@
 
     function digits(v) { return (v || '').replace(/\D/g, ''); }
 
+    /**
+     * Device ID oficial (MP_DEVICE_SESSION_ID, via security.js).
+     * Validacao defensiva de formato; retorna '' quando ausente/invalido.
+     * O VALOR nunca e logado — apenas presente yes/no.
+     */
+    function deviceId() {
+        var v = '';
+        try {
+            v = typeof window.MP_DEVICE_SESSION_ID !== 'undefined' ? String(window.MP_DEVICE_SESSION_ID) : '';
+        } catch (e) { v = ''; }
+        v = v.trim();
+        if (!/^[A-Za-z0-9_.:-]{8,128}$/.test(v)) return '';
+        return v;
+    }
+
+    function validCpfBasic(v) {
+        var d = digits(v);
+        if (d.length !== 11) return false;
+        if (/^(\d)\1{10}$/.test(d)) return false;
+        return true;
+    }
+
     function normMonth(v) {
         if (window.MpCardUtils && window.MpCardUtils.normalizeMonth) return window.MpCardUtils.normalizeMonth(v);
         var d = digits(v);
@@ -156,8 +178,14 @@
         var cvv = digits($('mp-card-cvv') ? $('mp-card-cvv').value : '');
         var doc = digits($('mp-card-doc') ? $('mp-card-doc').value : '');
         // Mensagem PROPRIA de validacao local — nunca confundida com erro do SDK.
+        // CPF obrigatorio (BR): melhora a avaliacao antifraude; usado SOMENTE
+        // na tokenizacao oficial, nunca enviado ao nosso backend.
         if (number.length < 13 || !name || !month || !year || cvv.length < 3) {
             cardError('Verifique os dados digitados no cartão.');
+            return;
+        }
+        if (!validCpfBasic(doc)) {
+            cardError('Informe um CPF válido do titular.');
             return;
         }
         var token = csrfToken();
@@ -188,9 +216,13 @@
                 return;
             }
 
-            // Ao backend: SOMENTE plan + card_token_id + CSRF.
+            // Ao backend: plan + card_token_id + device_id + CSRF.
+            // NUNCA numero/CVV/CPF. Device ID: so presente yes/no no console.
+            var deviceSessionId = deviceId();
+            if (typeof console !== 'undefined' && console.info) console.info('[mp-device] present=' + (deviceSessionId ? 'yes' : 'no'));
             var body = 'plan=' + encodeURIComponent(currentPlan)
                 + '&card_token_id=' + encodeURIComponent(cardTokenId)
+                + '&device_id=' + encodeURIComponent(deviceSessionId)
                 + '&csrf_token=' + encodeURIComponent(token);
             var resp = await fetch('/index.php?action=subscribe_start', {
                 method: 'POST',

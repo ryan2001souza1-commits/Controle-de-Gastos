@@ -86,7 +86,7 @@ class MpWebhookController
         }
         $secret = MercadoPagoClient::readEnv(self::ENV_SECRET);
         if ($secret === '') {
-            error_log('[mp_webhook] err=webhook_nao_configurado');
+            $this->diag('config', 'webhook_nao_configurado');
             $this->json(500, ['success' => false, 'error' => 'webhook_nao_configurado']);
             return;
         }
@@ -107,7 +107,7 @@ class MpWebhookController
         $manifest .= 'request-id:' . $requestId . ';ts:' . $parts['ts'] . ';';
         $expected = hash_hmac('sha256', $manifest, $secret);
         if (!hash_equals($expected, strtolower($parts['v1']))) {
-            error_log('[mp_webhook] err=assinatura_invalida req=' . substr($requestId, 0, 40));
+            $this->diag('signature', 'assinatura_invalida', 'req=' . substr($requestId, 0, 40));
             $this->json(401, ['success' => false, 'error' => 'assinatura_invalida']);
             return;
         }
@@ -131,7 +131,7 @@ class MpWebhookController
             ]);
             $claim = WebhookLedger::claim($this->db, $event);
         } catch (Throwable $e) {
-            error_log('[mp_webhook] err=ledger req=' . substr($requestId, 0, 40));
+            $this->diag('ledger', 'erro_interno', 'req=' . substr($requestId, 0, 40));
             $this->json(500, ['success' => false, 'error' => 'erro_interno']);
             return;
         }
@@ -148,12 +148,12 @@ class MpWebhookController
             $this->failEvent($requestId);
             $code = $e->getErrorCode();
             $http = $code === 'mp_timeout' ? 504 : (($code === 'mp_http_429' || $code === 'mp_http_5xx') ? 503 : 500);
-            error_log('[mp_webhook] err=' . $code . ' req=' . substr($requestId, 0, 40) . ' res=' . substr($resourceId, 0, 40));
+            $this->diag('api', $code, 'req=' . substr($requestId, 0, 40) . ' res=' . substr($resourceId, 0, 40));
             $this->json($http, ['success' => false, 'error' => $code]);
             return;
         } catch (Throwable $e) {
             $this->failEvent($requestId);
-            error_log('[mp_webhook] err=mp_unexpected req=' . substr($requestId, 0, 40));
+            $this->diag('api', 'mp_unexpected', 'req=' . substr($requestId, 0, 40));
             $this->json(500, ['success' => false, 'error' => 'erro_interno']);
             return;
         }
@@ -163,6 +163,7 @@ class MpWebhookController
         $apiRef = trim((string)($pre['external_reference'] ?? ''));
         if ($apiId === '') {
             $this->failEvent($requestId);
+            $this->diag('api', 'resposta_invalida', 'req=' . substr($requestId, 0, 40));
             $this->json(500, ['success' => false, 'error' => 'resposta_invalida']);
             return;
         }
@@ -175,26 +176,36 @@ class MpWebhookController
             }
         } catch (Throwable $e) {
             $this->failEvent($requestId);
+            $this->diag('db', 'erro_interno', 'req=' . substr($requestId, 0, 40));
             $this->json(500, ['success' => false, 'error' => 'erro_interno']);
             return;
         }
         if ($local === null) {
-            WebhookLedger::markProcessed($this->db, 'mercadopago', $requestId);
-            error_log('[mp_webhook] ignored=subscription_desconhecida res=' . substr($apiId, 0, 40));
+            if (!$this->markProcessedSafe($requestId)) {
+                $this->json(500, ['success' => false, 'error' => 'erro_interno']);
+                return;
+            }
+            $this->diag('link', 'subscription_desconhecida', 'res=' . substr($apiId, 0, 40));
             $this->json(200, ['success' => true, 'ignored' => true, 'reason' => 'subscription_desconhecida']);
             return;
         }
         if (($local['provider'] ?? '') !== BillingSyncService::PROVIDER_MERCADOPAGO) {
-            WebhookLedger::markProcessed($this->db, 'mercadopago', $requestId);
-            error_log('[mp_webhook] ignored=provider_divergente sub=' . (int)$local['id']);
+            if (!$this->markProcessedSafe($requestId)) {
+                $this->json(500, ['success' => false, 'error' => 'erro_interno']);
+                return;
+            }
+            $this->diag('link', 'provider_divergente', 'sub=' . (int)$local['id']);
             $this->json(200, ['success' => true, 'ignored' => true, 'reason' => 'provider_divergente']);
             return;
         }
 
         $internal = self::API_STATUS_MAP[$apiStatus] ?? null;
         if ($internal === null) {
-            WebhookLedger::markProcessed($this->db, 'mercadopago', $requestId);
-            error_log('[mp_webhook] ignored=status_desconhecido api_status=' . substr($apiStatus, 0, 20));
+            if (!$this->markProcessedSafe($requestId)) {
+                $this->json(500, ['success' => false, 'error' => 'erro_interno']);
+                return;
+            }
+            $this->diag('link', 'status_desconhecido', 'api_status=' . substr($apiStatus, 0, 20));
             $this->json(200, ['success' => true, 'ignored' => true, 'reason' => 'status_desconhecido']);
             return;
         }
@@ -202,7 +213,11 @@ class MpWebhookController
         try {
             $resolution = BillingSyncService::resolvePlanUpdate($internal, (string)$local['plan_slug']);
         } catch (Throwable $e) {
-            WebhookLedger::markProcessed($this->db, 'mercadopago', $requestId);
+            if (!$this->markProcessedSafe($requestId)) {
+                $this->json(500, ['success' => false, 'error' => 'erro_interno']);
+                return;
+            }
+            $this->diag('link', 'plano_invalido', 'sub=' . (int)$local['id']);
             $this->json(200, ['success' => true, 'ignored' => true, 'reason' => 'plano_invalido']);
             return;
         }
@@ -222,7 +237,7 @@ class MpWebhookController
             );
         } catch (Throwable $e) {
             $this->failEvent($requestId);
-            error_log('[mp_webhook] err=sync_falhou sub=' . (int)$local['id'] . ' msg=' . substr($e->getMessage(), 0, 120));
+            $this->diag('sync', 'erro_interno', 'sub=' . (int)$local['id']);
             $this->json(500, ['success' => false, 'error' => 'erro_interno']);
             return;
         }
@@ -339,8 +354,34 @@ class MpWebhookController
         try {
             WebhookLedger::markFailed($this->db, 'mercadopago', $requestId);
         } catch (Throwable $e) {
-            error_log('[mp_webhook] mark failed err=' . substr($e->getMessage(), 0, 100));
+            $this->diag('ledger', 'mark_failed', 'req=' . substr($requestId, 0, 40));
         }
+    }
+
+    /**
+     * Marca conclusao fora da transacao principal (paths ignored).
+     * Falha aqui e 500 (retryavel), nunca 200 silencioso.
+     */
+    private function markProcessedSafe(string $requestId): bool
+    {
+        try {
+            WebhookLedger::markProcessed($this->db, 'mercadopago', $requestId);
+            return true;
+        } catch (Throwable $e) {
+            $this->diag('ledger', 'mark_failed', 'req=' . substr($requestId, 0, 40));
+            return false;
+        }
+    }
+
+    /**
+     * Diagnostico staged de TODOS os caminhos de erro: stage identifica a
+     * etapa (config/signature/ledger/api/link/sync/db/fatal) e err um
+     * codigo seguro. Nunca inclui HMAC, secret, token ou payload sensivel.
+     */
+    private function diag(string $stage, string $code, string $extra = ''): void
+    {
+        $suffix = $extra !== '' ? ' ' . $extra : '';
+        error_log("[mp_webhook] stage={$stage} err={$code}{$suffix}");
     }
 
     private function json(int $status, array $data): void

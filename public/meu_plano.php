@@ -286,8 +286,8 @@ $mpCardEnabled = ($mpPublicKey !== '');
                         <input id="mp-card-cvv" inputmode="numeric" autocomplete="cc-csc" placeholder="123" maxlength="4" required style="width:100%;margin-top:4px;padding:10px 12px;border-radius:10px;border:1px solid var(--color-border);background:var(--color-surface-2);color:var(--color-text-1)">
                     </label>
                 </div>
-                <label style="font-size:12px;color:var(--color-text-2)">CPF do titular (opcional)
-                    <input id="mp-card-doc" inputmode="numeric" placeholder="Somente números" maxlength="14" style="width:100%;margin-top:4px;padding:10px 12px;border-radius:10px;border:1px solid var(--color-border);background:var(--color-surface-2);color:var(--color-text-1)">
+                <label style="font-size:12px;color:var(--color-text-2)">CPF do titular
+                    <input id="mp-card-doc" inputmode="numeric" placeholder="Somente números" maxlength="14" required style="width:100%;margin-top:4px;padding:10px 12px;border-radius:10px;border:1px solid var(--color-border);background:var(--color-surface-2);color:var(--color-text-1)">
                 </label>
                 <div id="mp-card-error" style="display:none;font-size:12px;color:#b91c1c;background:rgba(220,38,38,.06);border:1px solid rgba(220,38,38,.25);border-radius:10px;padding:8px 12px"></div>
                 <button type="submit" id="mp-card-submit" class="btn btn-primary" style="width:100%;justify-content:center">Confirmar assinatura</button>
@@ -295,6 +295,7 @@ $mpCardEnabled = ($mpPublicKey !== '');
         </form>
     </div>
 </div>
+<script src="https://www.mercadopago.com/v2/security.js" view="checkout"></script>
 <script src="https://sdk.mercadopago.com/js/v2"></script>
 <?php endif; ?>
 <script src="/js/mp-card-utils.js?v=<?= @filemtime(__DIR__ . '/js/mp-card-utils.js') ?>"></script>
