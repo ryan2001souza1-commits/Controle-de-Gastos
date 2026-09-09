@@ -81,8 +81,10 @@ class MercadoPagoClient
     }
 
     /**
-     * Valida formato do Device Session ID (doc oficial Subscriptions).
-     * Defensivo: somente formato, nunca o valor e registrado/logado.
+     * Valida formato do Device Session ID de forma DEFENSIVA, sem presumir
+     * charset (a documentacao oficial nao define o formato exato): string,
+     * trim, tamanho razoavel, sem CR/LF nem caracteres de controle.
+     * Nunca rejeita ID legitimo por simbolo. Nunca registra o valor.
      */
     public static function isValidDeviceSessionId(?string $value): bool
     {
@@ -90,7 +92,11 @@ class MercadoPagoClient
             return false;
         }
         $v = trim($value);
-        return $v !== '' && strlen($v) <= 128 && preg_match('/^[A-Za-z0-9_.:-]{8,128}$/', $v) === 1;
+        $len = strlen($v);
+        if ($len < 4 || $len > 512) {
+            return false;
+        }
+        return preg_match('/[\x00-\x1F\x7F]/', $v) !== 1;
     }
 
     /**

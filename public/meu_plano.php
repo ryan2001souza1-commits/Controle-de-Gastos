@@ -261,6 +261,10 @@ $mpCardEnabled = ($mpPublicKey !== '');
 
 <?php if ($mpCardEnabled): ?>
 <div id="mp-card-modal" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(15,23,42,.55);align-items:center;justify-content:center;padding:16px">
+    <!-- Fallback OFICIAL documentado: security.js preenche este elemento com
+         o Device ID quando presente. Lido somente pelo JS; nunca serializado
+         para o backend (o fetch monta o body explicitamente). -->
+    <input type="hidden" id="deviceId" value="">
     <div style="width:100%;max-width:420px;background:var(--color-surface-1);border:1px solid var(--color-border);border-radius:16px;padding:var(--space-5)">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-1)">
             <div id="mp-card-title" style="font-size:16px;font-weight:700;color:var(--color-text-1)">Assinar plano</div>

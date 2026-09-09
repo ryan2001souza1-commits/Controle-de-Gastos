@@ -89,8 +89,8 @@
     function digits(v) { return (v || '').replace(/\D/g, ''); }
 
     /**
-     * Device ID oficial (MP_DEVICE_SESSION_ID, via security.js).
-     * Validacao defensiva de formato; retorna '' quando ausente/invalido.
+     * Leitura SINCRONA legada do Device ID (fallback quando MpCardUtils
+     * indisponivel). Caminho principal usa waitForDeviceId (com polling).
      * O VALOR nunca e logado — apenas presente yes/no.
      */
     function deviceId() {
@@ -99,8 +99,36 @@
             v = typeof window.MP_DEVICE_SESSION_ID !== 'undefined' ? String(window.MP_DEVICE_SESSION_ID) : '';
         } catch (e) { v = ''; }
         v = v.trim();
-        if (!/^[A-Za-z0-9_.:-]{8,128}$/.test(v)) return '';
+        if (v.length < 4 || v.length > 512) return '';
+        if (/[\x00-\x1F\x7F]/.test(v)) return '';
         return v;
+    }
+
+    /**
+     * Diagnostico de carregamento do security.js (listeners onload/onerror
+     * registrados na inicializacao; nunca quebram o checkout).
+     */
+    function watchSecurityJs() {
+        try {
+            var scripts = document.querySelectorAll('script[src*="security.js"]');
+            for (var i = 0; i < scripts.length; i++) {
+                var src = scripts[i].getAttribute('src') || '';
+                if (src.indexOf('mercadopago.com/v2/security.js') === -1) continue;
+                scripts[i].addEventListener('load', function () { window.__mpSecurityJsLoaded = true; });
+                scripts[i].addEventListener('error', function () { window.__mpSecurityJsFailed = true; });
+            }
+        } catch (e) { /* diagnostico e opcional */ }
+    }
+
+    function securityJsLoaded(deviceValue) {
+        if (window.__mpSecurityJsFailed === true) return false;
+        if (window.__mpSecurityJsLoaded === true) return true;
+        // Prova de execucao: ID obtido por fonte oficial.
+        return !!deviceValue;
+    }
+
+    function diagLine(suffix) {
+        if (typeof console !== 'undefined' && console.info) console.info('[mp-device] ' + suffix);
     }
 
     function validCpfBasic(v) {
@@ -216,13 +244,32 @@
                 return;
             }
 
-            // Ao backend: plan + card_token_id + device_id + CSRF.
-            // NUNCA numero/CVV/CPF. Device ID: so presente yes/no no console.
-            var deviceSessionId = deviceId();
-            if (typeof console !== 'undefined' && console.info) console.info('[mp-device] present=' + (deviceSessionId ? 'yes' : 'no'));
+            // Device ID oficial com espera limitada: tenta o global, aguarda
+            // ate ~1.5s (poll 75ms) caso o security.js ainda esteja gerando,
+            // depois usa o fallback oficial (#deviceId) ou segue sem ID.
+            // Diagnostico: SOMENTE yes/no e reason — nunca o valor.
+            var deviceInfo = { value: '', source: null, sawGlobal: false, sawFallback: false };
+            if (window.MpCardUtils && window.MpCardUtils.waitForDeviceId) {
+                try {
+                    deviceInfo = await window.MpCardUtils.waitForDeviceId(window, { intervalMs: 75, maxMs: 1500 });
+                } catch (e) { /* segue sem ID */ }
+            } else {
+                var legacy = deviceId();
+                deviceInfo = { value: legacy, source: legacy ? 'global' : null, sawGlobal: !!legacy, sawFallback: false };
+            }
+            var deviceSessionId = deviceInfo.value || '';
+            var deviceReason = deviceSessionId ? 'present' : ((deviceInfo.sawGlobal || deviceInfo.sawFallback) ? 'invalid' : 'missing');
+            diagLine('security_js_loaded=' + (securityJsLoaded(deviceSessionId) ? 'yes' : 'no'));
+            diagLine('global_present=' + (deviceInfo.sawGlobal ? 'yes' : 'no'));
+            diagLine('fallback_present=' + (deviceInfo.sawFallback ? 'yes' : 'no'));
+            diagLine('added_to_post=' + (deviceSessionId ? 'yes' : 'no'));
+            diagLine('reason=' + deviceReason);
+            diagLine('present=' + (deviceSessionId ? 'yes' : 'no'));
+            // Ao backend: plan + card_token_id + CSRF (+ device_id quando valido).
+            // NUNCA numero/CVV/CPF.
             var body = 'plan=' + encodeURIComponent(currentPlan)
                 + '&card_token_id=' + encodeURIComponent(cardTokenId)
-                + '&device_id=' + encodeURIComponent(deviceSessionId)
+                + (deviceSessionId ? '&device_id=' + encodeURIComponent(deviceSessionId) : '')
                 + '&csrf_token=' + encodeURIComponent(token);
             var resp = await fetch('/index.php?action=subscribe_start', {
                 method: 'POST',
@@ -252,6 +299,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
+        watchSecurityJs();
         document.querySelectorAll('.subscribe-btn[data-plan]').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 setBusy(null, false);

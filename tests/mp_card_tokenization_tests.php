@@ -45,7 +45,7 @@ echo "\n-- diagnostico seguro no JS --\n";
 $js = (string)file_get_contents($ROOT . '/public/js/subscribe.js');
 $utils = (string)file_get_contents($ROOT . '/public/js/mp-card-utils.js');
 assert_test(str_contains($js, '[mp-tokenization] code='), 'CTN02: console registra SOMENTE o codigo ([mp-tokenization] code=)');
-assert_test(preg_match_all('/console\.(log|info|warn|error)\s*\(/', $js, $mm) === 3, 'CTN03: exatamente 3 consoles, todos so com codigo/present');
+assert_test(preg_match_all('/console\.(log|info|warn|error)\s*\(/', $js, $mm) === 3, 'CTN03: exatamente 3 consoles (2 tokenizacao + 1 diag centralizado)');
 // Nenhum console recebe objeto/erro/token/chave/cartao.
 $consoleLines = [];
 foreach (explode("\n", $js) as $line) {
@@ -62,12 +62,18 @@ foreach ($consoleLines as $line) {
     if (preg_match('/console\.\w+\s*\(\s*(e|err|error|token|card|key|resp|data)\b/i', $line)) {
         $consoleClean = false;
     }
-    // Unicas strings dinamicas permitidas: codigo seguro ou presente yes/no.
-    if (!str_contains($line, '[mp-tokenization] code=') && !str_contains($line, '[mp-device] present=')) {
+    // Unicas strings dinamicas permitidas: codigo seguro ou prefixo diag.
+    if (!str_contains($line, '[mp-tokenization] code=') && !str_contains($line, "'[mp-device] '")) {
         $consoleClean = false;
     }
 }
 assert_test($consoleClean && count($consoleLines) === 3, 'CTN04: nenhum console com erro/token/cartao/chave');
+assert_test(
+    str_contains($js, "diagLine('security_js_loaded='") && str_contains($js, "diagLine('global_present='")
+    && str_contains($js, "diagLine('fallback_present='") && str_contains($js, "diagLine('added_to_post='")
+    && str_contains($js, "diagLine('reason='") && str_contains($js, "diagLine('present='"),
+    'CTN04b: diagnosticos yes/no passam pelo diag centralizado'
+);
 assert_test(str_contains($js, "locale: 'pt-BR'") && str_contains($js, 'new window.MercadoPago(publicKey(),'), 'CTN05: instancia com locale pt-BR');
 assert_test(str_contains($js, 'normMonth') && str_contains($js, 'normYear'), 'CTN06: submit usa normalizacao de mes/ano');
 assert_test(str_contains($js, 'Verifique os dados digitados no cartão.'), 'CTN07: erro local tem mensagem propria');

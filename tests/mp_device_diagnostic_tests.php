@@ -242,6 +242,12 @@ foreach ($captured['headers'] ?? [] as $h) {
 }
 assert_test(http_response_code() === 200 && !$hasHeader, 'DV05: device malformado tratado como ausente');
 assert_test(MercadoPagoClient::isValidDeviceSessionId($device) && !MercadoPagoClient::isValidDeviceSessionId('!!!') && !MercadoPagoClient::isValidDeviceSessionId(null), 'DV06: validador de formato do device');
+assert_test(
+    MercadoPagoClient::isValidDeviceSessionId('abc+def/ghi=jklm|nop:qrs_tuv.wxy-z01')
+    && !MercadoPagoClient::isValidDeviceSessionId("ab\r\ncdEFGH")
+    && !MercadoPagoClient::isValidDeviceSessionId(str_repeat('x', 600)),
+    'DV06b: simbolos nao descartados; CR/LF e excesso rejeitados'
+);
 
 // Device nunca persistido nem retornado.
 $leaked = false;
@@ -299,15 +305,31 @@ echo "\n-- frontend: CPF obrigatorio + security.js + CSP --\n";
 $js = (string)file_get_contents($ROOT . '/public/js/subscribe.js');
 $meuPlano = (string)file_get_contents($ROOT . '/public/meu_plano.php');
 assert_test(str_contains($js, 'MP_DEVICE_SESSION_ID') && str_contains($js, "'&device_id='"), 'DV17: frontend coleta e envia device_id');
-assert_test(str_contains($js, '[mp-device] present='), 'DV18: console registra apenas presente yes/no');
+assert_test(str_contains($js, 'waitForDeviceId') && str_contains($js, 'maxMs'), 'DV17b: polling limitado antes de desistir');
+assert_test(str_contains($js, 'inspectDevice') || str_contains($js, 'sawGlobal'), 'DV17c: distingue missing x invalid');
+assert_test(str_contains($js, "diagLine('present='"), 'DV18: console registra apenas presente yes/no');
+foreach (['security_js_loaded=', 'global_present=', 'fallback_present=', 'added_to_post=', 'reason='] as $diag) {
+    assert_test(str_contains($js, "diagLine('{$diag}'"), "DV18b: diagnostico [mp-device] {$diag} presente");
+}
+assert_test(str_contains($js, 'watchSecurityJs') && str_contains($js, "__mpSecurityJsLoaded") && str_contains($js, "__mpSecurityJsFailed"), 'DV18c: onload/onerror do security.js monitorados');
 assert_test(str_contains($js, 'validCpfBasic') && str_contains($js, 'Informe um CPF'), 'DV19: CPF obrigatorio com validacao basica no form');
 assert_test(str_contains($meuPlano, 'security.js') && str_contains($meuPlano, 'view="checkout"'), 'DV20: security.js oficial no checkout');
+assert_test(preg_match('/<input[^>]+id="deviceId"/', $meuPlano) === 1, 'DV20b: elemento fallback oficial id=deviceId presente');
 assert_test(str_contains($meuPlano, 'CPF do titular') && !str_contains($meuPlano, 'CPF do titular (opcional)'), 'DV21: CPF marcado obrigatorio');
 $vercel = str_replace('\\/', '/', (string)file_get_contents($ROOT . '/vercel.json'));
 assert_test(str_contains($vercel, 'https://www.mercadopago.com') && !str_contains($vercel, 'api.mercadolibre.com'), 'DV22: CSP com host oficial do security.js, sem tracks');
 preg_match('/"Content-Security-Policy", "value": "([^"]+)"/', $vercel, $cspm);
 $cspOnly = str_replace('\\/', '/', (string)($cspm[1] ?? ''));
 assert_test($cspOnly !== '' && !str_contains($cspOnly, '*') && preg_match('/\bhttps:(?!\/\/)/', $cspOnly) !== 1, 'DV23: CSP sem wildcard');
+preg_match('/script-src([^;]+);/', $cspOnly, $ssm);
+$scriptSrc = trim((string)($ssm[1] ?? ''));
+assert_test(
+    str_contains($scriptSrc, 'https://sdk.mercadopago.com')
+    && str_contains($scriptSrc, 'https://content.mercadopago.com')
+    && str_contains($scriptSrc, 'https://www.mercadopago.com')
+    && !str_contains($scriptSrc, 'mercadolibre.com'),
+    'DV23b: CSP inalterada nesta etapa (só hosts já aprovados)'
+);
 
 echo "\n-- webhook: diagnostico staged em todos os 500 --\n";
 $whSrc = (string)file_get_contents($ROOT . '/src/controllers/MpWebhookController.php');
