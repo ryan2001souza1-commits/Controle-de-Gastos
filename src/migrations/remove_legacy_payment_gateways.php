@@ -14,6 +14,9 @@
  * principal (src/migrations.php) e NAO deve ser removido por este arquivo:
  * ela é reutilizável pela futura integração oficial (correlação com o
  * preapproval do Mercado Pago) e preserva o histórico de tentativas.
+ * O mesmo vale para subscriptions.provider/provider_plan_id, reintroduzidas
+ * como identificador generico do gateway (nao confundir com as colunas
+ * legadas Asaas removidas anteriormente).
  *
  * Executado automaticamente no boot do app (via runMigrations em migrations.php).
  * Idempotente: IF EXISTS em todos os DROP.
@@ -33,7 +36,10 @@ function run_remove_legacy_payment_gateways(PDO $db): void
         "ALTER TABLE subscriptions DROP COLUMN IF EXISTS mp_payer_id",
         "ALTER TABLE subscriptions DROP COLUMN IF EXISTS asaas_customer_id",
         "ALTER TABLE subscriptions DROP COLUMN IF EXISTS asaas_subscription_id",
-        "ALTER TABLE subscriptions DROP COLUMN IF EXISTS provider",
+        // subscriptions.provider foi REINTRODUZIDA de proposito como
+        // identificador generico do gateway (ver src/migrations.php).
+        // NAO readicionar DROP COLUMN provider aqui: este cleanup roda no
+        // boot APOS os ADD COLUMN e apagaria a coluna nova.
         "ALTER TABLE subscriptions DROP COLUMN IF EXISTS provider_status",
 
         // Asaas: colunas legadas da tabela usuarios

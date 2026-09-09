@@ -165,6 +165,8 @@ $statusBadgeClass = $planIsAtivo ? 'badge-success' : 'badge-warning';
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--space-4)">
+        <span id="subscribe-csrf" style="display:none"><?= csrf_field() ?></span>
+        <div id="subscribe-feedback-global" class="subscribe-feedback" style="display:none;grid-column:1/-1;font-size:13px;color:#b91c1c;background:rgba(220,38,38,.06);border:1px solid rgba(220,38,38,.25);border-radius:10px;padding:10px 14px"></div>
         <?php
         $planCardStyles = [
             'pro'      => ['border' => '1px solid var(--color-pro-border, #7c3aed33)', 'bg' => 'rgba(124,58,237,0.04)', 'header_bg' => 'rgba(124,58,237,0.08)', 'header_color' => '#7c3aed', 'accent_color' => '#7c3aed'],
@@ -217,18 +219,16 @@ $statusBadgeClass = $planIsAtivo ? 'badge-success' : 'badge-warning';
                         <?php endforeach; ?>
                     </div>
 
+                    <div data-plan-card="<?= htmlspecialchars($slug) ?>">
                     <button
                         type="button"
-                        class="btn"
-                        disabled
-                        aria-disabled="true"
-                        title="Pagamento temporariamente indisponível"
-                        style="width:100%;justify-content:center;display:flex;align-items:center;gap:6px;opacity:.6;cursor:not-allowed">
+                        class="btn subscribe-btn"
+                        data-plan="<?= htmlspecialchars($slug) ?>"
+                        style="width:100%;justify-content:center;display:flex;align-items:center;gap:6px">
                         <?= render_icon('zap', 15) ?>
                         Assinar <?= htmlspecialchars($planName) ?>
                     </button>
-                    <div style="margin-top:var(--space-2);font-size:11px;color:var(--color-text-3);text-align:center">
-                        Pagamento temporariamente indisponível.
+                    <div class="subscribe-feedback" style="display:none;margin-top:var(--space-2);font-size:12px;color:#b91c1c;text-align:center"></div>
                     </div>
                 </div>
             </div>
@@ -237,4 +237,5 @@ $statusBadgeClass = $planIsAtivo ? 'badge-success' : 'badge-warning';
 </section>
 <?php endif; ?>
 
+<script src="/js/subscribe.js?v=<?= @filemtime(__DIR__ . '/js/subscribe.js') ?>"></script>
 <?php include __DIR__ . '/partials/layout_end.php'; ?>

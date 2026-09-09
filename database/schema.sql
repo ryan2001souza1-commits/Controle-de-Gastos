@@ -84,11 +84,16 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     -- external_reference = rastreio legivel user_{ID}_{plano}_{attempt};
     -- raw_status = status original retornado pelo gateway (auditoria);
     -- checkout_url = URL de checkout legada do gateway historico.
+    -- provider = gateway de origem da assinatura (ex: 'mercadopago').
+    --   Nao confundir com usuarios.provider/provider_sub (OAuth, ex: Google).
+    -- provider_plan_id = plano do provedor (ex: preapproval_plan_id).
     mp_preapproval_id VARCHAR(80) DEFAULT NULL,
     attempt_token VARCHAR(64) DEFAULT NULL,
     external_reference VARCHAR(120) DEFAULT NULL,
     raw_status VARCHAR(40) DEFAULT NULL,
     checkout_url TEXT DEFAULT NULL,
+    provider VARCHAR(30) DEFAULT NULL,
+    provider_plan_id VARCHAR(80) DEFAULT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE,
@@ -98,6 +103,29 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 -- Relacionamento com assinatura ativa
 ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS active_subscription_id INTEGER
     REFERENCES subscriptions(id) ON DELETE SET NULL;
+
+--============================================================
+-- WEBHOOK_EVENTS (ledger minimo de idempotencia)
+-- Uma linha por notificacao de gateway; a UNIQUE
+-- (provider, provider_event_id) impede processamento duplicado.
+-- Payload sempre sanitizado (sem segredos).
+--============================================================
+CREATE TABLE IF NOT EXISTS webhook_events (
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    provider VARCHAR(30) NOT NULL,
+    provider_event_id VARCHAR(120) NOT NULL,
+    event_type VARCHAR(80) NOT NULL DEFAULT '',
+    subscription_id INTEGER REFERENCES subscriptions(id) ON DELETE SET NULL,
+    resource_id VARCHAR(120),
+    payload TEXT NOT NULL DEFAULT '{}',
+    processed_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Ciclo de vida p/ retry seguro: received|processing|processed|failed.
+    status VARCHAR(20) NOT NULL DEFAULT 'received',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_webhook_events_provider_event UNIQUE (provider, provider_event_id)
+);
 
 --============================================================
 -- CATEGORIAS
@@ -282,5 +310,11 @@ CREATE INDEX IF NOT EXISTS idx_subscriptions_mp_id
     ON subscriptions(mp_preapproval_id);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_external_ref
     ON subscriptions(external_reference);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_provider_plan
+    ON subscriptions(provider, provider_plan_id);
+CREATE INDEX IF NOT EXISTS idx_webhook_events_subscription
+    ON webhook_events(subscription_id);
+CREATE INDEX IF NOT EXISTS idx_webhook_events_type
+    ON webhook_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_sessions_user
     ON sessions(user_id) WHERE user_id IS NOT NULL;

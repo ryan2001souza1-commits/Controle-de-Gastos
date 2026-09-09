@@ -126,6 +126,41 @@ function runMigrations(PDO $db): void
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )",
 
+        //============================================================
+        // WEBHOOK_EVENTS (ledger minimo de idempotencia)
+        //============================================================
+        // Registra cada notificacao de gateway UMA vez, mesmo com
+        // retry/redelivery. A constraint UNIQUE (provider,
+        // provider_event_id) permite INSERT ... ON CONFLICT DO NOTHING.
+        // O payload deve ser sanitizado antes de gravar (sem segredos).
+        // Rollback manual, se um dia necessario: descartar apenas a tabela
+        // webhook_events, sem tocar em subscriptions/usuarios.
+        "CREATE TABLE IF NOT EXISTS webhook_events (
+            id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            provider VARCHAR(30) NOT NULL,
+            provider_event_id VARCHAR(120) NOT NULL,
+            event_type VARCHAR(80) NOT NULL DEFAULT '',
+            subscription_id INTEGER REFERENCES subscriptions(id) ON DELETE SET NULL,
+            resource_id VARCHAR(120),
+            payload TEXT NOT NULL DEFAULT '{}',
+            processed_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT uq_webhook_events_provider_event UNIQUE (provider, provider_event_id)
+        )",
+        "CREATE INDEX IF NOT EXISTS idx_webhook_events_subscription ON webhook_events(subscription_id)",
+        "CREATE INDEX IF NOT EXISTS idx_webhook_events_type ON webhook_events(event_type)",
+        // Ciclo de vida do evento (idempotencia com retry seguro):
+        //   received   - reservado, aguardando processamento
+        //   processing - processamento em andamento (dono atual)
+        //   processed  - concluido; redelivery responde sem repetir efeitos
+        //   failed     - falha transitoria; proximo redelivery pode retomar
+        // attempts conta reservas; updated_at permite retomar 'processing'
+        // obsoleto (crash) apos a janela de STALE_CLAIM. Sem DROP/UPDATE
+        // em linhas existentes: defaults cobrem registros antigos.
+        "ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'received'",
+        "ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
+
         "CREATE TABLE IF NOT EXISTS bug_reports (
             id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
             usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
@@ -252,6 +287,15 @@ function runMigrations(PDO $db): void
         // Relacionamento com assinatura ativa
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS active_subscription_id
             INTEGER REFERENCES subscriptions(id) ON DELETE SET NULL",
+        // Provedor de cobranca (generico, reutilizavel): identifica o gateway
+        // de origem da assinatura (ex: 'mercadopago'). Nao confundir com
+        // usuarios.provider/provider_sub, que sao do OAuth (ex: Google).
+        // ATENCAO: remove_legacy_payment_gateways.php NAO pode voltar a
+        // incluir DROP COLUMN provider — a coluna foi reintroduzida de
+        // proposito para a nova integracao.
+        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS provider VARCHAR(30)",
+        // Plano do provedor (ex: preapproval_plan_id do Mercado Pago).
+        "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS provider_plan_id VARCHAR(80)",
         // Gateway historico: correlacionar com a assinatura externa
         "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS mp_preapproval_id VARCHAR(80)",
         // attempt_token: identificador opaco da tentativa local (UUID hex, 32 chars).
@@ -270,6 +314,16 @@ function runMigrations(PDO $db): void
 
     foreach ($addColumnIfMissing as $sql) {
         $db->exec($sql);
+    }
+
+    // Indice do gateway generico: criado APOS os ADD COLUMN acima, pois
+    // depende das colunas provider/provider_plan_id. (Criar antes falha
+    // silenciosamente e o indice nunca nasceria.)
+    try {
+        $db->exec("CREATE INDEX IF NOT EXISTS idx_subscriptions_provider_plan
+            ON subscriptions(provider, provider_plan_id)");
+    } catch (Throwable $e) {
+        error_log('[migrations] falha ao criar idx_subscriptions_provider_plan: ' . $e->getMessage());
     }
 
     // Migration de dados legados: extrair URL de checkout legada de raw_status para checkout_url.
