@@ -562,6 +562,145 @@ $noIdSig = 'ts=1704908010000,v1=' . hash_hmac('sha256', 'request-id:req-noid;ts:
 $r = wh_call($ctl, wh_req($noIdSig, 'req-noid', [], wh_body('pre_1')));
 assert_test(count($captured) === 1 && wh_has_query($db, 'INSERT INTO webhook_events'), 'WH45: manifest sem id valida; lookup pelo body apos assinatura ok');
 
+echo "\n-- roteamento por tipo de evento (regressao caso real prod) --\n";
+
+// Transporte que responde conforme a URL (fatura x assinatura).
+function wh_routed_transport(array &$captured, array $routes): callable
+{
+    return function (string $method, string $url, array $headers, string $reqBody) use (&$captured, $routes): array {
+        $captured[] = ['method' => $method, 'url' => $url, 'headers' => $headers, 'body' => $reqBody];
+        foreach ($routes as $needle => $res) {
+            if (str_contains($url, $needle)) {
+                return $res;
+            }
+        }
+        return ['status' => 404, 'body' => '{"message":"not found"}', 'error' => ''];
+    };
+}
+
+function wh_invoice_body(int $id, string $parentId): string
+{
+    return json_encode(['id' => $id, 'preapproval_id' => $parentId, 'status' => 'approved', 'external_reference' => 'user_42_pro_aaa'], JSON_UNESCAPED_SLASHES);
+}
+
+// CASO REAL DE PRODUCAO: type=subscription_authorized_payment, data.id=7031756303.
+// Antes: GET /preapproval/7031756303 -> 404. Correto: invoice -> pai -> sync.
+$captured = [];
+$db = new FakeMpPDO();
+$local = wh_local_row(7, 42, 'pro', 'mercadopago');
+$db->queue = [
+    wh_stmt([], [], 1),          // claim INSERT
+    wh_stmt($local),             // findLocalByMpId (pai)
+    wh_stmt($local),             // SELECT FOR UPDATE
+    wh_stmt([], [], 1),          // UPDATE subscriptions ids
+    wh_stmt([], [], 0),          // nenhuma outra ativa
+    wh_stmt([], [], 1),          // UPDATE usuarios
+    wh_stmt([], [], 1),          // UPDATE subscriptions status
+    wh_stmt([], [], 1),          // markProcessed
+];
+$ctl = new MpWebhookController($db, new User($db), new PlanService($db), new MercadoPagoClient('TEST_TOKEN', wh_routed_transport($captured, [
+    '/authorized_payments/7031756303' => ['status' => 200, 'body' => wh_invoice_body(7031756303, 'pre_parent_1'), 'error' => ''],
+    '/preapproval/pre_parent_1' => ['status' => 200, 'body' => wh_api('pre_parent_1', 'authorized', 'user_42_pro_aaa'), 'error' => ''],
+])));
+$r = wh_call($ctl, wh_req(wh_sig('7031756303', 'req-real', '1704908010000'), 'req-real', ['data.id' => '7031756303'], wh_body('7031756303', 'subscription_authorized_payment')));
+$urls = array_column($captured, 'url');
+assert_test(!in_array('https://api.mercadopago.com/preapproval/7031756303', $urls, true), 'WHR01: NUNCA consulta GET /preapproval/{invoice_id}');
+assert_test(in_array('https://api.mercadopago.com/authorized_payments/7031756303', $urls, true), 'WHR02: consulta GET /authorized_payments/{id}');
+assert_test(in_array('https://api.mercadopago.com/preapproval/pre_parent_1', $urls, true), 'WHR03: resolve o pai e consulta GET /preapproval/{pai}');
+assert_test(
+    array_search('https://api.mercadopago.com/authorized_payments/7031756303', $urls, true)
+    < array_search('https://api.mercadopago.com/preapproval/pre_parent_1', $urls, true),
+    'WHR04: invoice antes da assinatura (ordem correta)'
+);
+assert_test($r['code'] === 200 && ($r['data']['status'] ?? '') === 'active', 'WHR05: fluxo fatura termina 2xx com active');
+assert_test(wh_user_update_params($db) === ['pro', 'ativo', 7, 42], 'WHR06: BillingSyncService ativa o usuario correto');
+$mpIdRecorded = null;
+foreach ($db->created as $i => $s) {
+    if (str_contains($db->queries[$i] ?? '', 'mp_preapproval_id = ?')) {
+        $mpIdRecorded = $s->params[0] ?? null;
+    }
+}
+assert_test($mpIdRecorded === 'pre_parent_1', 'WHR07: provider_subscription_id gravado e o ID PAI, nao o da fatura');
+
+// Fatura sem preapproval_id: 500 retryavel, sem sync.
+$captured = [];
+$db = new FakeMpPDO();
+$db->queue = [wh_stmt([], [], 1)];
+$ctl = new MpWebhookController($db, new User($db), new PlanService($db), new MercadoPagoClient('TEST_TOKEN', wh_routed_transport($captured, [
+    '/authorized_payments/9' => ['status' => 200, 'body' => '{"id":9,"status":"approved"}', 'error' => ''],
+])));
+$r = wh_call($ctl, wh_req(wh_sig('9', 'req-noparent', '1704908010000'), 'req-noparent', ['data.id' => '9'], wh_body('9', 'subscription_authorized_payment')));
+assert_test($r['code'] === 500 && !wh_has_query($db, 'UPDATE usuarios'), 'WHR08: invoice sem pai nao sincroniza');
+
+// Fatura inexistente (404): 500 retryavel, sem sync.
+$captured = [];
+$db = new FakeMpPDO();
+$db->queue = [wh_stmt([], [], 1)];
+$ctl = new MpWebhookController($db, new User($db), new PlanService($db), new MercadoPagoClient('TEST_TOKEN', wh_routed_transport($captured, [])));
+$r = wh_call($ctl, wh_req(wh_sig('404404', 'req-404', '1704908010000'), 'req-404', ['data.id' => '404404'], wh_body('404404', 'subscription_authorized_payment')));
+assert_test($r['code'] === 500 && ($r['data']['error'] ?? '') === 'mp_http_404' && !wh_has_query($db, 'UPDATE usuarios'), 'WHR09: invoice 404 nao sincroniza');
+
+// subscription_preapproval: direto, SEM passar por authorized_payments.
+$captured = [];
+$db = new FakeMpPDO();
+wh_queue_active($db, wh_local_row());
+$ctl = new MpWebhookController($db, new User($db), new PlanService($db), new MercadoPagoClient('TEST_TOKEN', wh_routed_transport($captured, [
+    '/preapproval/pre_hex_1' => ['status' => 200, 'body' => wh_api('pre_hex_1', 'authorized', ''), 'error' => ''],
+])));
+$r = wh_call($ctl, wh_req(wh_sig('pre_hex_1', 'req-pre', '1704908010000'), 'req-pre', ['data.id' => 'pre_hex_1'], wh_body('pre_hex_1', 'subscription_preapproval')));
+$hasInvoiceCall = false;
+foreach ($captured as $c) {
+    if (str_contains($c['url'], '/authorized_payments/')) {
+        $hasInvoiceCall = true;
+    }
+}
+assert_test($r['code'] === 200 && !$hasInvoiceCall, 'WHR10: preapproval direto, sem desvio para invoices');
+
+// subscription_preapproval_plan: ID de PLANO, nunca de subscription.
+// Ignora com seguranca (reserva + 200), zero chamadas a API.
+$captured = [];
+$db = new FakeMpPDO();
+$db->queue = [wh_stmt([], [], 1), wh_stmt([], [], 1)];
+$called = false;
+$transport = function () use (&$called): array {
+    $called = true;
+    return ['status' => 200, 'body' => '{}', 'error' => ''];
+};
+$ctl = new MpWebhookController($db, new User($db), new PlanService($db), new MercadoPagoClient('TEST_TOKEN', $transport));
+$r = wh_call($ctl, wh_req(wh_sig('plan_1', 'req-plan', '1704908010000'), 'req-plan', ['data.id' => 'plan_1'], wh_body('plan_1', 'subscription_preapproval_plan')));
+assert_test($r['code'] === 200 && ($r['data']['reason'] ?? '') === 'tipo_plano' && !$called && !wh_has_query($db, 'UPDATE usuarios'), 'WHR11: plan_id jamais confundido com subscription');
+
+// Tipo desconhecido nao-assinatura: ignorado antes de claim/API/DB.
+$db = new FakeMpPDO();
+$ctl = new MpWebhookController($db, new User($db), new PlanService($db));
+$r = wh_call($ctl, wh_req(wh_sig('777', 'req-pay', '1704908010000'), 'req-pay', ['data.id' => '777'], wh_body('777', 'payment')));
+assert_test($r['code'] === 200 && ($r['data']['reason'] ?? '') === 'tipo_nao_assinatura' && count($db->queries) === 0, 'WHR12: tipo desconhecido ignorado sem efeitos');
+
+// Cliente: getAuthorizedPayment usa endpoint e validacao corretos.
+$cap = [];
+$c = new MercadoPagoClient('TEST_TOKEN', wh_transport($cap, 200, '{"id":1,"preapproval_id":"p"}'));
+$res = $c->getAuthorizedPayment('7031756303');
+assert_test(($cap[0]['method'] ?? '') === 'GET' && ($cap[0]['url'] ?? '') === 'https://api.mercadopago.com/authorized_payments/7031756303' && $res['preapproval_id'] === 'p', 'WHR13: getAuthorizedPayment correto');
+$threw = false;
+try {
+    $c->getAuthorizedPayment('../../x');
+} catch (MercadoPagoException $e) {
+    $threw = $e->getErrorCode() === 'mp_payload_invalido';
+}
+assert_test($threw, 'WHR14: id de fatura invalido rejeitado');
+
+// Duplicata de invoice: segunda entrega nao reconsulta nem resincroniza.
+$db = new FakeMpPDO();
+$db->queue = [wh_stmt([], [], 0), wh_stmt(['status' => 'processed', 'attempts' => 1, 'updated_at' => date('Y-m-d H:i:s')])];
+$called = false;
+$transport2 = function () use (&$called): array {
+    $called = true;
+    return ['status' => 200, 'body' => '{}', 'error' => ''];
+};
+$ctl = new MpWebhookController($db, new User($db), new PlanService($db), new MercadoPagoClient('TEST_TOKEN', $transport2));
+$r = wh_call($ctl, wh_req(wh_sig('7031756303', 'req-dup', '1704908010000'), 'req-dup', ['data.id' => '7031756303'], wh_body('7031756303', 'subscription_authorized_payment')));
+assert_test($r['code'] === 200 && ($r['data']['duplicate'] ?? false) === true && !$called, 'WHR15: redelivery de invoice deduplicado');
+
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;
 echo "Total: $total | \033[32mPassed: $passed\033[0m | \033[31mFailed: $failed\033[0m\n";

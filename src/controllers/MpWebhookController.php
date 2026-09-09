@@ -140,21 +140,31 @@ class MpWebhookController
             return;
         }
 
+        // ---- Roteamento pelo tipo OFICIAL do evento ----
+        // Cada topico tem seu recurso e seu endpoint (doc oficial):
+        //   subscription_authorized_payment -> data.id e FATURA (numerico);
+        //     GET /authorized_payments/{id} (traz `preapproval_id` pai)
+        //   subscription_preapproval        -> data.id e a ASSINATURA;
+        //     GET /preapproval/{id}
+        //   subscription_preapproval_plan   -> data.id e o PLANO (nao e
+        //     subscription: ignora com seguranca, sem confundir IDs)
+        $isPlan = str_contains($type, 'preapproval_plan');
+        if ($isPlan) {
+            if (!$this->markProcessedSafe($requestId)) {
+                $this->json(500, ['success' => false, 'error' => 'erro_interno']);
+                return;
+            }
+            $this->diag('link', 'tipo_plano', 'res=' . substr($resourceId, 0, 40));
+            $this->json(200, ['success' => true, 'ignored' => true, 'reason' => 'tipo_plano']);
+            return;
+        }
+
         // ---- Consulta oficial: UNICA fonte de verdade do status ----
         $client = $this->client ?? new MercadoPagoClient();
         try {
-            $pre = $client->getPreapproval($resourceId);
-        } catch (MercadoPagoException $e) {
-            $this->failEvent($requestId);
-            $code = $e->getErrorCode();
-            $http = $code === 'mp_timeout' ? 504 : (($code === 'mp_http_429' || $code === 'mp_http_5xx') ? 503 : 500);
-            $this->diag('api', $code, 'req=' . substr($requestId, 0, 40) . ' res=' . substr($resourceId, 0, 40));
-            $this->json($http, ['success' => false, 'error' => $code]);
-            return;
+            $pre = $this->loadOfficialPreapproval($client, $type, $resourceId);
         } catch (Throwable $e) {
-            $this->failEvent($requestId);
-            $this->diag('api', 'mp_unexpected', 'req=' . substr($requestId, 0, 40));
-            $this->json(500, ['success' => false, 'error' => 'erro_interno']);
+            $this->respondApiFailure($requestId, $resourceId, $e);
             return;
         }
 
@@ -347,6 +357,46 @@ class MpWebhookController
         $stmt->execute([$ref]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return is_array($row) ? $row : null;
+    }
+
+    /**
+     * Resolve o preapproval oficial conforme o tipo do evento.
+     * Fatura (`subscription_authorized_payment`): busca a invoice e extrai
+     * o `preapproval_id` pai da RESPOSTA OFICIAL; so entao consulta a
+     * assinatura. Demais tipos de assinatura: consulta direta.
+     *
+     * @throws MercadoPagoException|RuntimeException
+     */
+    private function loadOfficialPreapproval(MercadoPagoClient $client, string $type, string $resourceId): array
+    {
+        if (!str_contains($type, 'authorized_payment')) {
+            return $client->getPreapproval($resourceId);
+        }
+        $invoice = $client->getAuthorizedPayment($resourceId);
+        $parentId = trim((string)($invoice['preapproval_id'] ?? ''));
+        if ($parentId === '') {
+            throw new RuntimeException('invoice sem preapproval_id');
+        }
+        return $client->getPreapproval($parentId);
+    }
+
+    /**
+     * Responde falha na consulta oficial preservando retry: marca o evento
+     * como failed (redelivery futuro retoma) e mapeia o HTTP.
+     */
+    private function respondApiFailure(string $requestId, string $resourceId, Throwable $e): void
+    {
+        if ($e instanceof MercadoPagoException) {
+            $this->failEvent($requestId);
+            $code = $e->getErrorCode();
+            $http = $code === 'mp_timeout' ? 504 : (($code === 'mp_http_429' || $code === 'mp_http_5xx') ? 503 : 500);
+            $this->diag('api', $code, 'req=' . substr($requestId, 0, 40) . ' res=' . substr($resourceId, 0, 40));
+            $this->json($http, ['success' => false, 'error' => $code]);
+            return;
+        }
+        $this->failEvent($requestId);
+        $this->diag('api', 'mp_unexpected', 'req=' . substr($requestId, 0, 40));
+        $this->json(500, ['success' => false, 'error' => 'erro_interno']);
     }
 
     private function failEvent(string $requestId): void

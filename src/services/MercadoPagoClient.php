@@ -156,6 +156,29 @@ class MercadoPagoClient
     }
 
     /**
+     * Consulta oficial de uma fatura autorizada (invoice) de assinatura.
+     * GET https://api.mercadopago.com/authorized_payments/{id}
+     *
+     * Usado pelo webhook para eventos `subscription_authorized_payment`,
+     * cujo data.id e o ID da FATURA (numerico), nao o da assinatura.
+     * A resposta oficial traz `preapproval_id` (assinatura pai).
+     *
+     * @return array Resposta decodificada (id, preapproval_id, status, ...).
+     * @throws MercadoPagoException
+     */
+    public function getAuthorizedPayment(string $id): array
+    {
+        if (!$this->isConfigured()) {
+            throw new MercadoPagoException('mp_not_configured', 'Integracao de pagamento nao configurada no servidor.');
+        }
+        $id = trim($id);
+        if ($id === '' || strlen($id) > 120 || !preg_match('/^[A-Za-z0-9_-]+$/', $id)) {
+            throw new MercadoPagoException('mp_payload_invalido', 'Identificador de fatura invalido.');
+        }
+        return $this->request('GET', '/authorized_payments/' . rawurlencode($id), null, 'get_authorized_payment');
+    }
+
+    /**
      * @param array|null $payload Null para GET (sem corpo).
      * @param string[] $extraHeaders Headers adicionais seguros (ex: antifraude).
      * @return array Resposta JSON decodificada.
