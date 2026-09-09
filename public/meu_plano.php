@@ -170,7 +170,7 @@ $mpCardEnabled = ($mpPublicKey !== '');
 
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--space-4)">
         <span id="subscribe-csrf" style="display:none"><?= csrf_field() ?></span>
-        <span id="mp-config" data-public-key="<?= htmlspecialchars($mpPublicKey) ?>" style="display:none"></span>
+        <span id="mp-config" data-public-key="<?= htmlspecialchars($mpPublicKey) ?>" data-pk-configured="<?= $mpCardEnabled ? 'yes' : 'no' ?>" style="display:none"></span>
         <div id="subscribe-feedback-global" class="subscribe-feedback" style="display:none;grid-column:1/-1;font-size:13px;color:#b91c1c;background:rgba(220,38,38,.06);border:1px solid rgba(220,38,38,.25);border-radius:10px;padding:10px 14px"></div>
         <?php
         $planCardStyles = [
@@ -297,5 +297,6 @@ $mpCardEnabled = ($mpPublicKey !== '');
 </div>
 <script src="https://sdk.mercadopago.com/js/v2"></script>
 <?php endif; ?>
+<script src="/js/mp-card-utils.js?v=<?= @filemtime(__DIR__ . '/js/mp-card-utils.js') ?>"></script>
 <script src="/js/subscribe.js?v=<?= @filemtime(__DIR__ . '/js/subscribe.js') ?>"></script>
 <?php include __DIR__ . '/partials/layout_end.php'; ?>

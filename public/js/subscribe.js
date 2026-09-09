@@ -88,6 +88,23 @@
 
     function digits(v) { return (v || '').replace(/\D/g, ''); }
 
+    function normMonth(v) {
+        if (window.MpCardUtils && window.MpCardUtils.normalizeMonth) return window.MpCardUtils.normalizeMonth(v);
+        var d = digits(v);
+        return d.length === 2 ? d : '';
+    }
+
+    function normYear(v) {
+        if (window.MpCardUtils && window.MpCardUtils.normalizeYear) return window.MpCardUtils.normalizeYear(v);
+        var d = digits(v);
+        return d.length === 4 ? d : '';
+    }
+
+    function safeCode(err) {
+        if (window.MpCardUtils && window.MpCardUtils.extractSafeCode) return window.MpCardUtils.extractSafeCode(err);
+        return 'unknown_tokenization_error';
+    }
+
     function friendlyMessage(code) {
         var map = {
             nao_autenticado: 'Sessão expirada. Recarregue a página e entre novamente.',
@@ -108,6 +125,23 @@
         return map[code] || 'Não foi possível concluir a assinatura. Tente novamente.';
     }
 
+    function friendlySdkMessage(code) {
+        var map = {
+            invalid_card_number: 'Número do cartão inválido. Confira e tente novamente.',
+            invalid_expiration_date: 'Data de validade inválida. Confira e tente novamente.',
+            invalid_expiration_month: 'Mês de validade inválido. Confira e tente novamente.',
+            invalid_expiration_year: 'Ano de validade inválido. Confira e tente novamente.',
+            invalid_security_code: 'Código de segurança inválido. Confira e tente novamente.',
+            invalid_cardholder_name: 'Nome do titular inválido. Confira e tente novamente.',
+            invalid_identification_number: 'Documento inválido. Confira e tente novamente.',
+            invalid_public_key: 'Pagamento indisponível no momento. Tente mais tarde.',
+            public_key_error: 'Pagamento indisponível no momento. Tente mais tarde.',
+            network_error: 'Falha de conexão com o pagamento. Tente novamente.'
+        };
+        if (map[code]) return map[code];
+        return 'Não foi possível validar o cartão (' + code + '). Confira os dados e tente novamente.';
+    }
+
     async function submitCard(event) {
         event.preventDefault();
         if (!currentPlan) return;
@@ -117,12 +151,13 @@
 
         var number = digits($('mp-card-number') ? $('mp-card-number').value : '');
         var name = ($('mp-card-name') ? $('mp-card-name').value : '').trim();
-        var month = digits($('mp-card-month') ? $('mp-card-month').value : '');
-        var year = digits($('mp-card-year') ? $('mp-card-year').value : '');
+        var month = normMonth($('mp-card-month') ? $('mp-card-month').value : '');
+        var year = normYear($('mp-card-year') ? $('mp-card-year').value : '');
         var cvv = digits($('mp-card-cvv') ? $('mp-card-cvv').value : '');
         var doc = digits($('mp-card-doc') ? $('mp-card-doc').value : '');
-        if (number.length < 13 || !name || month.length !== 2 || year.length !== 4 || cvv.length < 3) {
-            cardError('Confira os dados do cartão e tente novamente.');
+        // Mensagem PROPRIA de validacao local — nunca confundida com erro do SDK.
+        if (number.length < 13 || !name || !month || !year || cvv.length < 3) {
+            cardError('Verifique os dados digitados no cartão.');
             return;
         }
         var token = csrfToken();
@@ -135,7 +170,7 @@
         try {
             // Tokenizacao oficial: dados do cartao vao ao Mercado Pago e
             // retornam como card_token_id temporario. Nada de cartao sai daqui.
-            var mp = new window.MercadoPago(publicKey());
+            var mp = new window.MercadoPago(publicKey(), { locale: 'pt-BR' });
             var cardData = {
                 cardNumber: number,
                 cardholderName: name,
@@ -147,6 +182,7 @@
             var tokenResp = await mp.createCardToken(cardData);
             var cardTokenId = tokenResp && tokenResp.id ? String(tokenResp.id) : '';
             if (!cardTokenId) {
+                if (typeof console !== 'undefined' && console.info) console.info('[mp-tokenization] code=empty_token_response');
                 cardError('Não foi possível validar o cartão. Tente novamente.');
                 if (submitBtn) { delete submitBtn.dataset.busy; submitBtn.disabled = false; submitBtn.style.opacity = ''; }
                 return;
@@ -174,7 +210,11 @@
             }
             cardError(friendlyMessage(data && data.error));
         } catch (e) {
-            cardError('Não foi possível validar o cartão. Confira os dados e tente novamente.');
+            // Diagnostico seguro: SOMENTE o codigo. Nunca objeto, mensagem
+            // bruta, token, chave ou dado do cartao.
+            var code = safeCode(e);
+            if (typeof console !== 'undefined' && console.info) console.info('[mp-tokenization] code=' + code);
+            cardError(friendlySdkMessage(code));
         }
         if (submitBtn) { delete submitBtn.dataset.busy; submitBtn.disabled = false; submitBtn.style.opacity = ''; }
     }
