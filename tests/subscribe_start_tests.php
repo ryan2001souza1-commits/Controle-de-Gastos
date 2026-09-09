@@ -72,6 +72,8 @@ class FakeSubPDO extends PDO
     public array $queries = [];
     /** @var FakeSubStmt[] */
     public array $queue = [];
+    /** @var FakeSubStmt[] */
+    public array $created = [];
     public string $nextId = '7';
 
     public function __construct()
@@ -81,8 +83,9 @@ class FakeSubPDO extends PDO
     public function prepare(string $query, array $options = []): PDOStatement|false
     {
         $this->queries[] = $query;
-        $stmt = array_shift($this->queue);
-        return $stmt ?? new FakeSubStmt();
+        $stmt = array_shift($this->queue) ?? new FakeSubStmt();
+        $this->created[] = $stmt;
+        return $stmt;
     }
 
     public function lastInsertId(?string $name = null): string|false
@@ -111,6 +114,25 @@ function sub_user_row(): array
 function sub_plan_row(string $slug, string $id, string $nome, string $preco): array
 {
     return ['id' => $id, 'nome' => $nome, 'slug' => $slug, 'preco' => $preco, 'descricao' => '', 'status' => 'ativo'];
+}
+
+/** card_token_id valido para os testes (formato aceito pelo backend). */
+function sub_token(): string
+{
+    return 'tokentest1234567890abcdef1234567890';
+}
+
+function sub_has_query(PDO $db, string $needle): bool
+{
+    if (!($db instanceof FakeSubPDO)) {
+        return false;
+    }
+    foreach ($db->queries as $q) {
+        if (str_contains($q, $needle)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /** @param array<string,string> $env */
@@ -233,7 +255,7 @@ assert_test($r['code'] === 400, 'SS08: plano ausente recusado');
 
 echo "\n-- catalogo como fonte da verdade --\n";
 $captured = [];
-sub_reset_request('POST', ['plan' => 'pro', 'price' => '0.01', 'amount' => '1', 'transaction_amount' => '1', 'user_id' => '999']);
+sub_reset_request('POST', ['plan' => 'pro', 'price' => '0.01', 'amount' => '1', 'transaction_amount' => '1', 'user_id' => '999', 'card_token_id' => sub_token()]);
 $db = new FakeSubPDO();
 sub_queue_success($db, 'pro');
 $ctl = new SubscribeController($db, new User($db), new PlanService($db), new MercadoPagoClient('TEST_TOKEN', sub_transport($captured, 201, sub_success_body())));
@@ -255,7 +277,7 @@ $captured2 = [];
 $dbB = new FakeSubPDO();
 sub_queue_success($dbB, 'pro');
 $ctlB = new SubscribeController($dbB, new User($dbB), new PlanService($dbB), new MercadoPagoClient('TEST_TOKEN', sub_transport($captured2, 201, sub_success_body())));
-sub_reset_request('POST', ['plan' => 'pro', 'user_id' => '999']);
+sub_reset_request('POST', ['plan' => 'pro', 'user_id' => '999', 'card_token_id' => sub_token()]);
 sub_call($ctlB);
 $insertSql = '';
 foreach ($dbB->queries as $q) {
@@ -311,7 +333,7 @@ $wrapPdo = new class ($dbC, $hold) extends FakeSubPDO {
 };
 $captured3 = [];
 $ctlC = new SubscribeController($wrapPdo, new User($wrapPdo), new PlanService($wrapPdo), new MercadoPagoClient('TEST_TOKEN', sub_transport($captured3, 201, sub_success_body())));
-sub_reset_request('POST', ['plan' => 'pro', 'user_id' => '999']);
+sub_reset_request('POST', ['plan' => 'pro', 'user_id' => '999', 'card_token_id' => sub_token()]);
 sub_call($ctlC);
 assert_test(($wrapPdo->seen[0] ?? null) === 42, 'SS14: user_id do frontend ignorado; sessao (42) e a fonte');
 
@@ -335,7 +357,7 @@ sub_env([]);
 
 echo "\n-- request MP e resposta --\n";
 $captured = [];
-sub_reset_request('POST', ['plan' => 'premium']);
+sub_reset_request('POST', ['plan' => 'premium', 'card_token_id' => sub_token()]);
 $db = new FakeSubPDO();
 sub_queue_success($db, 'premium');
 $ctl = new SubscribeController($db, new User($db), new PlanService($db), new MercadoPagoClient('TEST_TOKEN', sub_transport($captured, 201, sub_success_body('pre_9', 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_id=pre_9'))));
@@ -366,7 +388,7 @@ echo "\n-- falhas da API --\n";
 function sub_fail_case(string $name, int $status, string $body, string $error, string $expectError, int $expectCode): void
 {
     $captured = [];
-    sub_reset_request('POST', ['plan' => 'pro']);
+    sub_reset_request('POST', ['plan' => 'pro', 'card_token_id' => sub_token()]);
     $db = new FakeSubPDO();
     sub_queue_success($db, 'pro');
     // Remove UPDATE da fila: a chamada deve falhar antes de concluir.
@@ -389,7 +411,7 @@ sub_fail_case('SS27: HTTP 500', 500, '{"message":"boom"}', '', 'mp_http_5xx', 50
 sub_fail_case('SS28: JSON invalido', 200, 'nao-json', '', 'mp_invalid_json', 502);
 
 $captured = [];
-sub_reset_request('POST', ['plan' => 'pro']);
+sub_reset_request('POST', ['plan' => 'pro', 'card_token_id' => sub_token()]);
 $db = new FakeSubPDO();
 sub_queue_success($db, 'pro');
 $ctl = new SubscribeController($db, new User($db), new PlanService($db), new MercadoPagoClient('TEST_TOKEN', sub_transport($captured, 201, '{"id":"pre_x","status":"pending"}')));
@@ -398,7 +420,7 @@ assert_test($r['code'] === 502 && ($r['data']['error'] ?? '') === 'checkout_indi
 
 echo "\n-- pending sem ativar + idempotencia --\n";
 $captured = [];
-sub_reset_request('POST', ['plan' => 'pro']);
+sub_reset_request('POST', ['plan' => 'pro', 'card_token_id' => sub_token()]);
 $db = new FakeSubPDO();
 sub_queue_success($db, 'pro');
 $ctl = new SubscribeController($db, new User($db), new PlanService($db), new MercadoPagoClient('TEST_TOKEN', sub_transport($captured, 201, sub_success_body())));
@@ -440,6 +462,82 @@ foreach ($db->queries as $q) {
 assert_test($r['code'] === 200 && ($r['data']['reused'] ?? false) === true && !$didInsert && !$called, 'SS31: double submit reutiliza tentativa sem nova chamada MP');
 
 assert_test(count($GLOBALS['SUB_WARNINGS_TOTAL'] ?? []) === 0, 'SS32: nenhum PHP warning durante as chamadas do controller');
+
+echo "\n-- card_token_id (tokenizacao oficial) --\n";
+// Ausente: 400 controlado (fila so com o SELECT de reuse, sem INSERT).
+sub_reset_request('POST', ['plan' => 'pro']);
+$db = new FakeSubPDO();
+$db->queue = [sub_stmt(sub_user_row()), sub_stmt(sub_plan_row('pro', '2', 'Pro', '9.90')), sub_stmt(sub_plan_row('pro', '2', 'Pro', '9.90')), sub_stmt([], [])];
+$ctl = new SubscribeController($db, new User($db), new PlanService($db));
+$r = sub_call($ctl);
+assert_test($r['code'] === 400 && ($r['data']['error'] ?? '') === 'card_token_ausente', 'CT01: card_token ausente retorna 400');
+assert_test(!sub_has_query($db, 'INSERT INTO subscriptions'), 'CT02: sem token, nenhuma tentativa e criada');
+
+// Formato invalido: 400 controlado.
+sub_reset_request('POST', ['plan' => 'pro', 'card_token_id' => '!!!curto']);
+$db = new FakeSubPDO();
+$db->queue = [sub_stmt(sub_user_row()), sub_stmt(sub_plan_row('pro', '2', 'Pro', '9.90')), sub_stmt(sub_plan_row('pro', '2', 'Pro', '9.90')), sub_stmt([], [])];
+$ctl = new SubscribeController($db, new User($db), new PlanService($db));
+$r = sub_call($ctl);
+assert_test($r['code'] === 400 && ($r['data']['error'] ?? '') === 'card_token_invalido', 'CT03: card_token malformado rejeitado');
+
+// Token valido: vai ao MP com status authorized; nunca ao banco/logs/resposta.
+$captured = [];
+sub_reset_request('POST', ['plan' => 'pro', 'card_token_id' => sub_token()]);
+$db = new FakeSubPDO();
+sub_queue_success($db, 'pro');
+$ctl = new SubscribeController($db, new User($db), new PlanService($db), new MercadoPagoClient('TEST_TOKEN', sub_transport($captured, 201, '{"id":"pre_t","status":"authorized"}')));
+$r = sub_call($ctl);
+$reqBody = json_decode($captured['body'] ?? '{}', true);
+assert_test(($reqBody['card_token_id'] ?? '') === sub_token(), 'CT04: card_token_id enviado no POST /preapproval');
+assert_test(($reqBody['status'] ?? '') === 'authorized', 'CT05: POST /preapproval com status authorized');
+$respJson = json_encode($r['data']);
+assert_test(!str_contains($respJson, sub_token()), 'CT06: card_token nunca na resposta');
+$tokenInDb = false;
+foreach ($db->created as $s) {
+    if (in_array(sub_token(), $s->params ?? [], true)) {
+        $tokenInDb = true;
+    }
+}
+assert_test(!$tokenInDb, 'CT07: card_token nunca persistido');
+$ctlSrc = (string)file_get_contents($ROOT . '/src/controllers/SubscribeController.php');
+$hasTokenInLog = false;
+foreach (explode("\n", $ctlSrc) as $line) {
+    if (str_contains($line, 'error_log') && (str_contains($line, 'cardToken') || str_contains($line, 'card_token'))) {
+        $hasTokenInLog = true;
+    }
+}
+assert_test(!$hasTokenInLog, 'CT08: card_token nunca logado');
+
+// authorized SEM init_point: sucesso, checkout null, plano intacto (webhook sincroniza depois).
+assert_test($r['code'] === 200 && ($r['data']['success'] ?? false) === true, 'CT09: authorized sem init_point retorna sucesso');
+assert_test(!array_key_exists('checkout_url', $r['data']) || $r['data']['checkout_url'] === null, 'CT10: checkout_url null quando MP nao retorna init_point');
+assert_test(!sub_has_query($db, 'UPDATE usuarios'), 'CT11: sucesso autorizado nao ativa usuario antes do webhook');
+
+// plan_slug como alias funciona.
+$captured = [];
+sub_reset_request('POST', ['plan_slug' => 'premium', 'card_token_id' => sub_token()]);
+$db = new FakeSubPDO();
+sub_queue_success($db, 'premium');
+$ctl = new SubscribeController($db, new User($db), new PlanService($db), new MercadoPagoClient('TEST_TOKEN', sub_transport($captured, 201, '{"id":"pre_t2","status":"authorized"}')));
+$r = sub_call($ctl);
+assert_test($r['code'] === 200, 'CT12: alias plan_slug aceito');
+
+echo "\n-- public key e frontend --\n";
+$profileSrc = (string)file_get_contents($ROOT . '/src/controllers/ProfileController.php');
+assert_test(str_contains($profileSrc, "MERCADOPAGO_PUBLIC_KEY") && str_contains($profileSrc, '$mpPublicKey'), 'CT13: public key exposta a view pelo backend');
+assert_test(str_contains($meuPlano, 'data-public-key') && str_contains($meuPlano, 'sdk.mercadopago.com/js/v2') && str_contains($meuPlano, 'mp-card-form'), 'CT14: template com public key, SDK oficial e form de cartao');
+assert_test(str_contains($js, 'createCardToken') && str_contains($js, 'new window.MercadoPago'), 'CT15: JS usa tokenizacao oficial MercadoPago.js');
+assert_test(
+    !preg_match('/\$_POST\[.(card|cardNumber|securityCode|cvv)/', $ctlSrc)
+    && !preg_match('/\$_POST\[.(card|cardNumber|securityCode|cvv)/', $meuPlano),
+    'CT16: backend e template nunca leem numero/CVV do cartao'
+);
+assert_test(str_contains($js, "'plan='") && str_contains($js, "'&card_token_id='") && str_contains($js, "'&csrf_token='"), 'CT17: fetch envia SOMENTE plan + card_token_id + csrf_token');
+$vercelSrc = (string)file_get_contents($ROOT . '/vercel.json');
+assert_test(str_contains($vercelSrc, 'https://sdk.mercadopago.com') && str_contains($vercelSrc, 'https://api.mercadopago.com'), 'CT19: CSP libera SDK e API MP');
+$envExample = (string)file_get_contents($ROOT . '/.env.example');
+assert_test(preg_match('/^#?\s*MERCADOPAGO_PUBLIC_KEY=\s*$/m', $envExample) === 1, 'CT20: .env.example com chave publica vazia');
 
 echo "\n=== RESUMO ===\n";
 $total = $passed + $failed;

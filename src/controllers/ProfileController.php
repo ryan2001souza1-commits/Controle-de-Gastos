@@ -155,6 +155,11 @@ class ProfileController
         $userName = $_SESSION['user_name'] ?? $user->name;
         $userEmail = $user->email;
 
+        // Public Key do Mercado Pago (PUBLICA por definicao): permite ao
+        // frontend tokenizar o cartao via MercadoPago.js sem expor segredos.
+        // Vazia => botoes de assinatura seguem desabilitados.
+        $mpPublicKey = MercadoPagoClient::readEnv('MERCADOPAGO_PUBLIC_KEY');
+
         // Pagamentos via gateway externo removidos (reconstrucao futura do zero).
         // Nenhum retorno/callback de checkout ativa plano por esta pagina.
         $subscribeNotice = null;

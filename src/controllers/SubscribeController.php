@@ -9,10 +9,11 @@
  *  2. valida plan=pro|premium contra o catalogo interno (preco do catalogo);
  *  3. registra tentativa local como pending (SEM alterar usuarios.plano);
  *  4. chama POST /preapproval na API oficial via MercadoPagoClient;
- *  5. grava mp_preapproval_id/raw_status/checkout_url e devolve init_point.
+ *  5. grava mp_preapproval_id/raw_status/checkout_url e devolve init_point
+ *     (quando houver) + status oficial. Sem ativar plano.
  *
  * PROIBIDO aqui: webhook, ativacao de plano pago, preco do frontend,
- * user_id do navegador, token no frontend/logs/banco.
+ * user_id do navegador, token no frontend/logs/banco, dados de cartao.
  */
 class SubscribeController
 {
@@ -59,9 +60,10 @@ class SubscribeController
                 $input = $decoded;
             }
         }
-        // O frontend envia SOMENTE plan. Qualquer user_id/price/amount vindo
-        // do navegador e deliberadamente ignorado (fonte: sessao + catalogo).
-        $plan = strtolower(trim((string)($input['plan'] ?? '')));
+        // O frontend envia SOMENTE plan (+ card_token_id + CSRF). Qualquer
+        // user_id/price/amount vindo do navegador e deliberadamente ignorado
+        // (fonte: sessao + catalogo). Aceita alias plan_slug.
+        $plan = strtolower(trim((string)($input['plan'] ?? $input['plan_slug'] ?? '')));
         if (!in_array($plan, self::ALLOWED_SLUGS, true)) {
             $this->json(400, ['success' => false, 'error' => 'plano_invalido']);
             return;
@@ -111,6 +113,19 @@ class SubscribeController
                 return;
             }
 
+            // card_token_id: token temporario gerado no frontend via
+            // MercadoPago.js (Core Methods). Numero/CVV NUNCA chegam aqui.
+            // Validado por formato; jamais logado ou persistido.
+            $cardToken = trim((string)($input['card_token_id'] ?? ''));
+            if ($cardToken === '') {
+                $this->json(400, ['success' => false, 'error' => 'card_token_ausente']);
+                return;
+            }
+            if (!preg_match('/^[A-Za-z0-9_-]{8,128}$/', $cardToken)) {
+                $this->json(400, ['success' => false, 'error' => 'card_token_invalido']);
+                return;
+            }
+
             $attemptToken = bin2hex(random_bytes(16));
             $externalRef = BillingSyncService::buildExternalReference($userId, $plan, $attemptToken);
 
@@ -131,6 +146,8 @@ class SubscribeController
             'reason'              => 'Plano ' . $plano['nome'] . ' — Controle de Gastos',
             'external_reference'  => $externalRef,
             'payer_email'         => $user->email,
+            'card_token_id'       => $cardToken,
+            'status'              => 'authorized',
         ];
         $backUrl = $this->backUrl();
         if ($backUrl !== '') {
@@ -154,9 +171,28 @@ class SubscribeController
         }
 
         $mpId = isset($resp['id']) ? trim((string)$resp['id']) : '';
-        $initPoint = isset($resp['init_point']) ? trim((string)$resp['init_point']) : '';
-        $rawStatus = substr(trim((string)($resp['status'] ?? 'pending')), 0, 40);
-        if ($mpId === '' || !$this->isHttpsUrl($initPoint)) {
+        $apiStatus = strtolower(trim((string)($resp['status'] ?? '')));
+        $rawStatus = substr($apiStatus !== '' ? $apiStatus : 'pending', 0, 40);
+        // Com cartao autorizado, o MP pode responder authorized SEM init_point
+        // (metodo ja definido). init_point presente deve ser HTTPS valida;
+        // pending sem checkout nao tem como ser concluido.
+        $initRaw = isset($resp['init_point']) ? trim((string)$resp['init_point']) : '';
+        $checkoutUrl = null;
+        if ($initRaw !== '') {
+            if (!$this->isHttpsUrl($initRaw)) {
+                $this->markAttemptFailed($attemptId, $userId);
+                error_log("[subscribe_start] user={$userId} plan={$plan} attempt={$attemptId} err=checkout_indisponivel");
+                $this->json(502, ['success' => false, 'error' => 'checkout_indisponivel']);
+                return;
+            }
+            $checkoutUrl = $initRaw;
+        } elseif ($apiStatus !== 'authorized') {
+            $this->markAttemptFailed($attemptId, $userId);
+            error_log("[subscribe_start] user={$userId} plan={$plan} attempt={$attemptId} err=checkout_indisponivel");
+            $this->json(502, ['success' => false, 'error' => 'checkout_indisponivel']);
+            return;
+        }
+        if ($mpId === '') {
             $this->markAttemptFailed($attemptId, $userId);
             error_log("[subscribe_start] user={$userId} plan={$plan} attempt={$attemptId} err=checkout_indisponivel");
             $this->json(502, ['success' => false, 'error' => 'checkout_indisponivel']);
@@ -168,7 +204,7 @@ class SubscribeController
                 'UPDATE subscriptions SET mp_preapproval_id = ?, raw_status = ?, checkout_url = ?, updated_at = NOW()
                  WHERE id = ? AND user_id = ?'
             );
-            $upd->execute([$mpId, $rawStatus !== '' ? $rawStatus : 'pending', $initPoint, $attemptId, $userId]);
+            $upd->execute([$mpId, $rawStatus, $checkoutUrl, $attemptId, $userId]);
             if ($upd->rowCount() !== 1) {
                 throw new RuntimeException('attempt update mismatch');
             }
@@ -179,8 +215,9 @@ class SubscribeController
         }
 
         // CRIAR PREAPPROVAL NAO E PAGAMENTO APROVADO: usuarios.plano segue intacto.
+        // Sincronizacao final continua sendo responsabilidade do webhook.
         error_log("[subscribe_start] user={$userId} plan={$plan} attempt={$attemptId} sub={$mpId} ok=1");
-        $this->json(200, ['success' => true, 'checkout_url' => $initPoint, 'reused' => false]);
+        $this->json(200, ['success' => true, 'checkout_url' => $checkoutUrl, 'status' => $apiStatus, 'reused' => false]);
     }
 
     /**

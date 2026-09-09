@@ -81,11 +81,15 @@ class MercadoPagoClient
     }
 
     /**
-     * Cria uma assinatura (preapproval) com plano associado.
-     * Checkout hospedado: sem card_token_id/status — o Mercado Pago
-     * retorna status pending + init_point para aprovacao do assinante.
+     * Cria uma assinatura (preapproval) com plano associado + cartao
+     * tokenizado no frontend (Core Methods / MercadoPago.js).
+     * Checkout com cartao: exige card_token_id e status authorized —
+     * o Mercado Pago debita/cobra conforme o plano associado.
      *
-     * @param array{preapproval_plan_id:string, reason:string, external_reference:string, payer_email:string, back_url?:string} $payload
+     * O numero do cartao/CVV NUNCA chegam aqui: so o card_token_id
+     * temporario (uso unico, 7 dias), que jamais e logado ou persistido.
+     *
+     * @param array{preapproval_plan_id:string, reason:string, external_reference:string, payer_email:string, card_token_id:string, status?:string, back_url?:string} $payload
      * @return array Resposta decodificada (id, init_point, status, ...).
      * @throws MercadoPagoException
      */
@@ -94,7 +98,7 @@ class MercadoPagoClient
         if (!$this->isConfigured()) {
             throw new MercadoPagoException('mp_not_configured', 'Integracao de pagamento nao configurada no servidor.');
         }
-        foreach (['preapproval_plan_id', 'reason', 'external_reference', 'payer_email'] as $required) {
+        foreach (['preapproval_plan_id', 'reason', 'external_reference', 'payer_email', 'card_token_id'] as $required) {
             if (!isset($payload[$required]) || trim((string)$payload[$required]) === '') {
                 throw new MercadoPagoException('mp_payload_invalido', "Campo obrigatorio ausente: {$required}.");
             }
