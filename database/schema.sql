@@ -84,9 +84,9 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     -- external_reference = rastreio legivel user_{ID}_{plano}_{attempt};
     -- raw_status = status original retornado pelo gateway (auditoria);
     -- checkout_url = URL de checkout legada do gateway historico.
-    -- provider = gateway de origem da assinatura (ex: 'mercadopago').
+    -- provider = gateway de origem da assinatura.
     --   Nao confundir com usuarios.provider/provider_sub (OAuth, ex: Google).
-    -- provider_plan_id = plano do provedor (ex: preapproval_plan_id).
+    -- provider_plan_id = plano do provedor (identificador do plano no gateway).
     mp_preapproval_id VARCHAR(80) DEFAULT NULL,
     attempt_token VARCHAR(64) DEFAULT NULL,
     external_reference VARCHAR(120) DEFAULT NULL,

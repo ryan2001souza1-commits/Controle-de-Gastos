@@ -100,22 +100,22 @@ echo "\n=== WEBHOOK LEDGER TESTS ===\n\n";
 
 echo "-- normalizeEvent --\n";
 $evt = WebhookLedger::normalizeEvent([
-    'provider' => '  MercadoPago ',
+    'provider' => '  TestGateway ',
     'provider_event_id' => 'evt_123',
     'event_type' => 'subscription.updated',
     'subscription_id' => 100,
     'resource_id' => 'pre_456',
     'payload' => ['status' => 'authorized', 'access_token' => 'SEGREDO'],
 ]);
-assert_test($evt['provider'] === 'mercadopago', 'WL01: provider normalizado');
+assert_test($evt['provider'] === 'testgateway', 'WL01: provider normalizado');
 assert_test($evt['provider_event_id'] === 'evt_123' && $evt['subscription_id'] === 100, 'WL02: ids preservados');
 assert_test($evt['payload']['access_token'] === '[redacted]' && $evt['payload']['status'] === 'authorized', 'WL03: payload sanitizado na normalizacao');
 
 assert_throws('WL04: provider desconhecido rejeitado', fn() => WebhookLedger::normalizeEvent(['provider' => 'x', 'provider_event_id' => 'e1']));
-assert_throws('WL05: evento sem id rejeitado', fn() => WebhookLedger::normalizeEvent(['provider' => 'mercadopago', 'provider_event_id' => '  ']));
-assert_throws('WL06: evento com id gigante rejeitado', fn() => WebhookLedger::normalizeEvent(['provider' => 'mercadopago', 'provider_event_id' => str_repeat('x', 121)]));
-assert_throws('WL07: subscription_id invalido rejeitado', fn() => WebhookLedger::normalizeEvent(['provider' => 'mercadopago', 'provider_event_id' => 'e1', 'subscription_id' => -5]));
-assert_throws('WL08: payload nao-array rejeitado', fn() => WebhookLedger::normalizeEvent(['provider' => 'mercadopago', 'provider_event_id' => 'e1', 'payload' => 'str']));
+assert_throws('WL05: evento sem id rejeitado', fn() => WebhookLedger::normalizeEvent(['provider' => 'testgateway', 'provider_event_id' => '  ']));
+assert_throws('WL06: evento com id gigante rejeitado', fn() => WebhookLedger::normalizeEvent(['provider' => 'testgateway', 'provider_event_id' => str_repeat('x', 121)]));
+assert_throws('WL07: subscription_id invalido rejeitado', fn() => WebhookLedger::normalizeEvent(['provider' => 'testgateway', 'provider_event_id' => 'e1', 'subscription_id' => -5]));
+assert_throws('WL08: payload nao-array rejeitado', fn() => WebhookLedger::normalizeEvent(['provider' => 'testgateway', 'provider_event_id' => 'e1', 'payload' => 'str']));
 
 echo "\n-- SQL idempotente --\n";
 $sql = WebhookLedger::insertSql();

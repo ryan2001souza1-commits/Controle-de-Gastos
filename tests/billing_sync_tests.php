@@ -131,9 +131,9 @@ function stmt(array $all = [], int $count = 1): FakeBillingStmt
 
 echo "\n=== BILLING SYNC TESTS ===\n\n";
 
-echo "-- provider --\n";
-assert_test(BillingSyncService::normalizeProvider('mercadopago') === 'mercadopago', 'BS01: provider mercadopago valido');
-assert_test(BillingSyncService::normalizeProvider('  MercadoPago ') === 'mercadopago', 'BS02: provider normaliza case/espacos');
+echo "-- provider (nenhum gateway ativo) --\n";
+assert_test(BillingSyncService::normalizeProvider('mercadopago') === null, 'BS01: mercadopago nao e mais provedor ativo');
+assert_test(BillingSyncService::normalizeProvider('  MercadoPago ') === null, 'BS02: nenhuma variacao de gateway removido e aceita');
 assert_test(BillingSyncService::normalizeProvider('stripe') === null, 'BS03: provider desconhecido rejeitado');
 assert_test(BillingSyncService::normalizeProvider('') === null, 'BS04: provider vazio rejeitado');
 assert_test(BillingSyncService::normalizeProvider(null) === null, 'BS05: provider null rejeitado');

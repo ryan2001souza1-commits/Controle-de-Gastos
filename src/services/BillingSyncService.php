@@ -2,7 +2,7 @@
 /**
  * BillingSyncService — regras neutras de sincronizacao de cobranca.
  *
- * Prepara a futura integracao oficial (ex: Mercado Pago) SEM implementar
+ * Prepara uma futura integracao de gateway SEM implementar
  * nenhuma chamada de API, sem credenciais e sem webhook publico.
  *
  * Responsabilidades:
@@ -21,10 +21,7 @@
  */
 final class BillingSyncService
 {
-    public const PROVIDER_MERCADOPAGO = 'mercadopago';
-
     private const PROVIDERS = [
-        self::PROVIDER_MERCADOPAGO,
     ];
 
     public const SUBSCRIPTION_PENDING   = 'pending';
@@ -253,19 +250,19 @@ final class BillingSyncService
     }
 
     /**
-     * Sincronizacao completa pos-consulta oficial (uso do webhook), em UMA
-     * unica transacao (travamento + updates + ledger):
+     * Sincronizacao completa pos-consulta ao gateway (uso de webhook futuro),
+     * em UMA unica transacao (travamento + updates + ledger):
      *  1. trava a subscription (FOR UPDATE) e confirma usuario + provider;
-     *  2. grava os identificadores oficiais (mp id, raw_status, checkout);
+     *  2. grava os identificadores do gateway (raw_status, checkout);
      *  3. aplica a regra de plano via nucleo compartilhado;
      *  4. marca o evento do ledger como processado.
      *
      * NUNCA abrir transacao antes de chamadas HTTP: este metodo so recebe
-     * dados ja confirmados pela API oficial.
+     * dados ja confirmados pelo gateway.
      *
      * @param array{id:int, user_id:int} $local Linha local previamente vinculada.
      * @param array{change:bool, subscription_status:string, plano:string, plano_status:string, clear_active_subscription:bool} $resolution Saida de resolvePlanUpdate().
-     * @param array{mp_preapproval_id:string, raw_status:string, checkout_url:?string} $providerIds
+     * @param array{raw_status:string, checkout_url:?string} $providerIds
      * @throws InvalidArgumentException|RuntimeException (rollback automatico)
      */
     public static function syncProviderStatus(PDO $db, array $local, array $resolution, array $providerIds, string $ledgerProvider, string $ledgerEventId): void
@@ -277,7 +274,7 @@ final class BillingSyncService
         }
         if (($resolution['change'] ?? false) !== true) {
             // Sem alteracao de plano (ex: pending/paused): ainda grava os
-            // identificadores oficiais e marca o ledger, sem tocar no plano.
+            // identificadores do gateway e marca o ledger, sem tocar no plano.
             $applyPlan = false;
         } else {
             $applyPlan = true;
@@ -301,21 +298,20 @@ final class BillingSyncService
             if (!is_array($row) || (int)($row['user_id'] ?? 0) !== $userId) {
                 throw new RuntimeException('Assinatura nao encontrada para este usuario.');
             }
-            if (($row['provider'] ?? '') !== self::PROVIDER_MERCADOPAGO) {
+            if (trim((string)($row['provider'] ?? '')) === '') {
                 throw new RuntimeException('Provider da subscription divergente.');
             }
 
             $updSub = $db->prepare(
-                'UPDATE subscriptions SET mp_preapproval_id = ?, raw_status = ?, checkout_url = COALESCE(?, checkout_url), updated_at = NOW() WHERE id = ?'
+                'UPDATE subscriptions SET raw_status = ?, checkout_url = COALESCE(?, checkout_url), updated_at = NOW() WHERE id = ?'
             );
             $updSub->execute([
-                substr((string)($providerIds['mp_preapproval_id'] ?? ''), 0, 80),
                 substr((string)($providerIds['raw_status'] ?? ''), 0, 40),
                 $providerIds['checkout_url'] ?? null,
                 $subscriptionId,
             ]);
             if ($updSub->rowCount() !== 1) {
-                throw new RuntimeException('Falha ao gravar identificadores oficiais.');
+                throw new RuntimeException('Falha ao gravar identificadores do gateway.');
             }
 
             self::coreApply($db, $userId, $subscriptionId, $status, $plan, $planStatus, !empty($resolution['clear_active_subscription']), $applyPlan);

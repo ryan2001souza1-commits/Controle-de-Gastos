@@ -24,10 +24,14 @@ final class WebhookLedger
      */
     public static function normalizeEvent(array $event): array
     {
-        $provider = BillingSyncService::normalizeProvider((string)($event['provider'] ?? ''));
-        if ($provider === null) {
+        // Ledger generico: aceita qualquer slug de provedor bem-formado
+        // (sem allowlist de gateway ativo). A decisao de qual provedor tem
+        // efeito de cobranca pertence ao BillingSyncService.
+        $rawProvider = strtolower(trim((string)($event['provider'] ?? '')));
+        if (!preg_match('/^[a-z0-9_-]{2,30}$/', $rawProvider)) {
             throw new InvalidArgumentException('provider invalido.');
         }
+        $provider = $rawProvider;
 
         $eventId = trim((string)($event['provider_event_id'] ?? ''));
         if ($eventId === '' || strlen($eventId) > 120) {

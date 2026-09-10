@@ -49,7 +49,6 @@ require_once __DIR__ . '/../src/services/GoalService.php';
 require_once __DIR__ . '/../src/services/BudgetService.php';
 require_once __DIR__ . '/../src/services/PlanService.php';
 require_once __DIR__ . '/../src/services/BillingSyncService.php';
-require_once __DIR__ . '/../src/services/MercadoPagoClient.php';
 require_once __DIR__ . '/../src/services/LancamentoLimitService.php';
 require_once __DIR__ . '/../src/services/CategoriaLimitService.php';
 require_once __DIR__ . '/../src/services/OrcamentoLimitService.php';
@@ -60,7 +59,6 @@ require_once __DIR__ . '/partials/icons.php';
 require_once __DIR__ . '/../src/controllers/ExpenseController.php';
 require_once __DIR__ . '/../src/controllers/GoalController.php';
 require_once __DIR__ . '/../src/controllers/ProfileController.php';
-require_once __DIR__ . '/../src/controllers/SubscribeController.php';
 require_once __DIR__ . '/../src/models/BugReport.php';
 require_once __DIR__ . '/../src/models/Plan.php';
 require_once __DIR__ . '/../src/models/Feedback.php';
@@ -99,7 +97,6 @@ $authController = new AuthController($authService, new GoogleAuthService(), $use
 $expenseController = new ExpenseController($expenseModel, $incomeModel, $categoryModel, $expenseService, $budgetModel, $budgetService, $lancamentoLimitService, $categoriaLimitService, $orcamentoLimitService, $planService, $dashboardPremiumService);
 $goalController = new GoalController($goalModel, $goalService, $metaLimitService);
 $profileController = new ProfileController($userModel, $db);
-$subscribeController = new SubscribeController($db, $userModel, $planService);
 $bugModel = new BugReport($db);
 $planModel = new Plan($db);
 $feedbackModel = new Feedback($db);
@@ -118,7 +115,6 @@ $csrfProtectedActions = [
     'store_goal', 'update_goal', 'delete_goal', 'update_profile',
     'update_password', 'feedback_create', 'reportar', 'reportar_create',
     'admin_bug_update', 'admin_feedback_update', 'ai_chat', 'logout',
-    'subscribe_start',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -210,8 +206,6 @@ if ($action === 'register') {
     $profileController->index();
 } elseif ($action === 'meu_plano') {
     $profileController->meuPlano();
-} elseif ($action === 'subscribe_start') {
-    $subscribeController->start();
 } elseif ($action === 'update_profile') {
     $profileController->updateProfile();
 } elseif ($action === 'update_password') {

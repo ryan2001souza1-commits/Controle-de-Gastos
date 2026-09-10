@@ -255,9 +255,6 @@ function runMigrations(PDO $db): void
         // cron de renovacoes futuras
         "CREATE INDEX IF NOT EXISTS idx_subscriptions_status_renewal
             ON subscriptions(status, next_billing_date) WHERE status = 'active'",
-        // Gateway historico: busca por ID externo
-        "CREATE INDEX IF NOT EXISTS idx_subscriptions_mp_id
-            ON subscriptions(mp_preapproval_id)",
         // Gateway historico: busca por external_reference
         "CREATE INDEX IF NOT EXISTS idx_subscriptions_external_ref
             ON subscriptions(external_reference)",
@@ -288,13 +285,13 @@ function runMigrations(PDO $db): void
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS active_subscription_id
             INTEGER REFERENCES subscriptions(id) ON DELETE SET NULL",
         // Provedor de cobranca (generico, reutilizavel): identifica o gateway
-        // de origem da assinatura (ex: 'mercadopago'). Nao confundir com
+        // de origem da assinatura. Nao confundir com
         // usuarios.provider/provider_sub, que sao do OAuth (ex: Google).
-        // ATENCAO: remove_legacy_payment_gateways.php NAO pode voltar a
-        // incluir DROP COLUMN provider — a coluna foi reintroduzida de
-        // proposito para a nova integracao.
+        // ATENCAO: nenhuma rotina de limpeza pode voltar a
+        // incluir DROP COLUMN provider — a coluna e generica e reutilizavel
+        // para a futura integracao.
         "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS provider VARCHAR(30)",
-        // Plano do provedor (ex: preapproval_plan_id do Mercado Pago).
+        // Plano do provedor (identificador do plano no gateway).
         "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS provider_plan_id VARCHAR(80)",
         // Gateway historico: correlacionar com a assinatura externa
         "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS mp_preapproval_id VARCHAR(80)",
@@ -345,9 +342,6 @@ SQL;
     } catch (Throwable $e) {
         error_log('[migration] falha ao extrair checkout_url legado: ' . $e->getMessage());
     }
-
-    require_once __DIR__ . '/migrations/remove_legacy_payment_gateways.php';
-    run_remove_legacy_payment_gateways($db);
 
     // Seed planos basicos (idempotente).
     // Precos sao a fonte oficial para o backend e o frontend.
@@ -428,33 +422,6 @@ SQL;
         $db->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_provider ON usuarios(provider, provider_sub) WHERE provider IS NOT NULL AND provider_sub IS NOT NULL");
     } catch (PDOException $e) {
         // índice pode existir — ignora
-    }
-
-    try {
-        $dupStmt = $db->query(
-            "SELECT mp_preapproval_id, COUNT(*) as cnt
-               FROM subscriptions
-              WHERE mp_preapproval_id IS NOT NULL
-                AND mp_preapproval_id <> ''
-              GROUP BY mp_preapproval_id
-             HAVING COUNT(*) > 1"
-        );
-        $duplicates = $dupStmt->fetchAll(PDO::FETCH_ASSOC);
-        if (count($duplicates) === 0) {
-            $db->exec(
-                "CREATE UNIQUE INDEX IF NOT EXISTS uq_subscriptions_mp_preapproval_id
-                    ON subscriptions(mp_preapproval_id)
-                   WHERE mp_preapproval_id IS NOT NULL
-                     AND mp_preapproval_id <> ''"
-            );
-        } else {
-            error_log(
-                '[migrations] mp_preapproval_id tem duplicatas — UNIQUE index nao criado: '
-                . json_encode($duplicates)
-            );
-        }
-    } catch (Throwable $e) {
-        error_log('[migrations] falha ao criar uq_subscriptions_mp_preapproval_id: ' . $e->getMessage());
     }
 
     // attempt_token e unico por tentativa: impede que dois webhooks/retries

@@ -158,8 +158,8 @@ $statusBadgeClass = $planIsAtivo ? 'badge-success' : 'badge-warning';
 <?php endif; ?>
 
 <?php
-$mpPublicKey = isset($mpPublicKey) && is_string($mpPublicKey) ? trim($mpPublicKey) : '';
-$mpCardEnabled = ($mpPublicKey !== '');
+// Assinatura via gateway externo indisponivel (reconstrucao futura do zero).
+// Planos internos (gratuito/pro/premium) preservados; sem checkout ativo.
 ?>
 <?php if (!empty($upgrades)): ?>
 <section>
@@ -169,9 +169,6 @@ $mpCardEnabled = ($mpPublicKey !== '');
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--space-4)">
-        <span id="subscribe-csrf" style="display:none"><?= csrf_field() ?></span>
-        <span id="mp-config" data-public-key="<?= htmlspecialchars($mpPublicKey) ?>" data-pk-configured="<?= $mpCardEnabled ? 'yes' : 'no' ?>" style="display:none"></span>
-        <div id="subscribe-feedback-global" class="subscribe-feedback" style="display:none;grid-column:1/-1;font-size:13px;color:#b91c1c;background:rgba(220,38,38,.06);border:1px solid rgba(220,38,38,.25);border-radius:10px;padding:10px 14px"></div>
         <?php
         $planCardStyles = [
             'pro'      => ['border' => '1px solid var(--color-pro-border, #7c3aed33)', 'bg' => 'rgba(124,58,237,0.04)', 'header_bg' => 'rgba(124,58,237,0.08)', 'header_color' => '#7c3aed', 'accent_color' => '#7c3aed'],
@@ -225,17 +222,6 @@ $mpCardEnabled = ($mpPublicKey !== '');
                     </div>
 
                     <div data-plan-card="<?= htmlspecialchars($slug) ?>">
-                    <?php if ($mpCardEnabled): ?>
-                    <button
-                        type="button"
-                        class="btn subscribe-btn"
-                        data-plan="<?= htmlspecialchars($slug) ?>"
-                        data-plan-name="<?= htmlspecialchars($planName) ?>"
-                        style="width:100%;justify-content:center;display:flex;align-items:center;gap:6px">
-                        <?= render_icon('zap', 15) ?>
-                        Assinar <?= htmlspecialchars($planName) ?>
-                    </button>
-                    <?php else: ?>
                     <button
                         type="button"
                         class="btn"
@@ -249,8 +235,6 @@ $mpCardEnabled = ($mpPublicKey !== '');
                     <div style="margin-top:var(--space-2);font-size:11px;color:var(--color-text-3);text-align:center">
                         Pagamento temporariamente indisponível.
                     </div>
-                    <?php endif; ?>
-                    <div class="subscribe-feedback" style="display:none;margin-top:var(--space-2);font-size:12px;color:#b91c1c;text-align:center"></div>
                     </div>
                 </div>
             </div>
@@ -259,49 +243,4 @@ $mpCardEnabled = ($mpPublicKey !== '');
 </section>
 <?php endif; ?>
 
-<?php if ($mpCardEnabled): ?>
-<div id="mp-card-modal" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(15,23,42,.55);align-items:center;justify-content:center;padding:16px">
-    <!-- Fallback OFICIAL documentado: security.js preenche este elemento com
-         o Device ID quando presente. Lido somente pelo JS; nunca serializado
-         para o backend (o fetch monta o body explicitamente). -->
-    <input type="hidden" id="deviceId" value="">
-    <div style="width:100%;max-width:420px;background:var(--color-surface-1);border:1px solid var(--color-border);border-radius:16px;padding:var(--space-5)">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-1)">
-            <div id="mp-card-title" style="font-size:16px;font-weight:700;color:var(--color-text-1)">Assinar plano</div>
-            <button type="button" id="mp-card-close" aria-label="Fechar" style="background:none;border:none;font-size:20px;color:var(--color-text-3);cursor:pointer">×</button>
-        </div>
-        <div style="font-size:12px;color:var(--color-text-3);margin-bottom:var(--space-4)">Pagamento seguro via Mercado Pago. Os dados do cartão vão direto ao Mercado Pago e nunca passam pelo nosso servidor.</div>
-        <form id="mp-card-form" autocomplete="on">
-            <div style="display:flex;flex-direction:column;gap:var(--space-3)">
-                <label style="font-size:12px;color:var(--color-text-2)">Número do cartão
-                    <input id="mp-card-number" inputmode="numeric" autocomplete="cc-number" placeholder="0000 0000 0000 0000" required style="width:100%;margin-top:4px;padding:10px 12px;border-radius:10px;border:1px solid var(--color-border);background:var(--color-surface-2);color:var(--color-text-1)">
-                </label>
-                <label style="font-size:12px;color:var(--color-text-2)">Nome impresso no cartão
-                    <input id="mp-card-name" autocomplete="cc-name" placeholder="Como está no cartão" required style="width:100%;margin-top:4px;padding:10px 12px;border-radius:10px;border:1px solid var(--color-border);background:var(--color-surface-2);color:var(--color-text-1)">
-                </label>
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-2)">
-                    <label style="font-size:12px;color:var(--color-text-2)">Mês
-                        <input id="mp-card-month" inputmode="numeric" autocomplete="cc-exp-month" placeholder="MM" maxlength="2" required style="width:100%;margin-top:4px;padding:10px 12px;border-radius:10px;border:1px solid var(--color-border);background:var(--color-surface-2);color:var(--color-text-1)">
-                    </label>
-                    <label style="font-size:12px;color:var(--color-text-2)">Ano
-                        <input id="mp-card-year" inputmode="numeric" autocomplete="cc-exp-year" placeholder="AAAA" maxlength="4" required style="width:100%;margin-top:4px;padding:10px 12px;border-radius:10px;border:1px solid var(--color-border);background:var(--color-surface-2);color:var(--color-text-1)">
-                    </label>
-                    <label style="font-size:12px;color:var(--color-text-2)">CVV
-                        <input id="mp-card-cvv" inputmode="numeric" autocomplete="cc-csc" placeholder="123" maxlength="4" required style="width:100%;margin-top:4px;padding:10px 12px;border-radius:10px;border:1px solid var(--color-border);background:var(--color-surface-2);color:var(--color-text-1)">
-                    </label>
-                </div>
-                <label style="font-size:12px;color:var(--color-text-2)">CPF do titular
-                    <input id="mp-card-doc" inputmode="numeric" placeholder="Somente números" maxlength="14" required style="width:100%;margin-top:4px;padding:10px 12px;border-radius:10px;border:1px solid var(--color-border);background:var(--color-surface-2);color:var(--color-text-1)">
-                </label>
-                <div id="mp-card-error" style="display:none;font-size:12px;color:#b91c1c;background:rgba(220,38,38,.06);border:1px solid rgba(220,38,38,.25);border-radius:10px;padding:8px 12px"></div>
-                <button type="submit" id="mp-card-submit" class="btn btn-primary" style="width:100%;justify-content:center">Confirmar assinatura</button>
-            </div>
-        </form>
-    </div>
-</div>
-<script src="https://www.mercadopago.com/v2/security.js" view="checkout"></script>
-<script src="https://sdk.mercadopago.com/js/v2"></script>
-<?php endif; ?>
-<script src="/js/mp-card-utils.js?v=<?= @filemtime(__DIR__ . '/js/mp-card-utils.js') ?>"></script>
-<script src="/js/subscribe.js?v=<?= @filemtime(__DIR__ . '/js/subscribe.js') ?>"></script>
 <?php include __DIR__ . '/partials/layout_end.php'; ?>
