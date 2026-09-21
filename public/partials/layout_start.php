@@ -146,3 +146,6 @@ $bellIcon = '<svg width="16" height="16" fill="none" stroke="currentColor" strok
             </a>
         </div>
     </header>
+
+    <script src="/js/prefetch-intent.js" defer></script>
+<?php include __DIR__ . '/prefetch.php'; ?>

@@ -190,9 +190,8 @@ function getDBConnection(): PDO
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES   => false,
             ]);
-
-            require_once __DIR__ . '/../migrations.php';
-            runMigrations($pdo);
+            // Migrações executadas apenas no bootstrap (public/index.php)
+            // para evitar overhead duplicado e acelerar conexões.
         } catch (\PDOException $e) {
             error_log('[DB] ' . $e->getMessage());
             throw new PDOException(

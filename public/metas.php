@@ -4,7 +4,8 @@ $goals=$data['goals']??[];$errors=['invalid_data'=>'Dados inválidos.','invalid_
 $totalObj=array_sum(array_column($goals,'target'));$totalSaved=array_sum(array_column($goals,'saved'));$completed=count(array_filter($goals,fn($g)=>($g['status']??'')==='completed'));$inProgress=count($goals)-$completed;
 $progressPct=$totalObj>0?min(100,round($totalSaved/$totalObj*100)):0;
 ?>
-<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Metas - Controle de Gastos</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"><link rel="stylesheet" href="/css/style.css?v=<?= @filemtime(__DIR__ . '/css/style.css') ?>"></head><body><div class="app-wrapper">
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Metas - Controle de Gastos</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"><link rel="stylesheet" href="/css/style.css?v=<?= @filemtime(__DIR__ . '/css/style.css') ?>">
+<?php include __DIR__ . '/partials/prefetch.php'; ?></head><body><div class="app-wrapper">
 <?php include __DIR__ . '/partials/layout_start.php'; ?>
 <?php if(isset($_GET['success'])&&isset($successMsgs[$_GET['success']])): ?><div class="alert alert-success" role="status"><?= render_icon('check',13) ?><span><?= htmlspecialchars($successMsgs[$_GET['success']]) ?></span></div><?php endif; ?>
 <?php if(isset($_GET['error'])):

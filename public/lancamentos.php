@@ -53,6 +53,7 @@ foreach (($expenseCategories ?? []) as $i => $c) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css?v=<?= @filemtime(__DIR__ . '/css/style.css') ?>">
+    <?php include __DIR__ . '/partials/prefetch.php'; ?>
 </head>
 <body>
 <div class="app-wrapper">
