@@ -171,7 +171,7 @@ class AuthService
             return ['success' => true, 'message' => $generic, 'resetUrl' => null, 'mailSent' => false];
         }
 
-        $this->rateLimiter->recordAttempt(RateLimiter::PASSWORD_RESET, $ipKey, false, self::RESET_MAX_ATTEMPTS, self::RESET_WINDOW_SECONDS);
+        $this->rateLimiter->recordAttempt(RateLimiter::PASSWORD_RESET, $ipKey, true, self::RESET_MAX_ATTEMPTS, self::RESET_WINDOW_SECONDS);
 
         $tokenPlain = bin2hex(random_bytes(32));
         $tokenHash  = hash('sha256', $tokenPlain);

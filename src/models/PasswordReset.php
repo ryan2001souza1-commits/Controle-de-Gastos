@@ -31,9 +31,9 @@ class PasswordReset
             );
             return $stmt->execute([$userId, $tokenHash, $expiresAt]);
         }
-        // Usa relógio do DB para evitar divergência entre PHP e Postgres (Vercel vs Neon)
+        // Fallback usa relogio do DB com o mesmo TTL do AuthService (15 min)
         $stmt = $this->db->prepare(
-            "INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES (?, ?, NOW() + INTERVAL '1 minute')"
+            "INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES (?, ?, NOW() + INTERVAL '15 minutes')"
         );
         return $stmt->execute([$userId, $tokenHash]);
     }

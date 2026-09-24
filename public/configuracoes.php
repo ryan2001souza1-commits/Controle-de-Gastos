@@ -5,11 +5,13 @@ $activeMenu = 'configuracoes';
 $showPeriodPicker = false;
 $topbarActions = '';
 if (!isset($user) || !$user) { $user = $userModel->findById($_SESSION['user_id']); }
-$initials = strtoupper(substr($user->name ?? $userName ?? 'U', 0, 1) . (strpos($user->name ?? '', ' ') !== false ? substr(explode(' ', $user->name)[1] ?? '', 0, 1) : ''));
-$initials = strtoupper(substr($user->name ?? 'U', 0, 1));
-if (strpos($user->name ?? '', ' ') !== false) {
-    $parts = explode(' ', trim($user->name));
+$nameForInitials = trim($user->name ?? $userName ?? 'U');
+if (strpos($nameForInitials, ' ') !== false) {
+    $parts = explode(' ', $nameForInitials);
+    $parts = array_values(array_filter($parts, fn($p) => $p !== ''));
     $initials = strtoupper(substr($parts[0],0,1) . substr(end($parts),0,1));
+} else {
+    $initials = strtoupper(substr($nameForInitials,0,1) ?: 'U');
 }
 $cpfFormatted = CpfValidator::format($user->cpf ?? null) ?? '';
 ?>

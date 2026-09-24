@@ -49,12 +49,19 @@ $isAdminSession = !empty($_SESSION['is_admin']) && (int)$_SESSION['is_admin'] ==
 $canSeeRelatorios = true;
 $userIdForFeatures = $_SESSION['user_id'] ?? null;
 if ($userIdForFeatures !== null) {
-    require_once dirname(__DIR__, 2) . '/src/services/PlanService.php';
-    require_once dirname(__DIR__, 2) . '/src/config/config.php';
-    $db = getDBConnection();
-    $planSvc = new PlanService($db);
-    $planSlug = $planSvc->getUserPlanSlug($userIdForFeatures);
-    $canSeeRelatorios = $planSvc->hasFeature($planSlug, 'relatorios');
+    try {
+        require_once dirname(__DIR__, 2) . '/src/services/PlanService.php';
+        if (!function_exists('getDBConnection')) {
+            require_once dirname(__DIR__, 2) . '/src/config/config.php';
+        }
+        $db = getDBConnection();
+        $planSvc = new PlanService($db);
+        $planSlug = $planSvc->getUserPlanSlug($userIdForFeatures);
+        $canSeeRelatorios = $planSvc->hasFeature($planSlug, 'relatorios');
+    } catch (Throwable $e) {
+        error_log('[layout_start] feature check failed: ' . $e->getMessage());
+        $canSeeRelatorios = true;
+    }
 }
 
 $sidebarIcons = [

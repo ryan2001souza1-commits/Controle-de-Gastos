@@ -90,7 +90,7 @@ function appTimezone(): string
 function appToday(): string
 {
     appTimezone();
-    return gmdate('Y-m-d');
+    return date('Y-m-d');
 }
 
 /**

@@ -44,6 +44,11 @@ class CsrfService
         if (!isset($_SESSION['csrf_token']) || !is_string($_SESSION['csrf_token'])) {
             return false;
         }
+        // Valida vínculo com o usuário da sessão para evitar reuso cross-user
+        $storedUid = $_SESSION['csrf_user_id'] ?? null;
+        if ($storedUid !== $userId) {
+            return false;
+        }
         return hash_equals($_SESSION['csrf_token'], $token);
     }
 

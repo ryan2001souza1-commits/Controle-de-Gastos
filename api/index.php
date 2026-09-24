@@ -130,6 +130,24 @@ if (in_array($pathInfo, $allowed, true)) {
     }
     if (session_status() === PHP_SESSION_NONE) {
         $lifetime = 604800;
+        $isHttpsAuth = (
+            (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ||
+            (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') ||
+            (isset($_SERVER['HTTP_X_VERCEL_FORWARDED_PROTO']) && $_SERVER['HTTP_X_VERCEL_FORWARDED_PROTO'] === 'https') ||
+            (getenv('VERCEL_ENV') !== false)
+        );
+        if (PHP_VERSION_ID >= 70300) {
+            session_set_cookie_params([
+                'lifetime' => $lifetime,
+                'path'     => '/',
+                'secure'   => $isHttpsAuth,
+                'httponly' => true,
+                'samesite' => 'Lax',
+            ]);
+        }
+        ini_set('session.gc_maxlifetime', (string)$lifetime);
+        ini_set('session.gc_probability', '1');
+        ini_set('session.gc_divisor', '100');
         try {
             $db = getDBConnection();
             $db->exec("CREATE TABLE IF NOT EXISTS sessions (id VARCHAR(128) PRIMARY KEY, data TEXT NOT NULL, expires_at TIMESTAMP NOT NULL)");
@@ -139,7 +157,6 @@ if (in_array($pathInfo, $allowed, true)) {
             session_set_save_handler($handler, true);
         } catch (Throwable $e) {
             error_log('[api/index.php session] ' . $e->getMessage());
-            ini_set('session.gc_maxlifetime', (string)$lifetime);
         }
         @session_start();
     }

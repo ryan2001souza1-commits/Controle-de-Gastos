@@ -76,7 +76,7 @@ class AiController
         }
         $userId = (int)$_SESSION['user_id'];
 
-        $raw = file_get_contents('php://input');
+        $raw = $GLOBALS['_RAW_JSON_BODY'] ?? file_get_contents('php://input');
         $data = json_decode($raw, true);
         if (!is_array($data)) $data = $_POST;
         $message = trim((string)($data['message'] ?? ''));
@@ -166,7 +166,7 @@ class AiController
             try { $dLen = function_exists('mb_strlen') ? mb_strlen($deterministic) : strlen($deterministic); $this->aiLimitService->incrementUsage($userId, (int)($dLen/4)); } catch (Throwable $e) { error_log('[ai] increment deterministic failed: '.$e->getMessage()); }
             $remaining = $this->aiLimitService->getRemaining($userId);
             $remainingVal = $remaining === null ? PHP_INT_MAX : $remaining;
-            $out = json_encode(['success'=>true, 'response'=>$deterministic, 'reply'=>$deterministic, 'source'=>'deterministic', 'remaining'=>max(0, $remainingVal-1)], JSON_UNESCAPED_UNICODE);
+            $out = json_encode(['success'=>true, 'response'=>$deterministic, 'reply'=>$deterministic, 'source'=>'deterministic', 'remaining'=>max(0, $remainingVal)], JSON_UNESCAPED_UNICODE);
             if ($out === false) { error_log('[ai] json_encode deterministic failed: '.json_last_error_msg()); $out = json_encode(['success'=>true, 'response'=>$deterministic, 'reply'=>$deterministic, 'source'=>'deterministic'], JSON_UNESCAPED_UNICODE); }
             echo $out;
             return;
@@ -178,7 +178,7 @@ class AiController
             try { $mLen = function_exists('mb_strlen') ? mb_strlen($message) : strlen($message); $rLen = function_exists('mb_strlen') ? mb_strlen($reply) : strlen($reply); $this->aiLimitService->incrementUsage($userId, (int)(($mLen+$rLen)/4)); } catch (Throwable $e) { error_log('[ai] increment ai failed: '.$e->getMessage()); }
             $remaining = $this->aiLimitService->getRemaining($userId);
             $remainingVal = $remaining === null ? PHP_INT_MAX : $remaining;
-            $out = json_encode(['success'=>true, 'response'=>$reply, 'reply'=>$reply, 'source'=>'ai', 'remaining'=>max(0, $remainingVal-1)], JSON_UNESCAPED_UNICODE);
+            $out = json_encode(['success'=>true, 'response'=>$reply, 'reply'=>$reply, 'source'=>'ai', 'remaining'=>max(0, $remainingVal)], JSON_UNESCAPED_UNICODE);
             if ($out === false) { error_log('[ai] json_encode ai failed: '.json_last_error_msg()); $out = json_encode(['success'=>true, 'response'=>$reply, 'reply'=>$reply, 'source'=>'ai'], JSON_UNESCAPED_UNICODE); }
             echo $out;
         } catch (Throwable $e) {

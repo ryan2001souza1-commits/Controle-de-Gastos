@@ -120,10 +120,13 @@ $csrfProtectedActions = [
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Valida apenas ações que precisam de CSRF
     if (in_array($action, $csrfProtectedActions, true)) {
-        // Tenta token via POST (form-encoded) ou JSON body
+        // Tenta token via POST (form-encoded) ou JSON body (ai_chat)
         $csrfToken = $_POST['csrf_token'] ?? '';
-        if ($csrfToken === '' && strpos($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') !== false) {
+        $isJson = strpos($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') !== false;
+        if ($csrfToken === '' && $isJson) {
             $rawBody = file_get_contents('php://input');
+            // Preserva body para o controller (ai_chat) que também lê php://input
+            $GLOBALS['_RAW_JSON_BODY'] = $rawBody;
             $jsonData = json_decode($rawBody, true);
             if (is_array($jsonData) && isset($jsonData['csrf_token'])) {
                 $csrfToken = (string)$jsonData['csrf_token'];
@@ -131,9 +134,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $userId = $_SESSION['user_id'] ?? 0;
         if (empty($csrfToken) || !$csrfService->validateToken($userId, $csrfToken)) {
+            if ($isJson) {
+                http_response_code(403);
+                header('Content-Type: application/json');
+                echo json_encode(['success'=>false, 'error'=>'Sessão expirada. Recarregue a página e tente novamente.']);
+                exit;
+            }
+            // Para formulários HTML, retorna página de erro segura (sem refletir referer não validado)
             http_response_code(403);
-            header('Content-Type: application/json');
-            echo json_encode(['success'=>false, 'error'=>'Sessão expirada. Recarregue a página e tente novamente.']);
+            header('Content-Type: text/html; charset=utf-8');
+            echo '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Sessão expirada</title><style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f8fafc;color:#334155}.card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:32px;max-width:480px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,.06)}h1{color:#b91c1c;font-size:18px;margin:0 0 8px}p{color:#64748b;font-size:14px;line-height:1.5;margin:0 0 16px}a{color:#059669;font-weight:600;text-decoration:none}a:hover{text-decoration:underline}</style></head><body><div class="card"><h1>Sessão expirada</h1><p>Sua sessão expirou ou o token de segurança é inválido. Recarregue a página e tente novamente.</p><p><a href="javascript:history.back()">Voltar</a> · <a href="/index.php">Ir para o início</a></p></div></body></html>';
             exit;
         }
     }

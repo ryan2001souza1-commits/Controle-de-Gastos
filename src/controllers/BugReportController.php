@@ -45,6 +45,8 @@ class BugReportController
             if ($screenshotPath === false) {
                 header('Location: /index.php?action=reportar&error=invalid_file'); exit;
             }
+            // handleUpload pode retornar null em ambiente serverless (ignora screenshot)
+            if ($screenshotPath === null) $screenshotPath = null;
         }
         $this->bugModel->create([
             'usuario_id' => $userId,
@@ -94,11 +96,25 @@ class BugReportController
         finfo_close($finfo);
         if (!isset($allowed[$mime])) return false;
         $ext = $allowed[$mime];
-        $dir = dirname(__DIR__,2).'/public/uploads/bugs';
-        if (!is_dir($dir)) mkdir($dir,0755,true);
+        // Em Vercel o filesystem é efêmero; tenta public/uploads, fallback para /tmp
+        $candidates = [
+            dirname(__DIR__,2).'/public/uploads/bugs',
+            sys_get_temp_dir() . '/uploads/bugs',
+        ];
         $name = bin2hex(random_bytes(8)).'.'.$ext;
-        $dest = $dir.'/'.$name;
-        if (!move_uploaded_file($file['tmp_name'], $dest)) return false;
-        return '/uploads/bugs/'.$name;
+        foreach ($candidates as $dir) {
+            if (!is_dir($dir) && !@mkdir($dir,0755,true) && !is_dir($dir)) continue;
+            $dest = $dir.'/'.$name;
+            if (@move_uploaded_file($file['tmp_name'], $dest) || @rename($file['tmp_name'], $dest) || @copy($file['tmp_name'], $dest)) {
+                // Se foi para /tmp, retorna como null (nao persistivel) para não quebrar em produção
+                if (str_starts_with($dir, sys_get_temp_dir())) {
+                    return null;
+                }
+                return '/uploads/bugs/'.$name;
+            }
+        }
+        // Se não conseguiu gravar, ignora screenshot mas não falha o report
+        error_log('[BugReport] screenshot upload falhou, ignorando');
+        return null;
     }
 }

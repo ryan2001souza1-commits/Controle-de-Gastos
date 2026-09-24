@@ -27,13 +27,6 @@ $statusMap = [
 ];
 $recent = [];
 if (!empty($feedbacks) && is_array($feedbacks)) $recent = array_slice($feedbacks, 0, 3);
-if (empty($recent)) {
-    $recent = [
-        ['titulo'=>'Relatórios personalizados','tipo'=>'sugestao','status'=>'em_analise','created_at'=>'2025-05-28 10:00:00'],
-        ['titulo'=>'Erro ao exportar dados','tipo'=>'critica','status'=>'novo','created_at'=>'2025-05-25 09:15:00'],
-        ['titulo'=>'Nova categoria','tipo'=>'sugestao','status'=>'implementado','created_at'=>'2025-05-20 16:45:00'],
-    ];
-}
 ?>
 <!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title><?= htmlspecialchars($pageTitle) ?> - Controle de Gastos</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"><link rel="stylesheet" href="/css/style.css?v=<?= @filemtime(__DIR__ . '/css/style.css') ?>"></head><body><div class="app-wrapper">
 <?php include __DIR__ . '/partials/layout_start.php'; ?>
@@ -128,6 +121,7 @@ if (empty($recent)) {
             <aside class="fb-side-card" aria-label="Feedbacks recentes">
                 <h3 style="font-size:15px">Feedbacks recentes</h3>
                 <div class="fb-recent-list" style="margin-top:14px">
+                    <?php if (empty($recent)): ?><div style="padding:16px;color:#94a3b8;font-size:12px;text-align:center">Nenhum feedback ainda. Seja o primeiro!</div><?php endif; ?>
                     <?php foreach ($recent as $r):
                         $t = $tipoMap[$r['tipo']] ?? $tipoMap['outro'];
                         $s = $statusMap[$r['status']] ?? $statusMap['novo'];

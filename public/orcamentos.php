@@ -20,8 +20,13 @@ $utilPct=$totals['percentage']??0;
 <section class="metric-strip">
     <article class="metric-card"><div class="metric-card-icon" style="background:#ecfdf5;color:#059669"><?= render_icon('wallet',18) ?></div><div class="metric-card-body"><div class="metric-card-label">Orçamento total</div><div class="metric-card-value" style="color:#059669">R$ <?= number_format($totals['limit'],2,',','.') ?></div><div class="text-xs" style="color:#64748b">Definido para o período</div></div></article>
     <article class="metric-card"><div class="metric-card-icon" style="background:#f5f3ff;color:#7c3aed"><?= render_icon('pie',18) ?></div><div class="metric-card-body"><div class="metric-card-label">Utilizado</div><div class="metric-card-value">R$ <?= number_format($totals['spent'],2,',','.') ?></div><div class="text-xs" style="color:#64748b"><?= $totals['percentage'] ?>% do total</div></div></article>
-    <article class="metric-card"><div class="metric-card-icon" style="background:#fffbeb;color:#d97706"><?= render_icon('credit-card',18) ?></div><div class="metric-card-body"><div class="metric-card-label">Disponível</div><div class="metric-card-value" style="color:#059669">R$ <?= number_format($totals['remaining'],2,',','.') ?></div><div class="text-xs" style="color:#64748b">47% do total</div></div></article>
-    <article class="metric-card"><div class="metric-card-icon" style="background:#eff6ff;color:#2563eb"><?= render_icon('chart',18) ?></div><div class="metric-card-body"><div class="metric-card-label">Maior gasto</div><div class="metric-card-value">Moradia</div><div class="text-xs" style="color:#64748b">R$ 1.650,00 (38,9%)</div></div></article>
+    <article class="metric-card"><div class="metric-card-icon" style="background:#fffbeb;color:#d97706"><?= render_icon('credit-card',18) ?></div><div class="metric-card-body"><div class="metric-card-label">Disponível</div><div class="metric-card-value" style="color:#059669">R$ <?= number_format($totals['remaining'],2,',','.') ?></div><div class="text-xs" style="color:#64748b"><?= $totals['limit'] > 0 ? round((1 - $totals['spent']/$totals['limit'])*100) : 0 ?>% do total</div></div></article>
+    <?php
+        $biggest = null; $biggestPct = 0;
+        foreach ($budgets as $b) { if ((float)($b['spent_amount']??0) > (float)($biggest['spent_amount']??0)) { $biggest = $b; } }
+        if ($biggest) { $biggestPct = $biggest['limit_amount'] > 0 ? round($biggest['spent_amount']/$biggest['limit_amount']*100, 1) : 0; }
+    ?>
+    <article class="metric-card"><div class="metric-card-icon" style="background:#eff6ff;color:#2563eb"><?= render_icon('chart',18) ?></div><div class="metric-card-body"><div class="metric-card-label">Maior gasto</div><div class="metric-card-value" style="font-size:15px"><?= htmlspecialchars($biggest['category_name'] ?? '—') ?></div><div class="text-xs" style="color:#64748b"><?= $biggest ? 'R$ '.number_format($biggest['spent_amount'],2,',','.') .' ('.$biggestPct.'%)' : '—' ?></div></div></article>
 </section>
 
 <div style="display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start">

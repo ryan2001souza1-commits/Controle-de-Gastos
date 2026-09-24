@@ -127,13 +127,19 @@ class ExpenseController
             $type = $_POST['type'] ?? 'despesa';
             $userId = $_SESSION['user_id'];
 
-            if (empty($description) || $amount <= 0 || empty($date)) {
+            if (empty($description) || mb_strlen($description) > 255 || $amount <= 0 || $amount > 999999999 || empty($date)) {
                 header('Location: /index.php?error=invalid_data');
                 exit;
             }
 
             $d = DateTime::createFromFormat('Y-m-d', $date);
             if (!$d || $d->format('Y-m-d') !== $date) {
+                header('Location: /index.php?error=invalid_data');
+                exit;
+            }
+            // impede datas futuras distantes ou muito antigas (validacao de negocio)
+            $ts = strtotime($date);
+            if ($ts === false || $ts < strtotime('2000-01-01') || $ts > strtotime('+2 years')) {
                 header('Location: /index.php?error=invalid_data');
                 exit;
             }
@@ -189,9 +195,16 @@ class ExpenseController
             $icon  = trim($_POST['icone'] ?? 'tag');
             $userId = $_SESSION['user_id'];
 
-            if ($name === '' || !in_array($type, ['despesa', 'receita'], true)) {
+            if ($name === '' || mb_strlen($name) > 50 || !in_array($type, ['despesa', 'receita'], true)) {
                 header('Location: /index.php?action=categorias&error=invalid_category');
                 exit;
+            }
+            if (!preg_match('/^#[0-9a-fA-F]{6}$/', $color)) {
+                $color = '#10b981';
+            }
+            $allowedIcons = ['tag','home','car','heart','shopping-bag','book','wallet','target','star','zap','chart','folder','credit-card','pie','alert','info','users','shield','calendar','check'];
+            if (!in_array($icon, $allowedIcons, true)) {
+                $icon = 'tag';
             }
 
             if ($this->categoryModel->countByName($name, $type, $userId) > 0) {
@@ -409,14 +422,37 @@ class ExpenseController
     {
         $default = '/index.php';
         $referer = $_SERVER['HTTP_REFERER'] ?? $default;
+        if ($referer === '' || $referer === $default) {
+            return $default;
+        }
         $host = $_SERVER['HTTP_HOST'] ?? '';
-        if ($host !== '' && $referer !== '' && stripos($referer, $host) === false) {
-            return $default;
+        $parsed = parse_url($referer);
+        // Referer absoluto (http://host/path): valida host exato
+        if (isset($parsed['host'])) {
+            $refererHost = strtolower($parsed['host']);
+            $currentHost = strtolower(preg_replace('/:\d+$/', '', $host));
+            if ($currentHost === '' || $refererHost !== $currentHost) {
+                return $default;
+            }
+            $path = ($parsed['path'] ?? '/') . (isset($parsed['query']) ? '?' . $parsed['query'] : '');
+            if (!preg_match('#^/[^/]#', $path)) {
+                return $default;
+            }
+            return $path;
         }
-        if (!preg_match('#^/[^/]#', $referer)) {
-            return $default;
+        // Referer relativo (/path?query)
+        if (str_starts_with($referer, '/') && !str_starts_with($referer, '//')) {
+            $pathOnly = parse_url($referer, PHP_URL_PATH) ?? '/';
+            if (!preg_match('#^/[^/]#', $referer)) {
+                return $default;
+            }
+            // bloqueia path traversal
+            if (str_contains($referer, '..') || str_contains($referer, '\\')) {
+                return $default;
+            }
+            return $referer;
         }
-        return $referer;
+        return $default;
     }
 
     /* ================================================================
@@ -531,7 +567,10 @@ class ExpenseController
         }
 
         $color = trim($_POST['cor']   ?? '#10b981');
+        if (!preg_match('/^#[0-9a-fA-F]{6}$/', $color)) $color = '#10b981';
         $icon  = trim($_POST['icone'] ?? 'tag');
+        $allowedIcons = ['tag','home','car','heart','shopping-bag','book','wallet','target','star','zap','chart','folder','credit-card','pie','alert','info','users','shield','calendar','check'];
+        if (!in_array($icon, $allowedIcons, true)) $icon = 'tag';
         $this->categoryModel->update($id, $name, $type, $userId, $color, $icon);
         header('Location: /index.php?action=categorias&success=updated');
         exit;

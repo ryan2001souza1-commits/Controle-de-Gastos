@@ -44,7 +44,7 @@ class GoalController
         $deadline = $_POST['deadline'] ?? '';
         $description = trim($_POST['description'] ?? '');
 
-        if ($name === '' || $target <= 0 || $saved < 0) {
+        if ($name === '' || mb_strlen($name) > 100 || $target <= 0 || $target > 999999999 || $saved < 0 || $saved > 999999999 || $saved > $target) {
             header('Location: /index.php?action=metas&error=invalid_data');
             exit;
         }
@@ -92,7 +92,7 @@ class GoalController
         $deadline = $_POST['deadline'] ?? '';
         $description = trim($_POST['description'] ?? '');
 
-        if ($id <= 0 || $name === '' || $target <= 0 || $saved < 0) {
+        if ($id <= 0 || $name === '' || mb_strlen($name) > 100 || $target <= 0 || $target > 999999999 || $saved < 0 || $saved > 999999999 || $saved > $target) {
             header('Location: /index.php?action=metas&error=invalid_data');
             exit;
         }

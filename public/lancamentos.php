@@ -164,10 +164,21 @@ foreach (($expenseCategories ?? []) as $i => $c) {
                 </tbody>
             </table>
         </div>
+        <?php
+            $totalPages = max(1, (int)ceil($txCount / $perPage));
+            $pageNum = min($pageNum, $totalPages);
+            $baseQs = http_build_query(array_filter(['action'=>'lancamentos','type'=>$filterType,'category_id'=>$categoryId?:null,'search'=>$search?:null,'start_date'=>$startDate,'end_date'=>$endDate]));
+            $prevDisabled = $pageNum <= 1 ? 'disabled' : '';
+            $nextDisabled = $pageNum >= $totalPages ? 'disabled' : '';
+        ?>
         <div class="pagination">
-            <div class="pagination-info">Mostrando <?= min($txCount, $perPage) ?> de <?= $txCount ?> lançamentos</div>
-            <div class="pagination-controls"><button class="pagination-btn" disabled>‹</button><button class="pagination-btn is-active">1</button><button class="pagination-btn">2</button><button class="pagination-btn">3</button><button class="pagination-btn">›</button></div>
-            <div class="pagination-select"><select><option>10 por página</option></select></div>
+            <div class="pagination-info">Mostrando <?= $txCount===0?0: min($perPage, $txCount - ($pageNum-1)*$perPage) ?> de <?= $txCount ?> lançamentos — página <?= $pageNum ?> de <?= $totalPages ?></div>
+            <div class="pagination-controls">
+                <a class="pagination-btn" <?= $prevDisabled ?> href="<?= $pageNum>1 ? '/index.php?'.$baseQs.'&page='.($pageNum-1) : '#' ?>" aria-disabled="<?= $pageNum<=1?'true':'false' ?>">‹</a>
+                <?php for($p=max(1,$pageNum-2); $p<=min($totalPages, $pageNum+2); $p++): ?><a class="pagination-btn <?= $p===$pageNum?'is-active':'' ?>" href="/index.php?<?= $baseQs ?>&page=<?= $p ?>"><?= $p ?></a><?php endfor; ?>
+                <a class="pagination-btn" <?= $nextDisabled ?> href="<?= $pageNum<$totalPages ? '/index.php?'.$baseQs.'&page='.($pageNum+1) : '#' ?>" aria-disabled="<?= $pageNum>=$totalPages?'true':'false' ?>">›</a>
+            </div>
+            <div class="pagination-select"><span style="font-size:12px;color:#94a3b8"><?= $perPage ?> por página</span></div>
         </div>
     </section>
 
